@@ -20,8 +20,8 @@ import {
   launchRecordedSubmission,
   retryOpenReviewSubmissions,
   retryReviewSubmission,
-  submitReview,
 } from "../services/review-tasking.js";
+import { submitReview } from "../services/review-submit.js";
 import { refreshReviewPullRequest } from "../services/review-pr-tracking.js";
 import {
   reviewWorktreeHold,

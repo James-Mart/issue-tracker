@@ -124,6 +124,7 @@ export function ReviewHeaderBody({
             projectId={projectId}
             review={review}
             header={header}
+            readyThreads={readyThreads}
             onAcknowledge={() =>
               setPendingThreadIds(readyThreads?.map((thread) => thread.root.id))
             }

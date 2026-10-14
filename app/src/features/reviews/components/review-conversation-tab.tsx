@@ -22,6 +22,7 @@ import {
   type CommentThread as CommentThreadData,
 } from "@/features/issues/lib/comment-threads";
 import { ThreadLinkedTaskChip } from "@/features/issues/components/comments/thread-linked-task-chip";
+import { IssueChip } from "@/features/issues/components/issue-chip";
 import {
   CONVERSATION_FILTER_CHIPS,
   conversationFilterCounts,
@@ -51,10 +52,11 @@ function ReviewSubmittedEvent({
       data-submission-id={submission.id}
       className="flex flex-col gap-1.5 border-b border-border py-3"
     >
-      <p className="text-sm text-foreground">
-        {reviewSubmittedLabel(submission.threadIds.length, submission.taskIds.length)}
-      </p>
+      <p className="text-sm text-foreground">{reviewSubmittedLabel(submission)}</p>
       <div className="flex flex-wrap gap-1.5">
+        {submission.ideaId ? (
+          <IssueChip id={submission.ideaId} testId="review-submitted-idea" />
+        ) : null}
         {submission.taskIds.map((taskId) => (
           <ThreadLinkedTaskChip key={taskId} taskId={taskId} />
         ))}

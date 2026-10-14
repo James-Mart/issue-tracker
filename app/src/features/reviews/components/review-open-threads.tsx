@@ -1,27 +1,9 @@
 import { ChevronRight } from "lucide-react";
 import type { ReviewOpenRound } from "../lib/review-submission-ui";
 import { openThreadsHeadline } from "../lib/review-submission-ui";
+import { reviewThreadExcerpt, reviewThreadLocation } from "../lib/review-thread-label";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
-import { isLineAnchor } from "@/features/issues/lib/comment-anchor";
-import { anchorLineRange } from "@/features/issues/lib/comment-anchor-snippet";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
-
-function threadLocation(thread: CommentThread): string {
-  const anchor = thread.root.anchor;
-  if (!anchor) return "Story comment";
-  if (!isLineAnchor(anchor)) return anchor.path;
-  const { start, end } = anchorLineRange(anchor);
-  const lines = start === end ? String(end) : `${start}-${end}`;
-  return `${anchor.path}:${lines}`;
-}
-
-function threadExcerpt(body: string): string {
-  const line = body
-    .split("\n")
-    .map((part) => part.trim())
-    .find((part) => part.length > 0);
-  return line ?? "";
-}
 
 /** Open threads from submissions that are not done, grouped by round. */
 export function ReviewOpenThreads({
@@ -64,7 +46,7 @@ export function ReviewOpenThreads({
               <ul className="m-0 list-none border-t border-border p-0">
                 {round.threadIds.map((threadId) => {
                   const thread = byId.get(threadId);
-                  const excerpt = thread ? threadExcerpt(thread.root.body) : "";
+                  const excerpt = thread ? reviewThreadExcerpt(thread.root.body) : "";
                   return (
                     <li key={`${round.submissionId}:${threadId}`} className="border-t border-border first:border-t-0">
                       <button
@@ -78,7 +60,7 @@ export function ReviewOpenThreads({
                         }}
                       >
                         <span className="max-w-full break-all font-mono text-xs text-[hsl(var(--current))]">
-                          {thread ? threadLocation(thread) : threadId}
+                          {thread ? reviewThreadLocation(thread.root.anchor) : threadId}
                         </span>
                         {excerpt ? (
                           <span className="line-clamp-2 text-sm text-muted-foreground">

@@ -1,7 +1,10 @@
 import type { ReviewSubmission, ThreadView } from "@server/schemas";
 import { readyToTaskFrom } from "../../issues/lib/ready-to-task";
 
-export type SubmissionClaim = Pick<ReviewSubmission, "threadIds" | "status">;
+export type SubmissionClaim = Pick<
+  ReviewSubmission,
+  "threadIds" | "status" | "summaryCommentId"
+>;
 
 export type SubmittableThread = Pick<
   ThreadView,
@@ -16,6 +19,7 @@ export type SubmittableThread = Pick<
  * releases a thread once that thread is open again — unresolved after the
  * submission became done — and the submission stays `done`. A thread left
  * open under `incomplete`, `failed`, or `tasking` stays with that submission.
+ * A submission's summary comment is never feedback for a later Submit.
  */
 export function isSubmittable(
   thread: SubmittableThread,
@@ -26,7 +30,8 @@ export function isSubmittable(
   }
   return !submissions.some(
     (submission) =>
-      submission.threadIds.includes(thread.rootId) && submission.status !== "done",
+      submission.summaryCommentId === thread.rootId ||
+      (submission.threadIds.includes(thread.rootId) && submission.status !== "done"),
   );
 }
 

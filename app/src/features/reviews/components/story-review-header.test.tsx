@@ -71,6 +71,12 @@ function readyThread(): CommentThread {
   };
 }
 
+function destinationRadio(destination: "story" | "idea"): HTMLInputElement | null {
+  return document.body.querySelector<HTMLInputElement>(
+    `[data-testid="submit-destination-${destination}"] input`,
+  );
+}
+
 function failedSubmission(): ReviewSubmissionView {
   return {
     id: "sub-1",
@@ -153,9 +159,10 @@ describe("StoryReviewHeader submit", () => {
     click(button);
 
     const dialog = document.body.querySelector('[data-testid="submit-review-dialog"]');
-    expect(dialog?.textContent).toContain(
-      "Turn 2 unresolved threads into Tasks. An optional summary comment is posted to the Conversation timeline.",
-    );
+    expect(dialog?.textContent).toContain("Submit as tasks to story-1");
+    expect(dialog?.textContent).toContain("Submit as a new idea");
+    expect(dialog?.textContent).toContain("Threads to submit (2)");
+    expect(destinationRadio("story")?.checked).toBe(true);
     const summary = document.body.querySelector<HTMLTextAreaElement>(
       '[data-testid="submit-review-summary"]',
     );
@@ -164,7 +171,7 @@ describe("StoryReviewHeader submit", () => {
     click(document.body.querySelector('[data-testid="submit-review-confirm"]'));
 
     expect(state.submit).toHaveBeenCalledWith(
-      { reviewId: "rev-1", summary: "Ship the reachability check." },
+      { reviewId: "rev-1", destination: "story", summary: "Ship the reachability check." },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
     expect(document.body.querySelector('[data-testid="submit-review-dialog"]')).toBeNull();
