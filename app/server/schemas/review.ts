@@ -85,8 +85,14 @@ export const openReviewBodySchema = z.union([
 
 export type OpenReviewBody = z.infer<typeof openReviewBodySchema>;
 
+/** `story` appends Tasks to the source Story; `idea` queues a new Idea for auto-plan. */
+export const REVIEW_SUBMIT_DESTINATIONS = ["story", "idea"] as const;
+
+export type ReviewSubmitDestination = (typeof REVIEW_SUBMIT_DESTINATIONS)[number];
+
 export const submitReviewBodySchema = z
   .object({
+    destination: z.enum(REVIEW_SUBMIT_DESTINATIONS),
     summary: z.string().optional(),
   })
   .strict();

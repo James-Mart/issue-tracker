@@ -5,6 +5,7 @@ import type {
   ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
+  SubmitReviewBody,
 } from "@server/schemas";
 import {
   deleteReviewRuntime,
@@ -95,8 +96,8 @@ export function useReopenReview(projectId: string) {
 export function useSubmitReview(projectId: string) {
   return useReviewMutation(
     projectId,
-    ({ reviewId, summary }: { reviewId: string; summary?: string }) =>
-      postSubmitReview(projectId, reviewId, summary),
+    ({ reviewId, ...body }: SubmitReviewBody & { reviewId: string }) =>
+      postSubmitReview(projectId, reviewId, body),
   );
 }
 

@@ -53,7 +53,8 @@ async function load() {
   const threads = await import("./thread-events.js");
   const runs = await import("./agent-runs.js");
   const reviews = await import("./reviews.js");
-  return { ...reviews, ...tasking, ...issues, ...threads, ...runs };
+  const submit = await import("./review-submit.js");
+  return { ...reviews, ...tasking, ...submit, ...issues, ...threads, ...runs };
 }
 
 describe("review tasking", () => {
@@ -78,7 +79,10 @@ describe("review tasking", () => {
     const second = await appendComment(REVIEW_ID, { role: "human", body: "And the name" });
     const sessions = stubReviewTaskingSessions(prompts);
 
-    const recordedView = await submitReview("p", REVIEW_ID, { summary: "Ship the wording" });
+    const recordedView = await submitReview("p", REVIEW_ID, {
+      destination: "story",
+      summary: "Ship the wording",
+    });
     expect(submission(recordedView)).toMatchObject({
       status: "tasking",
       threadIds: [first.id, second.id],
@@ -106,7 +110,9 @@ describe("review tasking", () => {
       "Ship the wording",
     );
 
-    await expect(submitReview("p", REVIEW_ID, {})).rejects.toThrow(SUBMISSION_TASKING_ERROR);
+    await expect(
+      submitReview("p", REVIEW_ID, { destination: "story" }),
+    ).rejects.toThrow(SUBMISSION_TASKING_ERROR);
 
     const runs = listAgentRunsForIssue(REVIEW_ID);
     expect(runs.map((run) => run.role)).toEqual([REVIEW_TASKER_ROLE]);
@@ -133,7 +139,7 @@ describe("review tasking", () => {
     const kept = await appendComment(REVIEW_ID, { role: "human", body: "Keep" });
     const missed = await appendComment(REVIEW_ID, { role: "human", body: "Miss" });
     const sessions = stubReviewTaskingSessions(prompts);
-    const recordedView = await submitReview("p", REVIEW_ID, {});
+    const recordedView = await submitReview("p", REVIEW_ID, { destination: "story" });
     const started = await launchRecorded(
       { launchRecordedSubmission, readReviewView },
       recordedView,

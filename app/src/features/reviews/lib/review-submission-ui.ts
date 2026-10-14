@@ -69,14 +69,17 @@ export function taskingLabel(threadCount: number): string {
   return `Tasking ${countLabel(threadCount, "thread", "threads")}…`;
 }
 
-export function submitReviewDialogDetail(readyCount: number): string {
-  const threads = countLabel(readyCount, "unresolved thread", "unresolved threads");
-  return `Turn ${threads} into Tasks. An optional summary comment is posted to the Conversation timeline.`;
+export function threadsToSubmitLabel(count: number): string {
+  return `Threads to submit (${count})`;
 }
 
-export function reviewSubmittedLabel(threadCount: number, taskCount: number): string {
-  const threads = countLabel(threadCount, "thread", "threads");
-  const tasks = taskCount === 1 ? "Task" : "Tasks";
+/** The timeline line for a done submission, to Tasks or to a follow-up Idea. */
+export function reviewSubmittedLabel(
+  submission: Pick<Extract<ReviewSubmission, { status: "done" }>, "threadIds" | "taskIds" | "ideaId">,
+): string {
+  const threads = countLabel(submission.threadIds.length, "thread", "threads");
+  if (submission.ideaId) return `Review submitted — ${threads} → follow-up idea`;
+  const tasks = submission.taskIds.length === 1 ? "Task" : "Tasks";
   return `Review submitted — ${threads} → ${tasks}`;
 }
 

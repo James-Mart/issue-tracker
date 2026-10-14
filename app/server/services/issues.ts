@@ -337,7 +337,13 @@ function assertWritable(target: Issue, all: Issue[]): void {
   }
 }
 
-export function create(input: CreateInput): Promise<IssueRecord> {
+/** Idea fields only server callers set; request bodies never reach them. */
+export type CreateOptions = { mergeBase?: string; queuePlan?: boolean };
+
+export function create(
+  input: CreateInput,
+  options: CreateOptions = {},
+): Promise<IssueRecord> {
   return serialize(() => {
     ensureMigrations();
     if (input.kind === "review") {
@@ -407,13 +413,13 @@ export function create(input: CreateInput): Promise<IssueRecord> {
       if (draft.executionGate === true && !draft.stakeholder) {
         throw new IssueError("conflict", EXECUTION_GATE_STAKEHOLDER_ERROR);
       }
+      if (options.mergeBase) draft.mergeBase = options.mergeBase;
       if (input.stakeholder) {
         const project = issues.find(
           (issue) => issue.id === input.partOf && issue.kind === "project",
         );
-        if (project?.kind === "project" && project.autonomous === true) {
-          draft.planQueuedAt = now;
-        }
+        const autonomous = project?.kind === "project" && project.autonomous === true;
+        if (autonomous || options.queuePlan) draft.planQueuedAt = now;
       }
     }
     if (input.kind === "story") {

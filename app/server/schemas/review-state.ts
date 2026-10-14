@@ -86,6 +86,8 @@ export const reviewSubmissionSchema = z.discriminatedUnion("status", [
       conversationId: nonEmpty.optional(),
       status: z.literal("done"),
       taskIds: z.array(nonEmpty),
+      // Set when the threads went to a new Idea instead of Tasks on the Story.
+      ideaId: nonEmpty.optional(),
     })
     .strict(),
 ]);

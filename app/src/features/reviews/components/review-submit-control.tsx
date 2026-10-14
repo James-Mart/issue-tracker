@@ -1,29 +1,17 @@
 import { useRef, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
-import type { ReviewView } from "@server/schemas";
+import type { ReviewSubmitDestination, ReviewView } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogField,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import {
   useArchiveReview,
   useReopenReview,
   useRetryOpenReviewSubmissions,
   useSubmitReview,
 } from "../api/mutations";
-import {
-  submitReviewDialogDetail,
-  type ReviewSubmitHeader,
-} from "../lib/review-submission-ui";
+import type { ReviewSubmitHeader } from "../lib/review-submission-ui";
+import { SubmitReviewDialog } from "./review-submit-dialog";
 
 function ReviewStatusAction({
   projectId,
@@ -57,55 +45,6 @@ function ReviewStatusAction({
     >
       Archive
     </Button>
-  );
-}
-
-function SubmitReviewDialog({
-  open,
-  readyCount,
-  summary,
-  onSummaryChange,
-  onOpenChange,
-  onSubmit,
-}: {
-  open: boolean;
-  readyCount: number;
-  summary: string;
-  onSummaryChange: (summary: string) => void;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="submit-review-dialog">
-        <DialogHeader>
-          <DialogTitle>Submit review</DialogTitle>
-          <DialogDescription>{submitReviewDialogDetail(readyCount)}</DialogDescription>
-        </DialogHeader>
-        <DialogField>
-          <Label htmlFor="submit-review-summary">Summary comment (optional)</Label>
-          <Textarea
-            id="submit-review-summary"
-            value={summary}
-            data-testid="submit-review-summary"
-            onChange={(event) => onSummaryChange(event.target.value)}
-          />
-        </DialogField>
-        <DialogFooter>
-          <Button type="button" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            data-testid="submit-review-confirm"
-            onClick={onSubmit}
-          >
-            Submit review
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -183,6 +122,7 @@ export function ReviewSubmitActions({
   projectId,
   review,
   header,
+  readyThreads,
   onAcknowledge,
   onAcknowledgeEnd,
   onRetryStart,
@@ -191,6 +131,9 @@ export function ReviewSubmitActions({
   projectId: string;
   review: ReviewView;
   header: ReviewSubmitHeader;
+  /** Threads a Submit carries; undefined until comments load. */
+  readyThreads: readonly CommentThread[] | undefined;
+  /** Tasking is acknowledged only for the Story destination. */
   onAcknowledge: () => void;
   onAcknowledgeEnd: () => void;
   onRetryStart: (submissionIds: readonly string[]) => void;
@@ -198,13 +141,20 @@ export function ReviewSubmitActions({
 }) {
   const submit = useSubmitReview(projectId);
   const retry = useRetryOpenReviewSubmissions(projectId);
+  const defaultDestination: ReviewSubmitDestination = review.story ? "story" : "idea";
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [destination, setDestination] = useState(defaultDestination);
   const [summary, setSummary] = useState("");
-  const keepSummary = useRef(false);
+  const keepDraft = useRef(false);
+
+  const resetDraft = () => {
+    setSummary("");
+    setDestination(defaultDestination);
+  };
 
   const closeDialog = (next: boolean) => {
-    if (!next && !keepSummary.current) setSummary("");
-    if (!next) keepSummary.current = false;
+    if (!next && !keepDraft.current) resetDraft();
+    if (!next) keepDraft.current = false;
     setDialogOpen(next);
   };
 
@@ -240,28 +190,35 @@ export function ReviewSubmitActions({
         />
         <ReviewStatusAction projectId={projectId} review={review} />
       </div>
-      {header.submit && header.submit.readyCount !== undefined ? (
+      {header.submit && readyThreads ? (
         <SubmitReviewDialog
           open={dialogOpen}
-          readyCount={header.submit.readyCount}
+          storyId={review.story}
+          threads={readyThreads}
+          destination={destination}
+          onDestinationChange={setDestination}
           summary={summary}
           onSummaryChange={setSummary}
           onOpenChange={closeDialog}
           onSubmit={() => {
             const trimmed = summary.trim();
-            keepSummary.current = true;
+            keepDraft.current = true;
             setDialogOpen(false);
-            onAcknowledge();
+            if (destination === "story") onAcknowledge();
             submit.mutate(
-              { reviewId: review.id, summary: trimmed === "" ? undefined : trimmed },
+              {
+                reviewId: review.id,
+                destination,
+                summary: trimmed === "" ? undefined : trimmed,
+              },
               {
                 onSuccess: () => {
-                  setSummary("");
-                  keepSummary.current = false;
+                  resetDraft();
+                  keepDraft.current = false;
                   onAcknowledgeEnd();
                 },
                 onError: () => {
-                  keepSummary.current = false;
+                  keepDraft.current = false;
                   onAcknowledgeEnd();
                   setDialogOpen(true);
                 },

@@ -5,10 +5,7 @@ import type {
   ReviewSubmission,
   ReviewSubmissionView,
 } from "../schemas/review.js";
-import {
-  parseRetryReviewSubmissionBody,
-  parseSubmitReviewBody,
-} from "../schemas/review.js";
+import { parseRetryReviewSubmissionBody } from "../schemas/review.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { resumeCoordinator } from "./bring-in-coordinator.js";
@@ -78,6 +75,21 @@ function submittableThreadIds(
   submissions: readonly ReviewSubmission[],
 ): string[] {
   return submittableRootIds(readComments(reviewId).threads, submissions);
+}
+
+/** Re-read under the store lock. Another submission can land after the first read. */
+export function assertThreadsStillSubmittable(
+  reviewId: string,
+  submissions: readonly ReviewSubmission[],
+  threadIds: readonly string[],
+): void {
+  const readyNow = new Set(submittableThreadIds(reviewId, submissions));
+  if (threadIds.some((id) => !readyNow.has(id))) {
+    throw new IssueError(
+      "conflict",
+      "ready threads changed before the submission was recorded",
+    );
+  }
 }
 
 function taskingPrompt(review: ReviewRecordView, threadIds: string[]): string {
@@ -193,7 +205,7 @@ function assertStoryOpenForTasking(storyId: string) {
   return story;
 }
 
-function assertNoTasking(submissions: readonly { status: string }[]): void {
+export function assertNoTasking(submissions: readonly { status: string }[]): void {
   if (submissions.some((item) => item.status === "tasking")) {
     throw new IssueError("conflict", SUBMISSION_TASKING_ERROR);
   }
@@ -239,14 +251,29 @@ async function markStartFailed(
   );
 }
 
-export async function submitReview(
+/** Post the optional summary comment, then the fields every new submission carries. */
+export async function newSubmissionFields(
+  reviewId: string,
+  summary: string | undefined,
+  threadIds: string[],
+): Promise<Pick<ReviewSubmission, "id" | "at" | "summaryCommentId" | "threadIds">> {
+  const summaryComment = summary
+    ? await appendComment(reviewId, { role: "human", body: summary })
+    : undefined;
+  return {
+    id: randomUUID(),
+    at: new Date().toISOString(),
+    ...(summaryComment ? { summaryCommentId: summaryComment.id } : {}),
+    threadIds,
+  };
+}
+
+/** Record a tasking submission of every ready thread. The route starts the tasker. */
+export async function submitReviewAsTasks(
   projectId: string,
   reviewId: string,
-  body: unknown,
+  summary: string | undefined,
 ): Promise<ReviewRecordView> {
-  const parsed = parseSubmitReviewBody(body);
-  if (!parsed.ok) throw new IssueError("validation", parsed.message);
-
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
   const storyId = requireReviewStory(review);
@@ -258,29 +285,15 @@ export async function submitReview(
   }
   requireProjectWorkspace(project);
 
-  const summary = parsed.body.summary?.trim() ?? "";
-  const summaryComment = summary
-    ? await appendComment(reviewId, { role: "human", body: summary })
-    : undefined;
-
   const submission: ReviewSubmission = {
-    id: randomUUID(),
-    at: new Date().toISOString(),
-    ...(summaryComment ? { summaryCommentId: summaryComment.id } : {}),
-    threadIds,
+    ...(await newSubmissionFields(reviewId, summary, threadIds)),
     status: "tasking",
   };
 
   updateStoredReview(project, reviewId, (current) => {
     assertStoryOpenForTasking(storyId);
     assertNoTasking(current.submissions);
-    const readyNow = new Set(submittableThreadIds(reviewId, current.submissions));
-    if (threadIds.some((id) => !readyNow.has(id))) {
-      throw new IssueError(
-        "conflict",
-        "ready threads changed before the submission was recorded",
-      );
-    }
+    assertThreadsStillSubmittable(reviewId, current.submissions, threadIds);
     return {
       ...current,
       updatedAt: submission.at,

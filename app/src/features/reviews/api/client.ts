@@ -9,6 +9,7 @@ import type {
   ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
+  SubmitReviewBody,
 } from "@server/schemas";
 
 /** Empty-search size for the new-review picker. */
@@ -172,11 +173,11 @@ export function postReopenReview(
 export function postSubmitReview(
   projectId: string,
   reviewId: string,
-  summary?: string,
+  body: SubmitReviewBody,
 ): Promise<ReviewView> {
   return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/submissions`, {
     method: "POST",
-    body: summary === undefined ? {} : { summary },
+    body,
   });
 }
 
