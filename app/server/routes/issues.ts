@@ -51,6 +51,7 @@ import {
 import { editComment } from "../services/comment-edit.js";
 import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
+  clearWorkQueueFields,
   createIssueChannelSession,
   startConversationPrompt,
 } from "../services/conversations.js";
@@ -252,6 +253,9 @@ export function createIssuesRouter(
         },
         sessions,
       );
+      if (channel === "implementing") {
+        await clearWorkQueueFields(issueId);
+      }
 
       // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
       // deadlock if nested inside the conversations write chain.

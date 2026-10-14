@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CursorAgentError } from "./agent-sdk.js";
 import {
   bindWorkQueueDisk,
   fakeLauncherSessions,
@@ -103,5 +104,66 @@ describe("implementing work-queue launcher", () => {
     const archived = await archivedById();
     expect(finished.map((id) => archived.get(id))).toEqual([true, true, true]);
     expect(archived.get(open)).toBe(false);
+  });
+
+  it("keeps a failed start queued in its slot until needsAttention is cleared", async () => {
+    seedProject();
+    seedEpic("older", 1, {
+      workQueuedAt: "2026-07-01T00:00:00.000Z",
+      workQueuePosition: 1,
+    });
+    seedEpic("newer", 2, {
+      workQueuedAt: "2026-07-02T00:00:00.000Z",
+      workQueuePosition: 2,
+    });
+    const { sessions, started } = fakeLauncherSessions();
+    let sends = 0;
+    const send = sessions.sendPrompt.bind(sessions);
+    sessions.sendPrompt = async (conversationId, options) => {
+      sends += 1;
+      if (sends === 1) {
+        return {
+          ok: false,
+          cause: "never_started",
+          error: new CursorAgentError("coordinator down"),
+        };
+      }
+      return send(conversationId, options);
+    };
+    const { runLauncherPass } = await loadLauncher();
+    const { update } = await import("./issues.js");
+    const { listConversations } = await loadConversations();
+
+    await runLauncherPass(sessions);
+
+    expect(sends).toBe(1);
+    expect(started).toHaveLength(0);
+    expect(readRaw("older")).toMatchObject({
+      workQueuedAt: "2026-07-01T00:00:00.000Z",
+      workQueuePosition: 1,
+      needsAttention: true,
+      attentionReason: "Auto-start failed: coordinator down",
+    });
+    expect(readRaw("newer")).toMatchObject({
+      workQueuedAt: "2026-07-02T00:00:00.000Z",
+      workQueuePosition: 2,
+    });
+    expect(readRaw("newer").needsAttention).not.toBe(true);
+    expect(listConversations().map((meta) => meta.issueId)).toEqual(["older"]);
+
+    await runLauncherPass(sessions);
+    expect(sends).toBe(1);
+
+    await update("older", { needsAttention: false, attentionReason: null });
+    await runLauncherPass(sessions);
+
+    expect(sends).toBe(2);
+    expect(started).toHaveLength(1);
+    expect(readRaw("older").workQueuedAt).toBeUndefined();
+    expect(readRaw("older").workQueuePosition).toBeUndefined();
+    expect(readRaw("older").needsAttention).not.toBe(true);
+    expect(readRaw("newer").workQueuedAt).toBe("2026-07-02T00:00:00.000Z");
+    const live = listConversations().filter((meta) => !meta.archived);
+    expect(live.map((meta) => meta.issueId)).toEqual(["older"]);
   });
 });

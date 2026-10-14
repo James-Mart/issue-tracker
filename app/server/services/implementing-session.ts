@@ -1,6 +1,7 @@
 import { listedAgentModels } from "../agent-model-slugs.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
+  clearWorkQueueFields,
   createIssueChannelSession,
   startConversationPrompt,
 } from "./conversations.js";
@@ -51,4 +52,5 @@ export async function startImplementingChannelSession(
   if (!started.ok) {
     throw new Error(started.message);
   }
+  await clearWorkQueueFields(input.issueId);
 }

@@ -32,20 +32,36 @@ function openSessions(byId: Map<string, Issue>): OpenSession[] {
   return open;
 }
 
+function countsAsOpenSlot(
+  root: WorkRoot,
+  projectId: string,
+  issues: Issue[],
+  derived: SlotSnapshot["derived"],
+  byId: Map<string, Issue>,
+): boolean {
+  if (root.archived || projectContaining(root, byId) !== projectId) return false;
+  return !isWorkRootFinished(root, issues, derived);
+}
+
 /**
- * Ids of the Project's work roots holding a slot: a non-archived
- * `implementing` session on a root that is neither archived nor finished.
+ * Ids of the Project's work roots holding a slot.
+ * A non-archived `implementing` session on a root that is neither archived
+ * nor finished holds one. So does a still-queued root with `needsAttention`:
+ * a failed start stays among the active slots until that flag is cleared.
  */
 export function slotHoldingRootIds(
   projectId: string,
   { issues, derived, byId }: SlotSnapshot,
 ): Set<string> {
+  const openByRoot = new Set(openSessions(byId).map(({ root }) => root.id));
   const held = new Set<string>();
-  for (const { root } of openSessions(byId)) {
-    if (held.has(root.id) || root.archived) continue;
-    if (projectContaining(root, byId) !== projectId) continue;
-    if (isWorkRootFinished(root, issues, derived)) continue;
-    held.add(root.id);
+  for (const issue of issues) {
+    if (issue.kind !== "epic" && issue.kind !== "story") continue;
+    const queuedAttention = Boolean(issue.workQueuedAt) && issue.needsAttention;
+    if (!openByRoot.has(issue.id) && !queuedAttention) continue;
+    if (countsAsOpenSlot(issue, projectId, issues, derived, byId)) {
+      held.add(issue.id);
+    }
   }
   return held;
 }

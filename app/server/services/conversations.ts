@@ -361,7 +361,8 @@ function refuseIfImplementingWorkRootLocked(
   }
 }
 
-async function clearWorkQueueFields(issueId: string): Promise<void> {
+/** Drop a work root's queue fields once an implementing start has taken its slot. */
+export async function clearWorkQueueFields(issueId: string): Promise<void> {
   const issue = readIssueOrThrow(issueId);
   if (issue.kind !== "epic" && issue.kind !== "story") return;
   if (!issue.workQueuedAt && issue.workQueuePosition === undefined) return;
@@ -373,8 +374,10 @@ async function clearWorkQueueFields(issueId: string): Promise<void> {
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
  * active sessions, and refused requests write nothing. An implementing session
- * needs a free slot in its Project unless the root already holds one, and
- * clears the work root's `workQueuedAt` and `workQueuePosition`.
+ * needs a free slot in its Project unless the root already holds one. Queue
+ * fields stay until the caller clears them: the launcher does that only after
+ * the prompt has started, and the channel route does it when the session is
+ * created.
  */
 export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
@@ -416,9 +419,6 @@ export async function createIssueChannelSession(
     );
     return { meta, ...(initialPrompt ? { initialPrompt } : {}) };
   });
-  if (input.channel === "implementing") {
-    await clearWorkQueueFields(input.issueId.trim());
-  }
   return created;
 }
 
