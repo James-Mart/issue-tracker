@@ -6,11 +6,12 @@ import { issuesById, projectIdOf } from "./build-tree";
 import {
   epicChildStories,
   epicEveryUnmergedChildReadyToLand,
+  epicHasActivelyImplementingChild,
   isInFlight,
   isIssueComplete,
   isReadyToLandStory,
-  storyIsActivelyImplementing,
 } from "./derived";
+import { compareQueueItems, queueStage, type QueueStage } from "./queue-view";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
 import { buildTreeRowIndexes } from "./tree-row-indexes";
 
@@ -21,6 +22,8 @@ export type { RailNodeState };
 export type FlowItem = {
   issue: IssueRecord;
   state: DerivedState | undefined;
+  /** Set on queue rows. Other buckets leave it unset. */
+  queueStage?: QueueStage;
 };
 
 /** Idea row in the awaiting-planning bucket (captured, not yet directed). */
@@ -43,6 +46,42 @@ export function isWorkQueuedRoot(issue: IssueRecord): boolean {
     (issue.kind === "epic" || issue.kind === "story") &&
     Boolean(issue.workQueuedAt)
   );
+}
+
+type QueueWorkFlowItem = FlowItem & {
+  issue: Extract<IssueRecord, { kind: "epic" | "story" }>;
+};
+
+function isQueueWorkRoot(item: FlowItem): item is QueueWorkFlowItem {
+  return item.issue.kind === "epic" || item.issue.kind === "story";
+}
+
+/** Running queue row: a slot-holding root with a live implementing turn. */
+export function isRunningQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "running" && isQueueWorkRoot(item);
+}
+
+/** Parked queue row: a root that left its slot and sits above the head. */
+export function isParkedQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "parked" && isQueueWorkRoot(item);
+}
+
+/** Paused queue row: a slot-holding root with no live implementing turn. */
+export function isPausedQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "paused" && isQueueWorkRoot(item);
+}
+
+/** Waiting queue row: epic or project-level Story not holding a slot. */
+export function isWaitingQueueWorkFlowItem(
+  item: FlowItem,
+): item is QueueWorkFlowItem {
+  return item.queueStage === "waiting" && isQueueWorkRoot(item);
 }
 
 /** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
@@ -91,10 +130,10 @@ export type DepGraphModel = {
 };
 
 export type FlowBuckets = {
-  awaitingPlanning: FlowItem[];
+  planning: FlowItem[];
   readyToLand: FlowItem[];
   ready: FlowItem[];
-  inFlight: FlowItem[];
+  queue: FlowItem[];
   blocked: FlowItem[];
   recentlyMerged: FlowItem[];
 };
@@ -180,16 +219,6 @@ export function inFlightTaskOf(
   return tasks[0];
 }
 
-function epicHasActivelyImplementingChild(
-  epicId: string,
-  issues: IssueRecord[],
-  derived: Record<string, DerivedState>,
-): boolean {
-  return epicChildStories(epicId, issues).some((child) =>
-    storyIsActivelyImplementing(child, derived[child.id], issues),
-  );
-}
-
 function epicPlacedInReady(
   epicId: string,
   issues: IssueRecord[],
@@ -212,22 +241,6 @@ function shouldOmitEpic(
   return (
     !epicHasActivelyImplementingChild(epicId, issues, derived) &&
     epicEveryUnmergedChildReadyToLand(epicId, issues, derived)
-  );
-}
-
-function isInFlightBucket(
-  issue: IssueRecord & { kind: "story" | "epic" | "idea" },
-  state: DerivedState | undefined,
-  issues: IssueRecord[],
-  derived: Record<string, DerivedState>,
-): boolean {
-  if (issue.kind === "idea") return state?.ideaStatus === "planning";
-  if (issue.kind === "story") {
-    return storyIsActivelyImplementing(issue, state, issues);
-  }
-  return (
-    state?.liveRun === true ||
-    epicHasActivelyImplementingChild(issue.id, issues, derived)
   );
 }
 
@@ -273,15 +286,14 @@ function recentlyMergedInstant(
 }
 
 /**
- * Bucket Stories, Epics, and Ideas into awaitingPlanning / readyToLand /
- * ready / inFlight / blocked / recentlyMerged. Pure view-model — no I/O.
- * `inFlight` is glowing active work: Ideas whose status is `planning`,
- * Stories that `storyIsActivelyImplementing`, and Epics with an actively
- * implementing child or a live implementing run. Ready-to-land Stories
- * (including epic-children) go to `readyToLand`. Captured Ideas go to
- * `awaitingPlanning`. `recentlyMerged` keeps project-level merged Stories
- * and done Epics that have a merge instant, newest first; equal instants
- * tie-break on issue id, smaller id first.
+ * Bucket Stories, Epics, and Ideas into planning / readyToLand / ready /
+ * queue / blocked / recentlyMerged. Pure view-model — no I/O.
+ * `queue` is the Project work queue: parked, running, paused, and waiting roots,
+ * including queued roots that are blocked. Planning Ideas come first in
+ * `planning`, then captured Ideas. Ready-to-land Stories (including
+ * epic-children) go to `readyToLand`. `recentlyMerged` keeps project-level
+ * merged Stories and done Epics that have a merge instant, newest first;
+ * equal instants tie-break on issue id, smaller id first.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -305,39 +317,56 @@ export function flowBuckets(
     },
   );
 
-  const awaitingPlanning: FlowItem[] = [];
+  const planning: FlowItem[] = [];
   const readyToLand: FlowItem[] = [];
   const ready: FlowItem[] = [];
-  const inFlight: FlowItem[] = [];
+  const queue: FlowItem[] = [];
   const blocked: FlowItem[] = [];
   const recentlyMergedRanked: { item: FlowItem; at: number }[] = [];
 
   for (const issue of candidates) {
     const state = derived[issue.id];
     const item: FlowItem = { issue, state };
+    const stage =
+      issue.kind === "epic" || issue.kind === "story"
+        ? queueStage(issue, state, issues, derived, byId)
+        : null;
+    const queued = stage ? { ...item, queueStage: stage } : null;
     if (issue.kind === "idea" && state?.ideaStatus === "captured") {
-      awaitingPlanning.push(item);
+      planning.push(item);
+    } else if ((state?.blocked || state?.planNotFinal) && queued) {
+      queue.push(queued);
     } else if (state?.blocked || state?.planNotFinal) {
       blocked.push(item);
+    } else if (issue.kind === "idea" && state?.ideaStatus === "planning") {
+      planning.push(item);
     } else if (isReadyToLandStory(issue, state, issues)) {
       readyToLand.push(item);
-    } else if (isInFlightBucket(issue, state, issues, derived)) {
-      inFlight.push(item);
-    } else if (issue.kind === "epic" && shouldOmitEpic(issue.id, issues, derived)) {
+    } else if (queued) {
+      queue.push(queued);
+    } else if (
+      issue.kind === "epic" &&
+      shouldOmitEpic(issue.id, issues, derived)
+    ) {
       continue;
     } else if (isRecentlyMerged(issue, state)) {
       const at = recentlyMergedInstant(issue, issues);
       // No merge instant: leave the row out of every bucket. Recently merged
-      // excludes it, and it is not ready or in flight.
+      // excludes it, and it is not ready or in the queue.
       if (at !== undefined) {
         recentlyMergedRanked.push({ item, at });
       }
-    } else if (isWorkQueuedRoot(issue)) {
-      inFlight.push(item);
     } else {
       ready.push(item);
     }
   }
+
+  planning.sort(
+    (a, b) =>
+      Number(a.state?.ideaStatus !== "planning") -
+      Number(b.state?.ideaStatus !== "planning"),
+  );
+  queue.sort(compareQueueItems);
 
   recentlyMergedRanked.sort((a, b) => {
     if (a.at !== b.at) return b.at - a.at;
@@ -346,10 +375,10 @@ export function flowBuckets(
   const recentlyMerged = recentlyMergedRanked.map((entry) => entry.item);
 
   return {
-    awaitingPlanning,
+    planning,
     readyToLand,
     ready,
-    inFlight,
+    queue,
     blocked,
     recentlyMerged,
   };

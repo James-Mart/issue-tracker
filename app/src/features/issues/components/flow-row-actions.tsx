@@ -2,9 +2,23 @@ import { GitPullRequest } from "lucide-react";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import type { FlowItem } from "../lib/flow";
-import { isCapturedIdeaFlowItem, isReadyWorkFlowItem } from "../lib/flow";
+import {
+  isCapturedIdeaFlowItem,
+  isParkedQueueWorkFlowItem,
+  isPausedQueueWorkFlowItem,
+  isReadyWorkFlowItem,
+  isRunningQueueWorkFlowItem,
+  isWaitingQueueWorkFlowItem,
+} from "../lib/flow";
 import { ImplementingFlowRowLaunch } from "./implementing-launch-control";
 import { PlanningFlowRowLaunch } from "./planning-launch-control";
+import { QueueDequeueControl } from "./queue-dequeue-control";
+import { ParkedResumeControl, QueueParkControl } from "./queue-park-control";
+import {
+  QueuePauseControl,
+  QueueResumeControl,
+} from "./queue-pause-resume-control";
+import { QueueDragHandle } from "./queue-reorder";
 
 /** Inline cockpit row actions scoped to what each flow bucket can perform. */
 export function FlowRowActions({
@@ -22,11 +36,40 @@ export function FlowRowActions({
   const readyWork = isReadyWorkFlowItem(item, issues, derived)
     ? item.issue
     : undefined;
+  const waitingWork = isWaitingQueueWorkFlowItem(item) ? item.issue : undefined;
+  const runningWork = isRunningQueueWorkFlowItem(item) ? item.issue : undefined;
+  const pausedWork = isPausedQueueWorkFlowItem(item) ? item.issue : undefined;
+  const parkedWork = isParkedQueueWorkFlowItem(item) ? item.issue : undefined;
 
   return (
     <>
       {capturedIdea ? (
         <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
+      ) : null}
+      {runningWork ? <QueuePauseControl issueId={runningWork.id} /> : null}
+      {pausedWork ? (
+        <>
+          <QueueResumeControl issue={pausedWork} />
+          <QueueParkControl issueId={pausedWork.id} />
+        </>
+      ) : null}
+      {parkedWork ? (
+        <>
+          <ParkedResumeControl
+            issueId={parkedWork.id}
+            testId="flow-row-parked-resume"
+          />
+          <QueueDequeueControl issue={parkedWork} />
+        </>
+      ) : null}
+      {waitingWork ? (
+        <>
+          <QueueDragHandle
+            issueId={waitingWork.id}
+            projectId={waitingWork.partOf}
+          />
+          <QueueDequeueControl issue={waitingWork} />
+        </>
       ) : null}
       {readyWork ? <ImplementingFlowRowLaunch issue={readyWork} /> : null}
       {prUrl ? (

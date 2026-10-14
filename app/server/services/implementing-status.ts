@@ -1,6 +1,58 @@
-import type { DerivedState, Issue } from "../schemas.js";
+import type { ConversationMeta, DerivedState, Issue } from "../schemas.js";
 import { listConversations } from "./conversations.js";
 import { isRunLive } from "./run-live.js";
+
+export type ImplementingPresence = { live: boolean };
+
+/**
+ * Non-archived implementing sessions per issue. Map presence means the
+ * session is open; `live` means one of those sessions has a live run.
+ */
+type OverlayFacts = {
+  liveRuns: Record<string, boolean>;
+  /** Implementing session ids, including archived sessions. */
+  implementingSessions: Map<string, string[]>;
+  openImplementing: Map<string, ImplementingPresence>;
+};
+
+function conversationOverlayFacts(
+  metas: readonly Pick<
+    ConversationMeta,
+    "id" | "issueId" | "channel" | "archived"
+  >[],
+  isLive: (conversationId: string) => boolean,
+): OverlayFacts {
+  const liveRuns: Record<string, boolean> = {};
+  const implementingSessions = new Map<string, string[]>();
+  const openImplementing = new Map<string, ImplementingPresence>();
+  for (const meta of metas) {
+    if (meta.issueId !== undefined && isLive(meta.id)) {
+      liveRuns[meta.issueId] = true;
+    }
+    if (meta.issueId !== undefined && meta.channel === "implementing") {
+      const sessions = implementingSessions.get(meta.issueId);
+      if (sessions) sessions.push(meta.id);
+      else implementingSessions.set(meta.issueId, [meta.id]);
+    }
+    if (meta.archived || meta.channel !== "implementing" || !meta.issueId) {
+      continue;
+    }
+    const current = openImplementing.get(meta.issueId) ?? { live: false };
+    if (isLive(meta.id)) current.live = true;
+    openImplementing.set(meta.issueId, current);
+  }
+  return { liveRuns, implementingSessions, openImplementing };
+}
+
+export function openImplementingPresence(
+  metas: readonly Pick<
+    ConversationMeta,
+    "id" | "issueId" | "channel" | "archived"
+  >[],
+  isLive: (conversationId: string) => boolean,
+): Map<string, ImplementingPresence> {
+  return conversationOverlayFacts(metas, isLive).openImplementing;
+}
 
 function sessionsByIssueChannel(channel: string): Map<string, string[]> {
   const byIssueChannel = new Map<string, string[]>();
@@ -34,16 +86,6 @@ export function hasActiveImplementingRun(issueId: string): boolean {
   return hasLiveRun(sessionsByIssueChannel("implementing").get(issueId));
 }
 
-/** True when any issue-anchored conversation on the issue is live (any channel). */
-export function liveRunByIssueId(): Record<string, boolean> {
-  const byId: Record<string, boolean> = {};
-  for (const meta of listConversations()) {
-    if (meta.issueId === undefined || !isRunLive(meta.id)) continue;
-    byId[meta.issueId] = true;
-  }
-  return byId;
-}
-
 /**
  * After `derive()`, overlay live implementing sessions onto Epic / project-level
  * Story status and set `liveRun` on every issue in the graph.
@@ -53,14 +95,20 @@ export function mergeImplementingOverlay(
   derived: Record<string, DerivedState>,
 ): void {
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  const implementingSessions = sessionsByIssueChannel("implementing");
-  const liveRuns = liveRunByIssueId();
+  const { liveRuns, implementingSessions, openImplementing } =
+    conversationOverlayFacts(listConversations(), isRunLive);
 
   for (const issue of issues) {
     const liveRun = liveRuns[issue.id] === true;
+    const presence = openImplementing.get(issue.id);
     const existing = derived[issue.id];
-    if (existing) existing.liveRun = liveRun;
-    else derived[issue.id] = { blocked: false, liveRun };
+    const next = existing ?? { blocked: false };
+    next.liveRun = liveRun;
+    if (presence) {
+      next.implementingOpen = true;
+      if (presence.live) next.implementingLive = true;
+    }
+    if (!existing) derived[issue.id] = next;
   }
 
   for (const issue of issues) {

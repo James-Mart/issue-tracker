@@ -6,14 +6,20 @@ export const COCKPIT_COLLAPSED_SECTIONS_STORAGE_KEY =
 const FLOW_BUCKET_KEYS = new Set<FlowBucketKey>([
   "needsAttention",
   "readyToLand",
-  "inFlight",
+  "queue",
   "ready",
-  "awaitingPlanning",
+  "planning",
   "recentlyMerged",
 ]);
 
 function isFlowBucketKey(value: unknown): value is FlowBucketKey {
   return typeof value === "string" && FLOW_BUCKET_KEYS.has(value as FlowBucketKey);
+}
+
+function storedSectionKey(value: unknown): FlowBucketKey | undefined {
+  if (value === "inFlight") return "queue";
+  if (value === "awaitingPlanning") return "planning";
+  return isFlowBucketKey(value) ? value : undefined;
 }
 
 export function readCockpitCollapsedSectionKeys(
@@ -25,7 +31,12 @@ export function readCockpitCollapsedSectionKeys(
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter(isFlowBucketKey));
+    return new Set(
+      parsed.flatMap((value) => {
+        const key = storedSectionKey(value);
+        return key ? [key] : [];
+      }),
+    );
   } catch {
     return new Set();
   }

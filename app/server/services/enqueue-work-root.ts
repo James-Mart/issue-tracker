@@ -1,8 +1,7 @@
-import type { Issue, IssueDetail } from "../schemas.js";
+import type { IssueDetail } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
-import { isImplementingWorkRootIssue } from "./implementing-launch.js";
 import { problemsFor } from "./integrity.js";
 import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import {
@@ -14,27 +13,19 @@ import {
   serialize,
 } from "./issues.js";
 import { projectContaining } from "./subtree.js";
-import { firstBlockingEnqueueBlocker, withQueueStamp } from "./work-queue.js";
+import {
+  firstBlockingEnqueueBlocker,
+  refuseWorkQueueConflict,
+  withQueueStamp,
+} from "./work-queue.js";
 import { runLauncherPass } from "./work-queue-launcher.js";
-import { slotHoldingRootIds, type WorkRoot } from "./work-slots.js";
+import {
+  implementingWorkRootFromIssue,
+  slotHoldingRootIds,
+} from "./work-slots.js";
 
 export const ENQUEUE_ALREADY_QUEUED = "already-queued";
 export const ENQUEUE_HOLDS_SLOT = "holds-slot";
-
-function implementingWorkRoot(
-  issue: Issue,
-  byId: Map<string, Issue>,
-): WorkRoot | undefined {
-  const parentKind =
-    issue.kind === "story" ? byId.get(issue.partOf)?.kind : undefined;
-  if (!isImplementingWorkRootIssue(issue.kind, parentKind)) return undefined;
-  if (issue.kind !== "epic" && issue.kind !== "story") return undefined;
-  return issue;
-}
-
-function refuseEnqueue(reason: string, message: string): never {
-  throw new IssueError("conflict", message, { reason });
-}
 
 /**
  * Queue an unarchived, unfinished work root that is not already in the queue.
@@ -51,7 +42,9 @@ export async function enqueueWorkRoot(
     const { issues } = readAll();
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
     const current = byId.get(id);
-    const root = current ? implementingWorkRoot(current, byId) : undefined;
+    const root = current
+      ? implementingWorkRootFromIssue(current, byId)
+      : undefined;
     if (!root) {
       throw new IssueError(
         "validation",
@@ -59,14 +52,14 @@ export async function enqueueWorkRoot(
       );
     }
     if (root.archived) {
-      refuseEnqueue("archived", `work root "${root.title}" is archived`);
+      refuseWorkQueueConflict("archived", `work root "${root.title}" is archived`);
     }
     const derived = derive(issues);
     if (isWorkRootFinished(root, issues, derived.byId)) {
-      refuseEnqueue("finished", `work root "${root.title}" is finished`);
+      refuseWorkQueueConflict("finished", `work root "${root.title}" is finished`);
     }
-    if (root.workQueuedAt) {
-      refuseEnqueue(
+    if (root.workQueuedAt || root.workParkedAt) {
+      refuseWorkQueueConflict(
         ENQUEUE_ALREADY_QUEUED,
         `work root "${root.title}" is already queued`,
       );
@@ -81,7 +74,7 @@ export async function enqueueWorkRoot(
       byId,
     });
     if (slotHolders.has(root.id)) {
-      refuseEnqueue(
+      refuseWorkQueueConflict(
         ENQUEUE_HOLDS_SLOT,
         `work root "${root.title}" already holds an implementing slot`,
       );
@@ -94,7 +87,7 @@ export async function enqueueWorkRoot(
       slotHolders,
     );
     if (blocker) {
-      refuseEnqueue(
+      refuseWorkQueueConflict(
         "blocked",
         `Blocked by ${blocker.title}, so it must be queued after it`,
       );

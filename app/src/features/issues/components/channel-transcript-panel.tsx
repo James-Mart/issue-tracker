@@ -438,6 +438,7 @@ function ChannelTranscriptBody({
         hideComposer={selectedSession.archived}
         composerDisabled={composerDisabled}
         composerDisabledPlaceholder={composerDisabledPlaceholder}
+        pauseCancel={channel === "implementing"}
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}

@@ -848,6 +848,7 @@ export function ConversationThread({
   hideComposer,
   composerDisabled = false,
   composerDisabledPlaceholder,
+  pauseCancel = false,
   banner,
 }: {
   conversationId: string;
@@ -869,6 +870,8 @@ export function ConversationThread({
   /** First export rewrite — the composer stays visible and does not send. */
   composerDisabled?: boolean;
   composerDisabledPlaceholder?: string;
+  /** Implementing channel: the cancel control is Pause. */
+  pauseCancel?: boolean;
   /** Sits under the thread chrome, above the transcript. */
   banner?: ReactNode;
 }) {
@@ -962,6 +965,7 @@ export function ConversationThread({
           runActive={runActive}
           disabled={composerDisabled}
           disabledPlaceholder={composerDisabledPlaceholder}
+          pauseCancel={pauseCancel}
         />
       ) : null}
     </div>

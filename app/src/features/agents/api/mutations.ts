@@ -22,7 +22,11 @@ import {
   type UpdateConversationBody,
 } from "./client";
 import { agentsKeys } from "./keys";
-import { patchChannelSessionActiveRunInCache } from "@/features/issues/lib/retire-channel-live-session";
+import {
+  patchChannelSessionActiveRunInCache,
+  patchIssueImplementingLive,
+} from "@/features/issues/lib/retire-channel-live-session";
+import { issuesKeys } from "@/features/issues/api/keys";
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : "Request failed";
@@ -105,7 +109,14 @@ export function useCancelConversationRun() {
     mutationFn: cancelConversationRun,
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (_data, conversationId) => {
-      patchChannelSessionActiveRunInCache(qc, conversationId, false);
+      const issueId = patchChannelSessionActiveRunInCache(
+        qc,
+        conversationId,
+        false,
+      );
+      if (!issueId) return;
+      patchIssueImplementingLive(qc, issueId, false);
+      void qc.invalidateQueries({ queryKey: issuesKeys.list() });
     },
   });
 }

@@ -365,7 +365,13 @@ function refuseIfImplementingWorkRootLocked(
 export async function clearWorkQueueFields(issueId: string): Promise<void> {
   const issue = readIssueOrThrow(issueId);
   if (issue.kind !== "epic" && issue.kind !== "story") return;
-  if (!issue.workQueuedAt && issue.workQueuePosition === undefined) return;
+  if (
+    !issue.workQueuedAt &&
+    issue.workQueuePosition === undefined &&
+    !issue.workParkedAt
+  ) {
+    return;
+  }
   await update(issueId, queueDeparturePatch());
 }
 

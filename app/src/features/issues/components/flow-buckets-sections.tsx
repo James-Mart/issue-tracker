@@ -20,7 +20,7 @@ import { projectLensPath } from "../lib/links";
 
 export type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
-export const AWAITING_PLANNING_PREVIEW_LIMIT = 5;
+export const FLOW_BUCKET_PREVIEW_LIMIT = 5;
 
 export const READY_EMPTY_COPY =
   "Nothing ready. Unblock a dependency, or add work in Structure.";
@@ -93,9 +93,8 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
-    key: "inFlight",
-    label: "In flight",
-    empty: "Nothing in flight. Pick up Ready work or start a Story.",
+    key: "queue",
+    label: "Queue",
     hideWhenEmpty: true,
   },
   {
@@ -106,17 +105,17 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     compact: true,
   },
   {
-    key: "awaitingPlanning",
-    label: "Awaiting planning",
+    key: "planning",
+    label: "Planning",
     hideWhenEmpty: true,
-    previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
+    previewLimit: FLOW_BUCKET_PREVIEW_LIMIT,
   },
   {
     key: "recentlyMerged",
     label: "Recently merged",
     empty: "Nothing merged recently. Finish a Story to land it here.",
     hideWhenEmpty: true,
-    previewLimit: AWAITING_PLANNING_PREVIEW_LIMIT,
+    previewLimit: FLOW_BUCKET_PREVIEW_LIMIT,
   },
 ];
 
@@ -147,10 +146,11 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
   const partitioned = {
     needsAttention,
     buckets: {
-      awaitingPlanning: take(buckets.awaitingPlanning),
+      planning: take(buckets.planning),
       readyToLand: take(buckets.readyToLand),
       ready: take(buckets.ready),
-      inFlight: take(buckets.inFlight),
+      // A flagged root stays in the queue at its position.
+      queue: buckets.queue,
       blocked: take(buckets.blocked),
       recentlyMerged: take(buckets.recentlyMerged),
     },
@@ -229,15 +229,18 @@ type FlowBucketItemsRenderer = (
   items: FlowItem[],
   compact?: boolean,
   previewLimit?: number,
+  bucketKey?: FlowBucketKey,
 ) => ReactNode;
 
 function BucketList({
+  bucketKey,
   items,
   renderRow,
   renderItems,
   compact,
   previewLimit,
 }: {
+  bucketKey: FlowBucketKey;
   items: FlowItem[];
   renderRow?: (item: FlowItem) => ReactNode;
   /** When set, renders the whole bucket body (e.g. cockpit project groups). */
@@ -248,7 +251,7 @@ function BucketList({
   if (renderItems) {
     return (
       <div className={compact ? "mt-2" : "mt-3"}>
-        {renderItems(items, compact, previewLimit)}
+        {renderItems(items, compact, previewLimit, bucketKey)}
       </div>
     );
   }
@@ -273,6 +276,7 @@ export function FlowPreviewedItems({
   renderItem,
   beforeItem,
   asRail,
+  liveItem,
 }: {
   items: FlowItem[];
   /** Snapshot used to build row indexes when `indexes` is omitted. */
@@ -290,6 +294,8 @@ export function FlowPreviewedItems({
   ) => ReactNode;
   /** Cockpit lists: one spine, state disc on each row. */
   asRail?: boolean;
+  /** When set, decides which rows light the spine. Defaults to in-flight rail state. */
+  liveItem?: (item: FlowItem) => boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const rowIndexes = useMemo(
@@ -301,6 +307,7 @@ export function FlowPreviewedItems({
   const visible = capped ? items.slice(0, previewLimit) : items;
   const live = visible.some(
     (item) =>
+      liveItem?.(item) ??
       issueRailNodeState(item.issue, item.state, rowIndexes) === "in-flight",
   );
 
@@ -389,6 +396,7 @@ function FlowBucketSection({
       <p className="mt-3 text-sm text-muted-foreground">{def.empty}</p>
     ) : (
       <BucketList
+        bucketKey={def.key}
         items={items}
         renderRow={renderRow}
         renderItems={
@@ -428,6 +436,7 @@ export function FlowBucketsSections({
   renderRecentlyMergedItems,
   collapsedSectionKeys: controlledCollapsed,
   onToggleSection: controlledOnToggle,
+  keys,
 }: {
   buckets: FlowBuckets;
   idPrefix: string;
@@ -438,6 +447,8 @@ export function FlowBucketsSections({
   renderRecentlyMergedItems?: FlowBucketItemsRenderer;
   collapsedSectionKeys?: ReadonlySet<FlowBucketKey>;
   onToggleSection?: (key: FlowBucketKey) => void;
+  /** When set, only these buckets render, in `FLOW_BUCKET_DEFS` order. */
+  keys?: readonly FlowBucketKey[];
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState<
     ReadonlySet<FlowBucketKey>
@@ -458,9 +469,13 @@ export function FlowBucketsSections({
   const { needsAttention, buckets: displayBuckets } =
     partitionCockpitBuckets(buckets);
 
+  const defs = keys
+    ? FLOW_BUCKET_DEFS.filter((def) => keys.includes(def.key))
+    : FLOW_BUCKET_DEFS;
+
   return (
     <div className="flex flex-col gap-5">
-      {FLOW_BUCKET_DEFS.map((def) => (
+      {defs.map((def) => (
         <FlowBucketSection
           key={def.key}
           def={def}

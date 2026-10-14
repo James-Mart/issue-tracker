@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { Mic, Paperclip, Send, Square, Upload, X } from "lucide-react";
+import { Mic, Paperclip, Pause, Send, Square, Upload, X } from "lucide-react";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
@@ -216,6 +216,7 @@ export function Composer({
   runActive,
   disabled = false,
   disabledPlaceholder,
+  pauseCancel = false,
 }: {
   conversationId: string;
   /** Conversation meta model — remembered default for the picker. */
@@ -225,6 +226,8 @@ export function Composer({
   /** Visible but inert — the export rewrite owns the turn. */
   disabled?: boolean;
   disabledPlaceholder?: string;
+  /** Implementing loops label the cancel control Pause. */
+  pauseCancel?: boolean;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const {
@@ -563,6 +566,7 @@ export function Composer({
 
   const sendLabel = runActive ? "Steer" : "Send";
   const sendTitle = sendLabel;
+  const cancelLabel = pauseCancel ? "Pause" : "Stop";
 
   return (
     <div
@@ -769,14 +773,19 @@ export function Composer({
                     </Button>
                     <Button
                       size="icon"
-                      variant="destructive"
+                      variant={pauseCancel ? "default" : "destructive"}
                       className="h-11 w-11 shrink-0 shell:h-9 shell:w-9"
                       onClick={stop}
                       disabled={cancelRun.isPending}
-                      title="Stop"
-                      aria-label="Stop"
+                      title={cancelLabel}
+                      aria-label={cancelLabel}
+                      data-testid={pauseCancel ? "composer-pause" : "composer-stop"}
                     >
-                      <Square className="h-3.5 w-3.5 fill-current" />
+                      {pauseCancel ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Square className="h-3.5 w-3.5 fill-current" />
+                      )}
                     </Button>
                   </>
                 ) : (
