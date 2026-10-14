@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { acknowledgedSubmissions, reviewSubmitHeader } from "./review-submission-ui";
+import {
+  acknowledgedSubmissions,
+  reviewSubmitHeader,
+} from "./review-submission-ui";
 
 describe("reviewSubmitHeader", () => {
   it("disables retry while another submission is tasking", () => {

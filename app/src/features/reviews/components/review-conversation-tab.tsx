@@ -135,10 +135,12 @@ function ConversationTimeline({
   items,
   reviewId,
   onOpenInDiff,
+  focusThreadId,
 }: {
   items: ConversationTimelineItem<CommentThreadData>[];
   reviewId: string;
   onOpenInDiff: (threadId: string, commitSha: string) => void;
+  focusThreadId: string | null;
 }) {
   let lastDay = "";
   return (
@@ -165,6 +167,7 @@ function ConversationTimeline({
               reviewId={reviewId}
               showAnchorContext
               collapse="resolved"
+              highlighted={thread.root.id === focusThreadId}
               onSeeInDiff={
                 anchor
                   ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
@@ -188,7 +191,7 @@ export function ReviewConversationTab({
   reviewId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
-  /** Review thread selected from the header disclosure. */
+  /** Thread from `?thread=`: scrolled to, highlighted, and kept past the filter. */
   focusThreadId?: string | null;
 }) {
   const comments = useReviewCommentsQuery(reviewId);
@@ -200,7 +203,7 @@ export function ReviewConversationTab({
 
   const { filter, toggle, reset } = useConversationFilter();
   const timeline = conversationTimelineItems(threads, submissions);
-  const visible = filterConversationTimeline(timeline, filter);
+  const visible = filterConversationTimeline(timeline, filter, focusThreadId);
   const commentsReady = !comments.error && !comments.isLoading;
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -272,6 +275,7 @@ export function ReviewConversationTab({
             items={visible}
             reviewId={reviewId}
             onOpenInDiff={onOpenInDiff}
+            focusThreadId={focusThreadId}
           />
         ) : null}
       </div>

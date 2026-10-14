@@ -21,6 +21,13 @@ import {
   retryOpenReviewSubmissions,
   retryReviewSubmission,
 } from "../services/review-tasking.js";
+import {
+  launchStandardsRun,
+  launchSubmitAgents,
+  retryStandardsAssessment,
+  setStandardsProposal,
+  submitStandardsGroup,
+} from "../services/review-standards.js";
 import { submitReview } from "../services/review-submit.js";
 import { refreshReviewPullRequest } from "../services/review-pr-tracking.js";
 import {
@@ -263,13 +270,8 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
       const projectId = req.params.projectId;
       const reviewId = req.params.reviewId;
       const view = await submitReview(projectId, reviewId, req.body);
-      const pending = view.submissions.find(
-        (item) => item.status === "tasking" && !item.conversationId,
-      );
       await sendReviewThenLaunch(res, projectId, view, 201, () =>
-        pending
-          ? launchRecordedSubmission(projectId, reviewId, pending.id, "start", sessions)
-          : Promise.resolve(),
+        launchSubmitAgents(projectId, reviewId, view, sessions),
       );
     }),
   );
@@ -297,6 +299,54 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
           );
         }
       });
+    }),
+  );
+
+  reviewsRouter.post(
+    "/:reviewId/submissions/:submissionId/standards/submit",
+    asyncRoute(async (req, res) => {
+      const { projectId, reviewId, submissionId } = req.params;
+      const view = submitStandardsGroup(
+        projectId,
+        reviewId,
+        submissionId,
+        req.body,
+        sessions,
+      );
+      await sendReviewThenLaunch(res, projectId, view, 200, () =>
+        launchStandardsRun(projectId, reviewId, submissionId, sessions),
+      );
+    }),
+  );
+
+  reviewsRouter.post(
+    "/:reviewId/submissions/:submissionId/standards/retry",
+    asyncRoute(async (req, res) => {
+      const projectId = req.params.projectId;
+      const reviewId = req.params.reviewId;
+      const submissionId = req.params.submissionId;
+      const view = retryStandardsAssessment(
+        projectId,
+        reviewId,
+        submissionId,
+        req.body,
+        sessions,
+      );
+      await sendReviewThenLaunch(res, projectId, view, 200, () =>
+        launchStandardsRun(projectId, reviewId, submissionId, sessions),
+      );
+    }),
+  );
+
+  reviewsRouter.patch(
+    "/:reviewId/submissions/:submissionId/standards/proposals/:proposalId",
+    asyncRoute(async (req, res) => {
+      const { projectId, reviewId, submissionId, proposalId } = req.params;
+      await sendReview(
+        res,
+        projectId,
+        setStandardsProposal(projectId, reviewId, submissionId, proposalId, req.body),
+      );
     }),
   );
 

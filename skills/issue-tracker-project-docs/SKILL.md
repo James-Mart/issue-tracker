@@ -142,14 +142,13 @@ Do not write files or set `supportingDocs` until after draft approval.
 
 **Attachment**
 
-1. If replacing an existing attachment basename (same name already attached,
-   or switching content onto a basename that is already present), first
-   `issue project detach <projectId> <name>`.
-2. Write the approved draft to a temp file whose basename is the chosen
-   name, then:
-   `issue project attach <projectId> <temp-file>`
-3. Use the printed stored basename as `<name>` for step 8 (attach may rename
-   on collision — prefer detach-first so the well-known name sticks).
+1. Write the approved draft to a temp file whose basename is the chosen
+   name.
+2. If that basename is already attached, run
+   `issue project attach <projectId> <temp-file> --replace`; otherwise run
+   `issue project attach <projectId> <temp-file>`.
+3. Use the printed stored basename as `<name>` for step 8 (replace keeps the
+   well-known name; a new attach may suffix on collision).
 
 **Workspace**
 

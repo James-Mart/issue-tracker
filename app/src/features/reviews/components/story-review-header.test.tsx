@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   threads: [] as CommentThread[],
   submit: vi.fn(),
   retry: vi.fn(),
+  /** undefined while the project query has not settled. */
+  codingStandards: true as boolean | undefined,
 }));
 
 vi.mock("@/features/issues/api/queries", async (importOriginal) => {
@@ -22,6 +24,25 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => {
       problems: [],
       loaded: true,
     }),
+    useIssueDetailQuery: () =>
+      state.codingStandards === undefined
+        ? { data: undefined, isLoading: true, error: null }
+        : {
+            data: {
+              id: "proj",
+              kind: "project" as const,
+              supportingDocs: state.codingStandards
+                ? {
+                    codingStandards: {
+                      type: "attachment" as const,
+                      name: "coding-standards.md",
+                    },
+                  }
+                : {},
+            },
+            isLoading: false,
+            error: null,
+          },
   };
 });
 
@@ -69,6 +90,10 @@ function readyThread(): CommentThread {
       body: "Please fix this.",
     },
   };
+}
+
+function assessCheckbox(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('[data-testid="submit-assess-standards"]');
 }
 
 function destinationRadio(destination: "story" | "idea"): HTMLInputElement | null {
@@ -124,6 +149,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   state.threads = [];
+  state.codingStandards = true;
   state.submit.mockReset();
   state.retry.mockReset();
 });
@@ -168,8 +194,8 @@ describe("StoryReviewHeader submit", () => {
     );
     if (!summary) throw new Error("no summary field");
     setTextarea(summary, "  Ship the reachability check.  ");
+    expect(assessCheckbox()?.getAttribute("data-state")).toBe("unchecked");
     click(document.body.querySelector('[data-testid="submit-review-confirm"]'));
-
     expect(state.submit).toHaveBeenCalledWith(
       { reviewId: "rev-1", destination: "story", summary: "Ship the reachability check." },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),

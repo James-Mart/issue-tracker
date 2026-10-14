@@ -22,11 +22,12 @@ import {
 } from "../hooks/use-review-workbench-location";
 import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
-import { REVIEW_WORKBENCH_TABS } from "../lib/workbench-tabs";
+import { reviewWorkbenchTabs } from "../lib/workbench-tabs";
 import { ReviewCommitsPanel } from "./review-commits-tab";
 import { ReviewConversationTab } from "./review-conversation-tab";
 import { ReviewDiffTab } from "./review-diff-tab";
 import { ReviewNoCommits } from "./review-no-commits";
+import { ReviewStandardsTab } from "./review-standards-tab";
 import { StoryReviewHeader } from "./story-review-header";
 
 /** Desktop bounds the page so the file tree and diff stack scroll on their own. */
@@ -117,6 +118,7 @@ function StoryReviewWorkbench({
   merged: boolean;
 }) {
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
+  const tabs = reviewWorkbenchTabs(review.submissions);
   const {
     active,
     setTab,
@@ -126,9 +128,10 @@ function StoryReviewWorkbench({
     threadReveal,
     markThreadRevealed,
     openThreadInDiff,
+    conversationThreadSearch,
     openThread,
     retargetThreadScope,
-  } = useReviewWorkbenchLocation(knownShas);
+  } = useReviewWorkbenchLocation(knownShas, tabs);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
 
   return (
@@ -145,9 +148,9 @@ function StoryReviewWorkbench({
       <div
         role="tablist"
         aria-label="Review"
-        className="flex shrink-0 gap-1 border-b border-border"
+        className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
       >
-        {REVIEW_WORKBENCH_TABS.map((tab) => (
+        {tabs.map((tab) => (
           <TabButton
             key={tab.key}
             selected={active === tab.key}
@@ -164,6 +167,13 @@ function StoryReviewWorkbench({
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
             focusThreadId={threadId}
+          />
+        ) : active === "standards" ? (
+          <ReviewStandardsTab
+            projectId={projectId}
+            reviewId={review.id}
+            submissions={review.submissions}
+            threadSearch={conversationThreadSearch}
           />
         ) : active === "commits" ? (
           <ReviewCommitsPanel

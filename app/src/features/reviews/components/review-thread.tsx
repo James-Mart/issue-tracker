@@ -29,6 +29,7 @@ export function ReviewThread({
   showAnchorContext = false,
   collapse,
   onSeeInDiff,
+  highlighted = false,
 }: {
   thread: CommentThreadData;
   reviewId: string;
@@ -36,6 +37,8 @@ export function ReviewThread({
   showAnchorContext?: boolean;
   collapse?: "resolved" | "outdated";
   onSeeInDiff?: () => void;
+  /** The thread a link landed on: outlined, and opened if it collapses. */
+  highlighted?: boolean;
 }) {
   const post = usePostComment(reviewId);
   const edit = useEditComment(reviewId);
@@ -65,6 +68,8 @@ export function ReviewThread({
         showAnchorContext={showAnchorContext}
         collapse={collapse}
         onSeeInDiff={onSeeInDiff}
+        highlighted={highlighted}
+        reveal={highlighted}
         onReply={
           isPlainNote(thread)
             ? undefined

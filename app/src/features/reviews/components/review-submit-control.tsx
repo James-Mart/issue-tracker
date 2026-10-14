@@ -127,12 +127,15 @@ export function ReviewSubmitActions({
   onAcknowledgeEnd,
   onRetryStart,
   onRetryEnd,
+  hasCodingStandards,
 }: {
   projectId: string;
   review: ReviewView;
   header: ReviewSubmitHeader;
   /** Threads a Submit carries; undefined until comments load. */
   readyThreads: readonly CommentThread[] | undefined;
+  /** True when the Project has a coding-standards doc. Undefined while that is still loading. */
+  hasCodingStandards: boolean | undefined;
   /** Tasking is acknowledged only for the Story destination. */
   onAcknowledge: () => void;
   onAcknowledgeEnd: () => void;
@@ -145,11 +148,13 @@ export function ReviewSubmitActions({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [destination, setDestination] = useState(defaultDestination);
   const [summary, setSummary] = useState("");
+  const [assessStandards, setAssessStandards] = useState(false);
   const keepDraft = useRef(false);
 
   const resetDraft = () => {
     setSummary("");
     setDestination(defaultDestination);
+    setAssessStandards(false);
   };
 
   const closeDialog = (next: boolean) => {
@@ -199,6 +204,9 @@ export function ReviewSubmitActions({
           onDestinationChange={setDestination}
           summary={summary}
           onSummaryChange={setSummary}
+          assessStandards={assessStandards}
+          hasCodingStandards={hasCodingStandards}
+          onAssessStandardsChange={setAssessStandards}
           onOpenChange={closeDialog}
           onSubmit={() => {
             const trimmed = summary.trim();
@@ -210,6 +218,7 @@ export function ReviewSubmitActions({
                 reviewId: review.id,
                 destination,
                 summary: trimmed === "" ? undefined : trimmed,
+                ...(assessStandards && hasCodingStandards ? { assessStandards: true } : {}),
               },
               {
                 onSuccess: () => {

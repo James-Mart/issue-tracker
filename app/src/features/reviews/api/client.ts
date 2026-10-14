@@ -9,6 +9,7 @@ import type {
   ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
+  SetStandardsProposalBody,
   SubmitReviewBody,
 } from "@server/schemas";
 
@@ -186,6 +187,45 @@ export function postRetryOpenReviewSubmissions(
   reviewId: string,
 ): Promise<ReviewView> {
   return request<ReviewView>(`${reviewUrl(projectId, reviewId)}/submissions/retry`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+function standardsUrl(projectId: string, reviewId: string, submissionId: string): string {
+  return `${reviewUrl(projectId, reviewId)}/submissions/${encodeURIComponent(submissionId)}/standards`;
+}
+
+export function patchStandardsProposal(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  proposalId: string,
+  body: SetStandardsProposalBody,
+): Promise<ReviewView> {
+  return request<ReviewView>(
+    `${standardsUrl(projectId, reviewId, submissionId)}/proposals/${encodeURIComponent(proposalId)}`,
+    { method: "PATCH", body },
+  );
+}
+
+export function postSubmitStandardsGroup(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${standardsUrl(projectId, reviewId, submissionId)}/submit`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function postRetryStandardsAssessment(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${standardsUrl(projectId, reviewId, submissionId)}/retry`, {
     method: "POST",
     body: {},
   });

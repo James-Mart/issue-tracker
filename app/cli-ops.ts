@@ -38,7 +38,7 @@ import { reviewStatus } from "./server/services/review-lifecycle.js";
 import {
   attachmentPath,
   listAttachments,
-  putAttachment,
+  postAttachment,
   removeAttachment,
 } from "./server/services/attachments.js";
 import { formatAttachmentsSection } from "./server/services/summary.js";
@@ -323,11 +323,17 @@ async function printDeleteResult(id: string): Promise<void> {
   }
 }
 
-async function printAttach(id: string, file: string): Promise<void> {
+async function printAttach(
+  id: string,
+  file: string,
+  replace?: boolean,
+): Promise<void> {
   const bytes = readFileSync(file);
-  const meta = await putAttachment(id, basename(file), bytes);
+  const name = basename(file);
+  const { meta, created } = await postAttachment(id, name, bytes, { replace });
+  const verb = created ? "attached" : "replaced";
   console.log(
-    `attached ${meta.name} (${meta.size} bytes) — ${attachmentPath(id, meta.name)}`,
+    `${verb} ${meta.name} (${meta.size} bytes) — ${attachmentPath(id, meta.name)}`,
   );
 }
 
@@ -630,20 +636,31 @@ function registerCommentCommand(parent: Command, run: Run, kind: IssueKind): voi
   );
 }
 
+const ATTACH_DESCRIPTION =
+  "attach a file; on basename collision keeps the existing file and stores under a unique name; prints the stored basename";
+
 function registerAttachCommands(parent: Command, run: Run, kind: IssueKind): void {
-  parent
+  const attachCmd = parent
     .command("attach")
     .argument("<id>", "issue id")
     .argument("<file>", "path to file to attach")
     .description(
-      "attach a file; on basename collision keeps the existing file and stores under a unique name; prints the stored basename",
-    )
-    .action((id: string, file: string) =>
-      run(async () => {
-        assertKind(kind, id);
-        await printAttach(id, file);
-      }),
+      kind === "project"
+        ? `${ATTACH_DESCRIPTION}; --replace overwrites an existing attachment at the file basename`
+        : ATTACH_DESCRIPTION,
     );
+  if (kind === "project") {
+    attachCmd.option(
+      "--replace",
+      "overwrite the attachment whose name equals the file basename; fails when that attachment is missing",
+    );
+  }
+  attachCmd.action((id: string, file: string, opts: { replace?: boolean }) =>
+    run(async () => {
+      assertKind(kind, id);
+      await printAttach(id, file, opts.replace);
+    }),
+  );
 
   parent
     .command("attachments")
@@ -738,9 +755,7 @@ export function registerBareIdOps(program: Command, run: Run): void {
     .command("attach")
     .argument("<id>", "issue id")
     .argument("<file>", "path to file to attach")
-    .description(
-      "attach a file; on basename collision keeps the existing file and stores under a unique name; prints the stored basename",
-    )
+    .description(ATTACH_DESCRIPTION)
     .action((id: string, file: string) =>
       run(async () => {
         resolveIssueKind(id);

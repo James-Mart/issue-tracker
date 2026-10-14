@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { ReviewSubmitDestination } from "@server/schemas";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SUPPORTING_DOC_KEY_LABELS } from "@/features/issues/lib/supporting-docs";
 import {
   Dialog,
   DialogContent,
@@ -79,6 +81,46 @@ function ThreadsToSubmit({ threads }: { threads: readonly CommentThread[] }) {
   );
 }
 
+function AssessStandardsOption({
+  checked,
+  enabled,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  /** False when the Project has no Coding standards doc. */
+  enabled: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const reasonId = "submit-assess-standards-reason";
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        className={cn(
+          "flex items-start gap-2.5 text-sm font-medium",
+          enabled ? "cursor-pointer" : "cursor-not-allowed",
+        )}
+      >
+        <Checkbox
+          checked={checked}
+          disabled={!enabled}
+          aria-describedby={enabled ? undefined : reasonId}
+          data-testid="submit-assess-standards"
+          className="mt-0.5"
+          onCheckedChange={(value) => onCheckedChange(value === true)}
+        />
+        <span className={enabled ? "text-foreground" : "text-muted-foreground"}>
+          Assess feedback for coding-standards gaps
+        </span>
+      </label>
+      {enabled ? null : (
+        <p id={reasonId} data-testid="submit-assess-standards-reason" className="pl-6 text-xs text-muted-foreground">
+          This project has no {SUPPORTING_DOC_KEY_LABELS.codingStandards} doc.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function SubmitReviewDialog({
   open,
   storyId,
@@ -87,6 +129,9 @@ export function SubmitReviewDialog({
   onDestinationChange,
   summary,
   onSummaryChange,
+  assessStandards,
+  hasCodingStandards,
+  onAssessStandardsChange,
   onOpenChange,
   onSubmit,
 }: {
@@ -98,6 +143,10 @@ export function SubmitReviewDialog({
   onDestinationChange: (destination: ReviewSubmitDestination) => void;
   summary: string;
   onSummaryChange: (summary: string) => void;
+  assessStandards: boolean;
+  /** True when the Project has a coding-standards doc. Undefined while that is still loading. */
+  hasCodingStandards: boolean | undefined;
+  onAssessStandardsChange: (assessStandards: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
 }) {
@@ -129,6 +178,13 @@ export function SubmitReviewDialog({
             Submit as a new idea
           </DestinationOption>
         </div>
+        {storyId && hasCodingStandards !== undefined ? (
+          <AssessStandardsOption
+            checked={assessStandards}
+            enabled={hasCodingStandards}
+            onCheckedChange={onAssessStandardsChange}
+          />
+        ) : null}
         <DialogField>
           <Label htmlFor="submit-review-summary">Summary comment (optional)</Label>
           <Textarea

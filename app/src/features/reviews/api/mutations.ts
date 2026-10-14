@@ -5,17 +5,21 @@ import type {
   ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
+  SetStandardsProposalBody,
   SubmitReviewBody,
 } from "@server/schemas";
 import {
   deleteReviewRuntime,
+  patchStandardsProposal,
   postArchiveReview,
   postOpenReview,
   postOpenReviewFromPr,
   postReopenReview,
   postRetryOpenReviewSubmissions,
+  postRetryStandardsAssessment,
   postReviewRuntime,
   postSubmitReview,
+  postSubmitStandardsGroup,
   postSyncReviewWorktree,
   putReviewMark,
 } from "./client";
@@ -104,6 +108,41 @@ export function useSubmitReview(projectId: string) {
 export function useRetryOpenReviewSubmissions(projectId: string) {
   return useReviewMutation(projectId, (reviewId: string) =>
     postRetryOpenReviewSubmissions(projectId, reviewId),
+  );
+}
+
+export type StandardsProposalTarget = {
+  reviewId: string;
+  submissionId: string;
+  proposalId: string;
+};
+
+export function useSetStandardsProposal(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({
+      reviewId,
+      submissionId,
+      proposalId,
+      ...body
+    }: SetStandardsProposalBody & StandardsProposalTarget) =>
+      patchStandardsProposal(projectId, reviewId, submissionId, proposalId, body),
+  );
+}
+
+export function useSubmitStandardsGroup(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
+      postSubmitStandardsGroup(projectId, reviewId, submissionId),
+  );
+}
+
+export function useRetryStandardsAssessment(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
+      postRetryStandardsAssessment(projectId, reviewId, submissionId),
   );
 }
 

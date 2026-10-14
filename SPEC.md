@@ -421,7 +421,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 - **`attach` / `attachments` / `detach`** —
   `issue attach <id> <file>` /
   `issue attachments <id>` /
-  `issue detach <id> <name>`; see [Attachments](#attachments).
+  `issue detach <id> <name>`; `issue project attach <projectId> <file> --replace`
+  overwrites in place; see [Attachments](#attachments).
 
 ### Kind-scoped ops
 
@@ -471,6 +472,17 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `^[A-Z_][A-Z0-9_]*$`, and the rest of the line is non-empty. Refuses a body
   that does not follow that format, naming the first bad item, and refuses
   when `review` is already `awaiting-human`. Prints the new comment id.
+- **`standards set`** (review only) —
+  `issue review standards set <reviewId> <submissionId> <file>` records
+  coding-standards proposals for a submission whose assessment is `assessing`.
+  `<file>` is JSON `{ proposals }` (`-` reads stdin). An empty list moves the
+  assessment to `noGaps`; any proposal moves it to `ready`. See
+  [Standards assessment](#standards-assessment).
+- **`standards applied`** (review only) —
+  `issue review standards applied <reviewId> <submissionId>` reports that the
+  accepted proposals were written to the coding-standards doc and moves an
+  `applying` assessment to `applied`. See
+  [Standards assessment](#standards-assessment).
 - **`human-done`** (story only) —
   `issue story human-done <storyId> [--note <text>]` posts a comment (`role`
   `human`, `type` `human-response`) with `replyTo` set to the latest
@@ -1471,6 +1483,59 @@ researcher conversation for that question and returns `204`. It refuses with
 `conflict` unless `researcherRun` is `failed`. Each researcher conversation is
 listed among the review's agent runs with role `issue-tracker-review-question`.
 
+<a id="standards-assessment"></a>
+
+**Standards assessment.** `POST /api/projects/:projectId/reviews/:reviewId/submissions`
+accepts `assessStandards: true` beside `destination` and `summary`. The review
+must have a Story source and the Project must have a `codingStandards` doc;
+otherwise the request is refused. The submission then records `standards`:
+`status` `assessing`, `proposals` `[]`, and `doc` copied from that Project ref
+(`{ type: "attachment", name }` or `{ type: "workspace", path }`). The server
+starts [`issue-tracker-standards-assessor`](agents/issue-tracker-standards-assessor.md)
+in a review-channel conversation on the review, working directory the review
+worktree, and stores that conversation id on `standards.conversationId`. The
+run starts alongside tasking, or alongside the new Idea's auto-plan, and does
+not wait on either. Its prompt carries the submission's frozen thread ids
+(resolved or still open), the summary, the snapshotted doc, and, for each
+anchored commit, the Task whose `commits` contain that sha, that Task's Story,
+the Story diff, and the commit diff.
+
+`issue review standards set <reviewId> <submissionId> <file>` reads
+`{ proposals }` from the file. Each proposal has `id`, `section`, `before`,
+`after`, `rationale`, and `threadIds`. `before` is empty for an addition and
+`after` is empty for a deletion. `rationale` is one line. `threadIds` are a
+subset of the submission's threads. The command moves `assessing` to `ready`,
+or to `noGaps` when `proposals` is empty. A run that ends while status is
+still `assessing` moves it to `assessFailed` and records `error`.
+`POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/retry`
+with an empty body re-runs the failed phase: a fresh assessor run from
+`assessFailed`, or a resumed apply from `applyFailed`. Either is refused with
+`conflict` while the assessor conversation still has a run. Each assessor
+conversation is listed among the review's agent runs with role
+`issue-tracker-standards-assessor`.
+
+`PATCH /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/proposals/:proposalId`
+with `{ decision?: "accepted" | "rejected" | null, editedAfter?: string | null }`
+records a human decision or an inline edit of `after` on one proposal and
+returns the review. At least one key is required; `null` clears that field and
+an absent key leaves it as stored. Setting one does not change the other. The
+request is refused unless the assessment is `ready`, and `editedAfter` is
+refused on a proposal whose `after` is empty.
+
+`POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/submit`
+with an empty body submits a `ready` group and returns the review. It is
+refused unless every proposal has a `decision`, and refused when `doc` is
+workspace-backed. When any proposal is accepted, the assessment moves to
+`applying` and the server resumes the assessor conversation with the accepted
+proposals (`editedAfter` in place of `after` when present); that is refused
+with `conflict` while the assessor conversation still has a run. The assessor
+merges them into the full doc, writes it with `issue project attach --replace`,
+and reports with `issue review standards applied <reviewId> <submissionId>`,
+which moves `applying` to `applied`. A run that ends while status is still
+`applying` moves it to `applyFailed` and records `error`. When every proposal
+is rejected, submit moves the assessment straight to `applied` without
+resuming the assessor.
+
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via
 `POST /api/issues/:reviewId/threads/:threadId/events` with
@@ -1696,9 +1761,16 @@ bytes, and any name that is not a plain basename. No extension allowlist.
 **Unique names.** `putAttachment` stores under a collision-free basename: the
 requested basename when free, otherwise `{stem}-{n}{ext}` with the smallest
 `n ≥ 2` not already taken (stem + last extension). `putAttachment` never
-overwrites an existing file. Removal is explicit (`removeAttachment` /
-`issue <kind> detach` / `DELETE`). There is no rename verb —
-attach under the desired basename and detach the old name.
+overwrites an existing file.
+
+**Replace.** `replaceAttachment` overwrites bytes at the exact requested
+basename and refuses when that file is missing. `issue project attach
+<projectId> <file> --replace` and `POST /api/issues/:id/attachments?replace=true`
+(multipart `file`; basename = uploaded filename) call it. Replace does not
+change `supportingDocs` refs that already point at that attachment name.
+Removal is explicit (`removeAttachment` / `issue <kind> detach` / `DELETE`).
+There is no rename verb — attach under the desired basename and detach the
+old name, or use replace when overwriting in place.
 
 **GitHub export drafts.** Basenames matching `^github-export-.+\.md$` are
 reserved. Each file is YAML frontmatter with a required `title` string, then
@@ -1720,7 +1792,7 @@ basename. Any other name is refused; those stay create-only on `POST`.
 | method | path | behavior |
 | --- | --- | --- |
 | `GET` | `/api/issues/:id/attachments` | list metadata |
-| `POST` | `/api/issues/:id/attachments` | multipart `file` upload; requested name = basename of uploaded filename; on collision store under a unique name; response returns the stored name |
+| `POST` | `/api/issues/:id/attachments` | multipart `file` upload; requested name = basename of uploaded filename; on collision store under a unique name; `201` returns the stored name; `?replace=true` overwrites that exact basename and returns `200`, or `404` when missing |
 | `PUT` | `/api/issues/:id/attachments/:name` | raw `text/markdown` or `text/plain` body; overwrite only when `:name` matches `^github-export-.+\.md$`; `200` one `Attachment` |
 | `GET` | `/api/issues/:id/attachments/:name` | download bytes + `Content-Type` |
 | `DELETE` | `/api/issues/:id/attachments/:name` | remove one file |

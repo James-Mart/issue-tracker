@@ -22,6 +22,11 @@ import {
   reviewTaskerConversationIds,
   reviewTaskerRunsForIssue,
 } from "./review-tasking.js";
+import {
+  conversationIdFromStandardsAssessorDelegation,
+  standardsAssessorConversationIds,
+  standardsAssessorRunsForIssue,
+} from "./review-standards.js";
 import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 
 export type AgentRunsWorkRoot = {
@@ -105,6 +110,7 @@ export function listAgentRunsForIssue(issueId: string, issues?: Issue[]): AgentR
   }
 
   runs.push(...reviewTaskerRunsForIssue(issueId, issues));
+  runs.push(...standardsAssessorRunsForIssue(issueId, issues));
   runs.push(...researcherRunsForIssue(issueId));
   runs.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   return runs;
@@ -123,6 +129,14 @@ export function listAgentRunEvents(
     conversationIdFromReviewTaskerDelegation(delegationId);
   if (taskerConversationId) {
     return reviewTaskerConversationIds(issueId).includes(taskerConversationId)
+      ? []
+      : undefined;
+  }
+
+  const assessorConversationId =
+    conversationIdFromStandardsAssessorDelegation(delegationId);
+  if (assessorConversationId) {
+    return standardsAssessorConversationIds(issueId).includes(assessorConversationId)
       ? []
       : undefined;
   }

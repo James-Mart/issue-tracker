@@ -5,9 +5,11 @@ import type { ReviewSubmission } from "./review-state.js";
 export {
   reviewMarksSchema,
   reviewSubmissionSchema,
+  standardsAssessmentSchema,
   type ReviewMarks,
   type ReviewPrSource,
   type ReviewSubmission,
+  type StandardsAssessment,
 } from "./review-state.js";
 
 const nonEmpty = z.string().min(1);
@@ -94,6 +96,7 @@ export const submitReviewBodySchema = z
   .object({
     destination: z.enum(REVIEW_SUBMIT_DESTINATIONS),
     summary: z.string().optional(),
+    assessStandards: z.boolean().optional(),
   })
   .strict();
 
@@ -112,19 +115,32 @@ export function parseSubmitReviewBody(raw: unknown): SubmitReviewBodyParseResult
   };
 }
 
-export const retryReviewSubmissionBodySchema = z.object({}).strict();
+export const emptyBodySchema = z.object({}).strict();
 
-export type RetryReviewSubmissionBodyParseResult =
-  | { ok: true }
-  | { ok: false; message: string };
+export type EmptyBodyParseResult = { ok: true } | { ok: false; message: string };
 
-export function parseRetryReviewSubmissionBody(
-  raw: unknown,
-): RetryReviewSubmissionBodyParseResult {
-  const result = retryReviewSubmissionBodySchema.safeParse(raw ?? {});
+export function parseEmptyBody(raw: unknown, message: string): EmptyBodyParseResult {
+  const result = emptyBodySchema.safeParse(raw ?? {});
   if (result.success) return { ok: true };
-  return { ok: false, message: "retry body must be empty" };
+  return { ok: false, message };
 }
+
+export function parseRetryReviewSubmissionBody(raw: unknown): EmptyBodyParseResult {
+  return parseEmptyBody(raw, "retry body must be empty");
+}
+
+/** `null` clears the field; an absent key leaves it as stored. */
+export const setStandardsProposalBodySchema = z
+  .object({
+    decision: z.enum(["accepted", "rejected"]).nullable().optional(),
+    editedAfter: nonEmpty.nullable().optional(),
+  })
+  .strict()
+  .refine((body) => body.decision !== undefined || body.editedAfter !== undefined, {
+    message: "set decision or editedAfter",
+  });
+
+export type SetStandardsProposalBody = z.infer<typeof setStandardsProposalBodySchema>;
 
 export type OpenReviewBodyParseResult =
   | { ok: true; body: OpenReviewBody }

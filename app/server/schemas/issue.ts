@@ -17,10 +17,13 @@ import {
   reviewPrSourceSchema,
   reviewSubmissionSchema,
 } from "./review-state.js";
+import { supportingDocRefSchema, type SupportingDocRef } from "./supporting-doc.js";
 import type {
   FileCommentAnchor,
   LineCommentAnchor,
 } from "../../src/features/issues/lib/comment-anchor.js";
+
+export { supportingDocRefSchema, type SupportingDocRef };
 
 export {
   isLineAnchor,
@@ -374,11 +377,6 @@ const timestamps = {
 };
 const orderField = { order: z.number().int().nonnegative().default(0) };
 
-export const supportingDocRefSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("attachment"), name: nonEmpty }),
-  z.object({ type: z.literal("workspace"), path: nonEmpty }),
-]);
-
 export const supportingDocsSchema = z
   .object({
     vision: supportingDocRefSchema.optional(),
@@ -389,7 +387,6 @@ export const supportingDocsSchema = z
   })
   .strict();
 
-export type SupportingDocRef = z.infer<typeof supportingDocRefSchema>;
 export type SupportingDocs = z.infer<typeof supportingDocsSchema>;
 
 const runtimePhaseString = z.string().min(1);
