@@ -8,10 +8,16 @@ import type {
   StandardsAssessment,
 } from "../schemas/review.js";
 import {
+  parseEmptyBody,
   parseRetryReviewSubmissionBody,
   setStandardsProposalBodySchema,
 } from "../schemas/review.js";
 import { standardsProposalSchema } from "../schemas/review-state.js";
+import {
+  everyProposalDecided,
+  proposalAfterText,
+  WORKSPACE_STANDARDS_SUBMIT_REASON,
+} from "../review-standards-status.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { prepareStoryChange } from "./change.js";
@@ -203,10 +209,23 @@ async function assessmentPrompt(
   ].join("\n");
 }
 
-function failureReason(outcome: StandardsRunOutcome): string {
+/** The status a run works in, and where it lands when it ends without its verb. */
+type StandardsRunPhase = "assessing" | "applying";
+
+const PHASE_FAILED = {
+  assessing: "assessFailed",
+  applying: "applyFailed",
+} as const satisfies Record<StandardsRunPhase, StandardsAssessment["status"]>;
+
+const PHASE_LABEL: Record<StandardsRunPhase, string> = {
+  assessing: "standards assessment",
+  applying: "standards apply",
+};
+
+function failureReason(outcome: StandardsRunOutcome, phase: StandardsRunPhase): string {
   const message = outcome.errorMessage?.trim();
   if (message) return message;
-  return `assessment run ${outcome.status}`;
+  return `${PHASE_LABEL[phase]} run ${outcome.status}`;
 }
 
 /** Drop read-model fields so a view submission can be written back. */
@@ -233,20 +252,25 @@ function patchSubmission(
   });
 }
 
-async function markAssessFailed(
+/** Land a run's phase on its failed status. A submission past that phase stays as it is. */
+function markPhaseFailed(
   projectId: string,
   reviewId: string,
   submissionId: string,
+  phase: StandardsRunPhase,
   message: string,
-): Promise<void> {
-  const reason = message.trim() || "standards assessment failed";
+): boolean {
+  const reason = message.trim() || `${PHASE_LABEL[phase]} failed`;
+  let saved = false;
   patchSubmission(projectId, reviewId, submissionId, (stored) => {
-    if (stored.standards?.status !== "assessing") return stored;
+    if (stored.standards?.status !== phase) return stored;
+    saved = true;
     return {
       ...stored,
-      standards: { ...stored.standards, status: "assessFailed", error: reason },
+      standards: { ...stored.standards, status: PHASE_FAILED[phase], error: reason },
     };
   });
+  return saved;
 }
 
 /**
@@ -279,7 +303,7 @@ export async function launchSubmitAgents(
  * Create the assessor conversation and start the run. A failure is stored on
  * the assessment. A conversation already recorded means this launch is done.
  */
-export async function launchStandardsAssessment(
+async function launchStandardsAssessment(
   projectId: string,
   reviewId: string,
   submissionId: string,
@@ -331,92 +355,101 @@ export async function launchStandardsAssessment(
       { persistPrompt: false },
     );
     if (!started.ok) {
-      await markAssessFailed(projectId, reviewId, submissionId, started.message);
+      markPhaseFailed(projectId, reviewId, submissionId, "assessing", started.message);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const latest =
-      readReviewView(projectId, reviewId).submissions.find(
-        (item) => item.id === submissionId,
-      ) ?? submission;
-    if (latest.standards?.status !== "assessing") return;
-    try {
-      await markAssessFailed(projectId, reviewId, submissionId, message);
-    } catch (markErr) {
-      console.error(
-        `could not record standards assessment failure for submission ${submissionId}:`,
-        markErr,
-      );
-    }
+    recordLaunchFailure(projectId, reviewId, submissionId, "assessing", err);
+  }
+}
+
+/** The HTTP response has been sent, so a failed write is logged rather than thrown. */
+function recordLaunchFailure(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  phase: StandardsRunPhase,
+  err: unknown,
+): void {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    markPhaseFailed(projectId, reviewId, submissionId, phase, message);
+  } catch (markErr) {
+    console.error(
+      `could not record ${PHASE_LABEL[phase]} failure for submission ${submissionId}:`,
+      markErr,
+    );
   }
 }
 
 /** An assessing submission with no conversation yet is ready to launch. */
-export function submissionNeedsStandardsLaunch(
+function submissionNeedsStandardsLaunch(
   submission: { standards?: StandardsAssessment } | undefined,
 ): boolean {
   const standards = submission?.standards;
   return standards?.status === "assessing" && !standards.conversationId;
 }
 
-function findAssessing(conversationId: string):
+function isRunPhase(status: StandardsAssessment["status"]): status is StandardsRunPhase {
+  return status === "assessing" || status === "applying";
+}
+
+function findRunning(conversationId: string):
   | {
       projectId: string;
-      review: ReviewRecordView;
-      submission: ReviewSubmission;
+      reviewId: string;
+      submissionId: string;
+      phase: StandardsRunPhase;
     }
   | undefined {
   const meta = readConversationMeta(conversationId);
   const review = reviewOfConversation(meta, readAll().issues);
   if (!review) return undefined;
-  const submission = review.submissions.find(
-    (item) =>
-      item.standards?.conversationId === conversationId &&
-      item.standards.status === "assessing",
-  );
-  if (!submission) return undefined;
-  return { projectId: meta.projectId, review, submission };
+  for (const submission of review.submissions) {
+    const standards = submission.standards;
+    if (standards?.conversationId !== conversationId) continue;
+    if (!isRunPhase(standards.status)) continue;
+    return {
+      projectId: meta.projectId,
+      reviewId: review.id,
+      submissionId: submission.id,
+      phase: standards.status,
+    };
+  }
+  return undefined;
 }
 
-/** A run that ends while still assessing did not report proposals. */
+/**
+ * A run that ends while still assessing did not report proposals; one that
+ * ends while still applying did not report the apply.
+ */
 export function classifyStandardsAssessmentRun(
   conversationId: string,
   outcome: StandardsRunOutcome,
 ): boolean {
-  const found = findAssessing(conversationId);
+  const found = findRunning(conversationId);
   if (!found) return false;
-  let saved = false;
-  patchSubmission(found.projectId, found.review.id, found.submission.id, (stored) => {
-    if (stored.standards?.status !== "assessing") return stored;
-    if (stored.standards.conversationId !== conversationId) return stored;
-    saved = true;
-    return {
-      ...stored,
-      standards: {
-        ...stored.standards,
-        status: "assessFailed",
-        error: failureReason(outcome),
-      },
-    };
-  });
-  return saved;
+  return markPhaseFailed(
+    found.projectId,
+    found.reviewId,
+    found.submissionId,
+    found.phase,
+    failureReason(outcome, found.phase),
+  );
 }
 
 export function failStandardsAssessmentClassification(
   conversationId: string,
   message: string,
 ): boolean {
-  const found = findAssessing(conversationId);
+  const found = findRunning(conversationId);
   if (!found) return false;
-  const reason = message.trim() || "standards assessment classification failed";
-  patchSubmission(found.projectId, found.review.id, found.submission.id, (stored) => {
-    if (stored.standards?.status !== "assessing") return stored;
-    return {
-      ...stored,
-      standards: { ...stored.standards, status: "assessFailed", error: reason },
-    };
-  });
-  return true;
+  return markPhaseFailed(
+    found.projectId,
+    found.reviewId,
+    found.submissionId,
+    found.phase,
+    message.trim() || `${PHASE_LABEL[found.phase]} classification failed`,
+  );
 }
 
 function proposalThreadError(
@@ -532,7 +565,150 @@ export function setStandardsProposal(
   });
 }
 
-/** Fresh assessor run from `assessFailed`. The route starts it. */
+function assertAssessorIdle(
+  standards: StandardsAssessment,
+  sessions: Pick<AgentSessions, "getActiveRun">,
+): void {
+  if (standards.conversationId && sessions.getActiveRun(standards.conversationId)) {
+    throw new IssueError("conflict", "the standards assessor is still running");
+  }
+}
+
+/**
+ * Submit a `ready` group once every proposal is decided. Any accepted
+ * proposal moves it to `applying` and the route resumes the assessor; an
+ * all-rejected group lands on `applied` with no doc change.
+ */
+export function submitStandardsGroup(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  body: unknown,
+  sessions: Pick<AgentSessions, "getActiveRun">,
+): ReviewRecordView {
+  const parsed = parseEmptyBody(body, "submit body must be empty");
+  if (!parsed.ok) throw new IssueError("validation", parsed.message);
+  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+    const standards = stored.standards;
+    if (!standards || standards.status !== "ready") {
+      throw new IssueError(
+        "validation",
+        `standards assessment is ${standards?.status ?? "absent"}`,
+      );
+    }
+    if (standards.doc.type === "workspace") {
+      throw new IssueError("validation", WORKSPACE_STANDARDS_SUBMIT_REASON);
+    }
+    if (!everyProposalDecided(standards.proposals)) {
+      throw new IssueError("validation", "every proposal needs a decision");
+    }
+    const accepted = standards.proposals.some(
+      (proposal) => proposal.decision === "accepted",
+    );
+    if (accepted) assertAssessorIdle(standards, sessions);
+    return {
+      ...stored,
+      standards: { ...standards, status: accepted ? "applying" : "applied" },
+    };
+  });
+}
+
+function applyPrompt(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  standards: StandardsAssessment,
+): string {
+  const accepted = standards.proposals
+    .filter((proposal) => proposal.decision === "accepted")
+    .map((proposal) => ({
+      id: proposal.id,
+      section: proposal.section,
+      before: proposal.before,
+      after: proposalAfterText(proposal),
+    }));
+  return [
+    "Mode: apply",
+    `Review: ${reviewId}`,
+    `Submission: ${submissionId}`,
+    `Project: ${projectId}`,
+    docLine(standards.doc),
+    `Path: ${standardsDocPath(projectId, standards.doc)}`,
+    "Accepted proposals:",
+    JSON.stringify(accepted, null, 2),
+  ].join("\n");
+}
+
+/**
+ * Resume the assessor conversation with the accepted proposals of an
+ * `applying` group. A failure is stored on the assessment as `applyFailed`.
+ */
+async function launchStandardsApply(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  standards: StandardsAssessment,
+  sessions: AgentSessions,
+): Promise<void> {
+  try {
+    const conversationId = standards.conversationId;
+    if (!conversationId) {
+      throw new Error(`submission "${submissionId}" has no assessor conversation`);
+    }
+    const started = await startConversationPrompt(
+      conversationId,
+      applyPrompt(projectId, reviewId, submissionId, standards),
+      loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
+      sessions,
+    );
+    if (!started.ok) {
+      markPhaseFailed(projectId, reviewId, submissionId, "applying", started.message);
+    }
+  } catch (err) {
+    recordLaunchFailure(projectId, reviewId, submissionId, "applying", err);
+  }
+}
+
+/**
+ * Start the run a submit or retry left the assessment waiting on: a fresh
+ * assessor while `assessing` with no conversation, or a resumed apply while
+ * `applying`. Any other status starts nothing.
+ */
+export async function launchStandardsRun(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  sessions: AgentSessions,
+): Promise<void> {
+  const review = readReviewView(projectId, reviewId);
+  const submission = review.submissions.find((item) => item.id === submissionId);
+  const standards = submission?.standards;
+  if (submissionNeedsStandardsLaunch(submission)) {
+    await launchStandardsAssessment(projectId, reviewId, submissionId, sessions);
+  } else if (standards?.status === "applying") {
+    await launchStandardsApply(projectId, reviewId, submissionId, standards, sessions);
+  }
+}
+
+/** Handler for `issue review standards applied`, reported once the accepted edits are on the attachment. */
+export function markStandardsApplied(reviewId: string, submissionId: string): void {
+  const review = readReviewOrThrow(reviewId);
+  patchSubmission(review.partOf, reviewId, submissionId, (stored) => {
+    const standards = stored.standards;
+    if (!standards || standards.status !== "applying") {
+      throw new IssueError(
+        "validation",
+        `standards assessment is ${standards?.status ?? "absent"}`,
+      );
+    }
+    return { ...stored, standards: { ...standards, status: "applied" } };
+  });
+}
+
+/**
+ * Re-run the failed phase: a fresh assessor run from `assessFailed`, or a
+ * resumed apply from `applyFailed`. The route starts it.
+ */
 export function retryStandardsAssessment(
   projectId: string,
   reviewId: string,
@@ -542,40 +718,24 @@ export function retryStandardsAssessment(
 ): ReviewRecordView {
   const parsed = parseRetryReviewSubmissionBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
-  const review = readReviewView(projectId, reviewId);
-  const submission = review.submissions.find((item) => item.id === submissionId);
-  if (!submission) {
-    throw new IssueError("not_found", `unknown submission "${submissionId}"`);
-  }
-  const standards = submission.standards;
-  if (!standards || standards.status !== "assessFailed") {
+  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+    const standards = stored.standards;
+    if (standards?.status === "applyFailed") {
+      assertAssessorIdle(standards, sessions);
+      const { error: _error, ...rest } = standards;
+      return { ...stored, standards: { ...rest, status: "applying" } };
+    }
+    if (standards?.status === "assessFailed") {
+      assertAssessorIdle(standards, sessions);
+      return {
+        ...stored,
+        standards: { status: "assessing", doc: standards.doc, proposals: [] },
+      };
+    }
     throw new IssueError(
       "validation",
       `standards assessment is ${standards?.status ?? "absent"}`,
     );
-  }
-  if (
-    standards.conversationId &&
-    sessions.getActiveRun(standards.conversationId)
-  ) {
-    throw new IssueError("conflict", "a standards assessment is already running");
-  }
-  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
-    const currentStandards = stored.standards;
-    if (!currentStandards || currentStandards.status !== "assessFailed") {
-      throw new IssueError(
-        "validation",
-        `standards assessment is ${currentStandards?.status ?? "absent"}`,
-      );
-    }
-    return {
-      ...stored,
-      standards: {
-        status: "assessing",
-        doc: currentStandards.doc,
-        proposals: [],
-      },
-    };
   });
 }
 

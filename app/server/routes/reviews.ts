@@ -22,11 +22,11 @@ import {
   retryReviewSubmission,
 } from "../services/review-tasking.js";
 import {
-  launchStandardsAssessment,
+  launchStandardsRun,
   launchSubmitAgents,
   retryStandardsAssessment,
   setStandardsProposal,
-  submissionNeedsStandardsLaunch,
+  submitStandardsGroup,
 } from "../services/review-standards.js";
 import { submitReview } from "../services/review-submit.js";
 import { refreshReviewPullRequest } from "../services/review-pr-tracking.js";
@@ -303,6 +303,23 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
   );
 
   reviewsRouter.post(
+    "/:reviewId/submissions/:submissionId/standards/submit",
+    asyncRoute(async (req, res) => {
+      const { projectId, reviewId, submissionId } = req.params;
+      const view = submitStandardsGroup(
+        projectId,
+        reviewId,
+        submissionId,
+        req.body,
+        sessions,
+      );
+      await sendReviewThenLaunch(res, projectId, view, 200, () =>
+        launchStandardsRun(projectId, reviewId, submissionId, sessions),
+      );
+    }),
+  );
+
+  reviewsRouter.post(
     "/:reviewId/submissions/:submissionId/standards/retry",
     asyncRoute(async (req, res) => {
       const projectId = req.params.projectId;
@@ -315,11 +332,8 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         req.body,
         sessions,
       );
-      const submission = view.submissions.find((item) => item.id === submissionId);
       await sendReviewThenLaunch(res, projectId, view, 200, () =>
-        submission && submissionNeedsStandardsLaunch(submission)
-          ? launchStandardsAssessment(projectId, reviewId, submission.id, sessions)
-          : Promise.resolve(),
+        launchStandardsRun(projectId, reviewId, submissionId, sessions),
       );
     }),
   );

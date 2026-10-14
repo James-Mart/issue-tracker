@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { commentDayLabel } from "@/features/issues/components/comments/marker";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
-import { useRetryStandardsAssessment } from "../api/mutations";
+import { useRetryStandardsAssessment, useSubmitStandardsGroup } from "../api/mutations";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import {
   showSubmittedGroupsLabel,
   standardsDocFileName,
   standardsGroupEditable,
   standardsGroups,
+  standardsSubmitState,
   type StandardsGroup,
 } from "../lib/review-standards-ui";
 import { StandardsProposalCard } from "./review-standards-proposal";
@@ -36,25 +37,33 @@ function GroupStatus({ status }: { status: StandardsGroup["standards"]["status"]
   return null;
 }
 
-function AssessFailed({
+/** A failed phase with its error; Retry re-runs that phase. */
+function RetryFault({
   projectId,
   reviewId,
   group,
+  fallback,
+  hint,
+  retryClassName,
 }: {
   projectId: string;
   reviewId: string;
   group: StandardsGroup;
+  fallback: string;
+  hint: string;
+  retryClassName?: string;
 }) {
   const retry = useRetryStandardsAssessment(projectId);
   return (
     <ShellInlineFault
       className="text-[hsl(var(--blocked))]"
-      message={group.standards.error ?? "Standards assessment failed."}
-      hint="Check the coding-standards doc, then retry."
+      message={group.standards.error ?? fallback}
+      hint={hint}
       action={
         <Button
           type="button"
           size="sm"
+          className={retryClassName}
           disabled={retry.isPending}
           data-testid="standards-retry"
           onClick={() => retry.mutate({ reviewId, submissionId: group.submissionId })}
@@ -67,6 +76,44 @@ function AssessFailed({
   );
 }
 
+function StandardsSubmit({
+  projectId,
+  reviewId,
+  group,
+}: {
+  projectId: string;
+  reviewId: string;
+  group: StandardsGroup;
+}) {
+  const submit = useSubmitStandardsGroup(projectId);
+  const { disabled, reason } = standardsSubmitState(group.standards);
+  const reasonId = `standards-submit-reason-${group.submissionId}`;
+  return (
+    <div className="flex flex-col items-start gap-2 border-t border-border px-1 pt-3">
+      {reason ? (
+        <p
+          id={reasonId}
+          className="text-xs text-[hsl(var(--blocked))]"
+          data-testid="standards-submit-reason"
+        >
+          {reason}
+        </p>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="primary"
+        disabled={disabled || submit.isPending}
+        aria-describedby={reason ? reasonId : undefined}
+        data-testid="standards-submit"
+        onClick={() => submit.mutate({ reviewId, submissionId: group.submissionId })}
+      >
+        Submit
+      </Button>
+    </div>
+  );
+}
+
 type GroupProps = {
   projectId: string;
   reviewId: string;
@@ -75,32 +122,72 @@ type GroupProps = {
   threadSearch: (threadId: string) => string;
 };
 
-function StandardsGroupBody({ projectId, reviewId, group, threadsById, threadSearch }: GroupProps) {
+function StandardsProposalList({
+  projectId,
+  reviewId,
+  group,
+  threadsById,
+  threadSearch,
+}: GroupProps) {
   const { standards } = group;
-  switch (standards.status) {
+  const editable = standardsGroupEditable(standards);
+  const docFileName = standardsDocFileName(standards.doc);
+  return standards.proposals.map((proposal) => (
+    <StandardsProposalCard
+      key={proposal.id}
+      projectId={projectId}
+      reviewId={reviewId}
+      submissionId={group.submissionId}
+      docFileName={docFileName}
+      proposal={proposal}
+      editable={editable}
+      threadsById={threadsById}
+      threadSearch={threadSearch}
+    />
+  ));
+}
+
+function StandardsGroupBody(props: GroupProps) {
+  const { projectId, reviewId, group } = props;
+  switch (group.standards.status) {
     case "assessing":
       return null;
     case "assessFailed":
-      return <AssessFailed projectId={projectId} reviewId={reviewId} group={group} />;
-    case "noGaps":
-      return <ShellState title="No coding-standards gaps found." />;
-    default: {
-      const editable = standardsGroupEditable(standards);
-      const docFileName = standardsDocFileName(standards.doc);
-      return standards.proposals.map((proposal) => (
-        <StandardsProposalCard
-          key={proposal.id}
+      return (
+        <RetryFault
           projectId={projectId}
           reviewId={reviewId}
-          submissionId={group.submissionId}
-          docFileName={docFileName}
-          proposal={proposal}
-          editable={editable}
-          threadsById={threadsById}
-          threadSearch={threadSearch}
+          group={group}
+          fallback="Standards assessment failed."
+          hint="Check the coding-standards doc, then retry."
         />
-      ));
-    }
+      );
+    case "noGaps":
+      return <ShellState title="No coding-standards gaps found." />;
+    case "ready":
+      return (
+        <>
+          <StandardsProposalList {...props} />
+          <StandardsSubmit projectId={projectId} reviewId={reviewId} group={group} />
+        </>
+      );
+    case "applying":
+    case "applied":
+      return <StandardsProposalList {...props} />;
+    case "applyFailed":
+      return (
+        <>
+          <StandardsProposalList {...props} />
+          <RetryFault
+            projectId={projectId}
+            reviewId={reviewId}
+            group={group}
+            fallback="Applying the accepted edits failed."
+            hint="Retry writes the accepted edits to the coding-standards doc."
+            retryClassName="[color:hsl(var(--blocked))]"
+          />
+        </>
+      );
   }
 }
 

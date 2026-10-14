@@ -683,7 +683,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
             );
           }
         }
-        if (!classified) {
+        // Submit can resume the assessor as soon as this turn clears; that newer
+        // run owns the outcome of the phase it started.
+        if (!classified && entry.turn === undefined) {
           try {
             classified = classifyStandardsAssessmentRun(conversationId, outcome);
           } catch (err) {

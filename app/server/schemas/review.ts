@@ -115,18 +115,18 @@ export function parseSubmitReviewBody(raw: unknown): SubmitReviewBodyParseResult
   };
 }
 
-export const retryReviewSubmissionBodySchema = z.object({}).strict();
+export const emptyBodySchema = z.object({}).strict();
 
-export type RetryReviewSubmissionBodyParseResult =
-  | { ok: true }
-  | { ok: false; message: string };
+export type EmptyBodyParseResult = { ok: true } | { ok: false; message: string };
 
-export function parseRetryReviewSubmissionBody(
-  raw: unknown,
-): RetryReviewSubmissionBodyParseResult {
-  const result = retryReviewSubmissionBodySchema.safeParse(raw ?? {});
+export function parseEmptyBody(raw: unknown, message: string): EmptyBodyParseResult {
+  const result = emptyBodySchema.safeParse(raw ?? {});
   if (result.success) return { ok: true };
-  return { ok: false, message: "retry body must be empty" };
+  return { ok: false, message };
+}
+
+export function parseRetryReviewSubmissionBody(raw: unknown): EmptyBodyParseResult {
+  return parseEmptyBody(raw, "retry body must be empty");
 }
 
 /** `null` clears the field; an absent key leaves it as stored. */

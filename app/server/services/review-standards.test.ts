@@ -75,7 +75,19 @@ async function load() {
   const runs = await import("./agent-runs.js");
   const cwd = await import("./agent-sessions.js");
   const cli = await import("../../cli-program.js");
-  return { ...standards, ...submit, ...issues, ...reviews, ...runs, ...cwd, ...cli };
+  const conversations = await import("./conversations.js");
+  const roles = await import("./role-bodies.js");
+  return {
+    ...standards,
+    ...submit,
+    ...issues,
+    ...reviews,
+    ...runs,
+    ...cwd,
+    ...cli,
+    ...conversations,
+    ...roles,
+  };
 }
 
 describe("standards assessment at submit", () => {
@@ -222,5 +234,96 @@ describe("standards proposal decisions and edits", () => {
     expect((await proposals())[0]).toMatchObject({ decision: "rejected" });
     expect((await proposals())[0]).not.toHaveProperty("editedAfter");
     expect((await proposals())[1]).not.toHaveProperty("decision");
+  });
+});
+
+describe("submitting a decided standards group", () => {
+  useReviewTaskingStore("issue-tracker-review-standards-submit-");
+
+  const DOC = { type: "attachment", name: "coding-standards.md" } as const;
+
+  const proposal = (
+    id: string,
+    decision: "accepted" | "rejected",
+    extra: Record<string, string> = {},
+  ) => ({
+    id,
+    section: "Implementation",
+    before: "Be clear.",
+    after: `Be clear (${id}).`,
+    rationale: "Feedback flagged it.",
+    threadIds: ["th-1"],
+    decision,
+    ...extra,
+  });
+
+  async function seedReady(proposals: ReturnType<typeof proposal>[]): Promise<string> {
+    seedReviewTasking();
+    attachCodingStandards(DOC);
+    const { createConversation, STANDARDS_ASSESSOR_ROLE, loadRoleModelPin } = await load();
+    const meta = await createConversation({
+      title: "Coding standards assessment",
+      projectId: "p",
+      model: loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
+      issueId: REVIEW_ID,
+      channel: "review",
+      role: STANDARDS_ASSESSOR_ROLE,
+      message: "assess",
+    });
+    writeReviewSubmissions([
+      {
+        id: "sub-1",
+        at: AT,
+        status: "done",
+        taskIds: [],
+        threadIds: ["th-1"],
+        standards: { status: "ready", conversationId: meta.id, doc: DOC, proposals },
+      },
+    ]);
+    return meta.id;
+  }
+
+  async function standards() {
+    const { readReviewView } = await load();
+    return submission(readReviewView("p", REVIEW_ID)).standards!;
+  }
+
+  it("resumes the assessor with accepted proposals and lands on applied when it reports", async () => {
+    const conversationId = await seedReady([
+      proposal("kept", "accepted", { editedAfter: "Be clear and exact." }),
+      proposal("plain", "accepted"),
+      proposal("dropped", "rejected"),
+    ]);
+    const { submitStandardsGroup, launchStandardsRun, markStandardsApplied } = await load();
+    const sent: { id: string; prompt: string }[] = [];
+    const sessions = {
+      getActiveRun: () => undefined,
+      sendPrompt: async (id: string, options: { prompt: string }) => {
+        sent.push({ id, prompt: options.prompt });
+        return { ok: true as const, run: { id: "run-apply" } as never };
+      },
+    } as unknown as Parameters<typeof launchStandardsRun>[3];
+
+    submitStandardsGroup("p", REVIEW_ID, "sub-1", {}, sessions);
+    expect((await standards()).status).toBe("applying");
+    await launchStandardsRun("p", REVIEW_ID, "sub-1", sessions);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.id).toBe(conversationId);
+    const prompt = sent[0]!.prompt;
+    expect(prompt).toContain("Mode: apply");
+    expect(prompt).toContain(`Review: ${REVIEW_ID}`);
+    expect(prompt).toContain("Submission: sub-1");
+    expect(prompt).toContain("Project: p");
+    expect(prompt).toContain("Coding standards: attachment coding-standards.md");
+    expect(prompt).toContain('"after": "Be clear and exact."');
+    expect(prompt).toContain('"after": "Be clear (plain)."');
+    expect(prompt).not.toContain("dropped");
+
+    markStandardsApplied(REVIEW_ID, "sub-1");
+    expect(await standards()).toMatchObject({ status: "applied", conversationId });
+    expect(() => markStandardsApplied(REVIEW_ID, "sub-1")).toThrow(
+      "standards assessment is applied",
+    );
   });
 });

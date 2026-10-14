@@ -478,6 +478,11 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `<file>` is JSON `{ proposals }` (`-` reads stdin). An empty list moves the
   assessment to `noGaps`; any proposal moves it to `ready`. See
   [Standards assessment](#standards-assessment).
+- **`standards applied`** (review only) —
+  `issue review standards applied <reviewId> <submissionId>` reports that the
+  accepted proposals were written to the coding-standards doc and moves an
+  `applying` assessment to `applied`. See
+  [Standards assessment](#standards-assessment).
 - **`human-done`** (story only) —
   `issue story human-done <storyId> [--note <text>]` posts a comment (`role`
   `human`, `type` `human-response`) with `replyTo` set to the latest
@@ -1481,8 +1486,10 @@ subset of the submission's threads. The command moves `assessing` to `ready`,
 or to `noGaps` when `proposals` is empty. A run that ends while status is
 still `assessing` moves it to `assessFailed` and records `error`.
 `POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/retry`
-with an empty body starts a fresh assessor run from `assessFailed`. Each
-assessor conversation is listed among the review's agent runs with role
+with an empty body re-runs the failed phase: a fresh assessor run from
+`assessFailed`, or a resumed apply from `applyFailed`. Either is refused with
+`conflict` while the assessor conversation still has a run. Each assessor
+conversation is listed among the review's agent runs with role
 `issue-tracker-standards-assessor`.
 
 `PATCH /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/proposals/:proposalId`
@@ -1492,6 +1499,20 @@ returns the review. At least one key is required; `null` clears that field and
 an absent key leaves it as stored. Setting one does not change the other. The
 request is refused unless the assessment is `ready`, and `editedAfter` is
 refused on a proposal whose `after` is empty.
+
+`POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/submit`
+with an empty body submits a `ready` group and returns the review. It is
+refused unless every proposal has a `decision`, and refused when `doc` is
+workspace-backed. When any proposal is accepted, the assessment moves to
+`applying` and the server resumes the assessor conversation with the accepted
+proposals (`editedAfter` in place of `after` when present); that is refused
+with `conflict` while the assessor conversation still has a run. The assessor
+merges them into the full doc, writes it with `issue project attach --replace`,
+and reports with `issue review standards applied <reviewId> <submissionId>`,
+which moves `applying` to `applied`. A run that ends while status is still
+`applying` moves it to `applyFailed` and records `error`. When every proposal
+is rejected, submit moves the assessment straight to `applied` without
+resuming the assessor.
 
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via

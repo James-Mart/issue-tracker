@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Check, X } from "lucide-react";
+import { proposalAfterText } from "@server/review-standards-status";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -8,11 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { cn } from "@/lib/utils/cn";
 import { useSetStandardsProposal } from "../api/mutations";
-import {
-  proposalAfterText,
-  proposalEditBody,
-  type StandardsProposal,
-} from "../lib/review-standards-ui";
+import { proposalEditBody, type StandardsProposal } from "../lib/review-standards-ui";
 import { reviewThreadExcerpt, reviewThreadLocation } from "../lib/review-thread-label";
 import { StandardsProposalDiff } from "./review-standards-proposal-diff";
 

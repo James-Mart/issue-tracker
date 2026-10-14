@@ -209,6 +209,17 @@ export function patchStandardsProposal(
   );
 }
 
+export function postSubmitStandardsGroup(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+): Promise<ReviewView> {
+  return request<ReviewView>(`${standardsUrl(projectId, reviewId, submissionId)}/submit`, {
+    method: "POST",
+    body: {},
+  });
+}
+
 export function postRetryStandardsAssessment(
   projectId: string,
   reviewId: string,

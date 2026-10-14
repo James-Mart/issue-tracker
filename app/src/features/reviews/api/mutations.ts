@@ -19,6 +19,7 @@ import {
   postRetryStandardsAssessment,
   postReviewRuntime,
   postSubmitReview,
+  postSubmitStandardsGroup,
   postSyncReviewWorktree,
   putReviewMark,
 } from "./client";
@@ -126,6 +127,14 @@ export function useSetStandardsProposal(projectId: string) {
       ...body
     }: SetStandardsProposalBody & StandardsProposalTarget) =>
       patchStandardsProposal(projectId, reviewId, submissionId, proposalId, body),
+  );
+}
+
+export function useSubmitStandardsGroup(projectId: string) {
+  return useReviewMutation(
+    projectId,
+    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
+      postSubmitStandardsGroup(projectId, reviewId, submissionId),
   );
 }
 

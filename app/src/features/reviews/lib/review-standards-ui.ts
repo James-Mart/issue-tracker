@@ -1,4 +1,8 @@
 import type { ReviewSubmission, StandardsAssessment } from "@server/schemas";
+import {
+  everyProposalDecided,
+  WORKSPACE_STANDARDS_SUBMIT_REASON,
+} from "@server/review-standards-status";
 import { countLabel } from "./review-submission-ui";
 
 export type StandardsProposal = StandardsAssessment["proposals"][number];
@@ -45,9 +49,17 @@ export function standardsGroupEditable(standards: StandardsAssessment): boolean 
   return standards.status === "ready";
 }
 
-/** Proposed wording as it stands: the human's edit, else the assessor's `after`. */
-export function proposalAfterText(proposal: Pick<StandardsProposal, "after" | "editedAfter">): string {
-  return proposal.editedAfter ?? proposal.after;
+/**
+ * Submit on a `ready` group is enabled once every proposal is decided. A
+ * workspace-backed doc keeps it disabled with the reason.
+ */
+export function standardsSubmitState(
+  standards: Pick<StandardsAssessment, "doc" | "proposals">,
+): { disabled: boolean; reason?: string } {
+  if (standards.doc.type === "workspace") {
+    return { disabled: true, reason: WORKSPACE_STANDARDS_SUBMIT_REASON };
+  }
+  return { disabled: !everyProposalDecided(standards.proposals) };
 }
 
 export function showSubmittedGroupsLabel(count: number): string {
