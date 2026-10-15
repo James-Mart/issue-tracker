@@ -20,6 +20,7 @@ import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-t
 import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
 import { quoteSource } from "@/features/issues/lib/quote-comment";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
+import { useReviewTranscriptLinks } from "./review-transcript-link";
 
 /** Review thread on the review workbench: reply, quote, resolve, and unresolve. */
 export function ReviewThread({
@@ -45,6 +46,12 @@ export function ReviewThread({
   const events = usePostThreadEvent(reviewId);
   const diff = useOptionalDiffComposer();
   const composers = useThreadComposers(reviewId);
+  const transcripts = useReviewTranscriptLinks();
+  const researcherConversationId = transcripts?.researcherConversationId(thread.root.id);
+  const openResearcher =
+    transcripts && researcherConversationId
+      ? () => transcripts.openResearcher(thread.root.id, researcherConversationId)
+      : undefined;
   const slot = composers.slots[thread.root.id];
   const threadId = thread.root.id;
 
@@ -115,6 +122,7 @@ export function ReviewThread({
         {...threadStateActions(thread, (event) =>
           events.mutate({ threadId, event }),
         )}
+        onOpenResearcher={openResearcher}
       />
       {diff ? null : (
         <ThreadComposerDiscard

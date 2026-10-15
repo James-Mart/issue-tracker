@@ -46,6 +46,64 @@ export function searchWithReviewRun(
   return next;
 }
 
+export type ReviewRunReturn =
+  | { surface: "thread"; threadId: string }
+  | { surface: "conversation"; submissionId: string }
+  | { surface: "standards"; submissionId: string };
+
+/** Return place stored beside `reviewRunOpened` when a reverse link opened the run. */
+export function reviewRunReturnFromState(state: unknown): ReviewRunReturn | null {
+  if (!reviewRunWasOpened(state)) return null;
+  const value = (state as { reviewRunReturn?: unknown }).reviewRunReturn;
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    record.surface === "thread" &&
+    typeof record.threadId === "string" &&
+    record.threadId.length > 0
+  ) {
+    return { surface: "thread", threadId: record.threadId };
+  }
+  if (
+    (record.surface === "conversation" || record.surface === "standards") &&
+    typeof record.submissionId === "string" &&
+    record.submissionId.length > 0
+  ) {
+    return { surface: record.surface, submissionId: record.submissionId };
+  }
+  return null;
+}
+
+function writeReviewRunReturn(params: URLSearchParams, returnTo: ReviewRunReturn): void {
+  if (returnTo.surface === "thread") params.set("thread", returnTo.threadId);
+  else params.set("tab", returnTo.surface);
+}
+
+/** Open a run, optionally on another tab, keeping a reverse link's return place. */
+export function searchOpeningReviewRun(
+  params: URLSearchParams,
+  runId: string,
+  options?: { tab?: string; returnTo?: ReviewRunReturn },
+): URLSearchParams {
+  const next = searchWithReviewRun(params, runId);
+  if (options?.tab) next.set("tab", options.tab);
+  if (options?.returnTo) writeReviewRunReturn(next, options.returnTo);
+  return next;
+}
+
+/**
+ * Leave a reverse-linked transcript on the thread, Conversation round, or
+ * Standards round. The tab already in the URL stays for a thread.
+ */
+export function searchClosingReviewRun(
+  params: URLSearchParams,
+  returnTo: ReviewRunReturn,
+): URLSearchParams {
+  const next = searchWithoutReviewRun(params);
+  writeReviewRunReturn(next, returnTo);
+  return next;
+}
+
 /**
  * Leave the transcript. The tab already in the URL is the return surface.
  * When that tab is missing, write Agents — the direct-load return.

@@ -17,6 +17,10 @@ import {
   type StandardsGroup,
 } from "../lib/review-standards-ui";
 import { StandardsProposalCard } from "./review-standards-proposal";
+import {
+  ReviewTranscriptLinkButton,
+  useReviewTranscriptLinks,
+} from "./review-transcript-link";
 
 function GroupStatus({ status }: { status: StandardsGroup["standards"]["status"] }) {
   if (status === "assessing" || status === "applying") {
@@ -194,7 +198,10 @@ function StandardsGroupBody(props: GroupProps) {
 function StandardsGroupSection(props: GroupProps) {
   const { group } = props;
   const { standards } = group;
+  const transcripts = useReviewTranscriptLinks();
+  const assessorId = transcripts?.assessorConversationId(group.submissionId);
   const headingId = `standards-group-${group.submissionId}`;
+  const title = `Round ${group.round}`;
   return (
     <section
       aria-labelledby={headingId}
@@ -206,7 +213,17 @@ function StandardsGroupSection(props: GroupProps) {
       <header className="flex items-start justify-between gap-2 px-1">
         <div className="min-w-0">
           <h3 id={headingId} className="truncate text-sm font-semibold text-foreground">
-            Round {group.round}
+            {transcripts && assessorId ? (
+              <ReviewTranscriptLinkButton
+                testId="standards-round-transcript"
+                className="truncate font-semibold"
+                onClick={() => transcripts.openAssessor(group.submissionId, assessorId)}
+              >
+                {title}
+              </ReviewTranscriptLinkButton>
+            ) : (
+              title
+            )}
           </h3>
           <p className="font-mono text-[11px] text-muted-foreground">
             {commentDayLabel(group.at)}

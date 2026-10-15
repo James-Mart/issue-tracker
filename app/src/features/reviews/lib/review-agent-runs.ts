@@ -1,9 +1,13 @@
 import type { ReviewAgentRun } from "@server/schemas";
 
+const TASKER_ROLE = "issue-tracker-review-tasker";
+const ASSESSOR_ROLE = "issue-tracker-standards-assessor";
+const RESEARCHER_ROLE = "issue-tracker-review-question";
+
 const ROLE_LABELS: Record<string, string> = {
-  "issue-tracker-review-tasker": "Tasker",
-  "issue-tracker-standards-assessor": "Standards assessor",
-  "issue-tracker-review-question": "Question researcher",
+  [TASKER_ROLE]: "Tasker",
+  [ASSESSOR_ROLE]: "Standards assessor",
+  [RESEARCHER_ROLE]: "Question researcher",
 };
 
 /** Short label for a review role. Any other role shows the stored string. */
@@ -26,9 +30,6 @@ export type ReviewAgentRunName = {
   target: "thread" | "conversation" | "standards" | null;
 };
 
-const TASKER_ROLE = "issue-tracker-review-tasker";
-const ASSESSOR_ROLE = "issue-tracker-standards-assessor";
-
 /** The question or the round the card names. Null when the run has neither. */
 export function reviewAgentRunName(run: ReviewAgentRun): ReviewAgentRunName | null {
   if (run.questionExcerpt && run.threadId) {
@@ -43,6 +44,55 @@ export function reviewAgentRunName(run: ReviewAgentRun): ReviewAgentRunName | nu
     return { text, target: "standards" };
   }
   return { text, target: null };
+}
+
+/**
+ * Latest matching run. The list is oldest first; the greatest `startedAt`
+ * wins, and a tie keeps the later record.
+ */
+function latestMatchingRun(
+  runs: readonly ReviewAgentRun[],
+  match: (run: ReviewAgentRun) => boolean,
+): ReviewAgentRun | undefined {
+  let latest: ReviewAgentRun | undefined;
+  for (const run of runs) {
+    if (!match(run)) continue;
+    if (!latest || run.startedAt >= latest.startedAt) latest = run;
+  }
+  return latest;
+}
+
+/** Researcher run the question's status line opens. */
+export function researcherTranscriptRun(
+  runs: readonly ReviewAgentRun[],
+  threadId: string,
+): ReviewAgentRun | undefined {
+  return latestMatchingRun(
+    runs,
+    (run) => run.role === RESEARCHER_ROLE && run.threadId === threadId,
+  );
+}
+
+/** Tasker run the submitted-round line opens. */
+export function taskerTranscriptRun(
+  runs: readonly ReviewAgentRun[],
+  submissionId: string,
+): ReviewAgentRun | undefined {
+  return latestMatchingRun(
+    runs,
+    (run) => run.role === TASKER_ROLE && run.submissionId === submissionId,
+  );
+}
+
+/** Assessor run the Standards round title opens. More than one keeps the latest. */
+export function latestAssessorTranscriptRun(
+  runs: readonly ReviewAgentRun[],
+  submissionId: string,
+): ReviewAgentRun | undefined {
+  return latestMatchingRun(
+    runs,
+    (run) => run.role === ASSESSOR_ROLE && run.submissionId === submissionId,
+  );
 }
 
 /**

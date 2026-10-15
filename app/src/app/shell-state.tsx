@@ -16,13 +16,30 @@ const eyebrowTone: Record<Tone, string> = {
 export function ShellFaultDetail({
   message,
   hint,
+  onMessageClick,
+  messageTestId,
 }: {
   message: string;
   hint: string;
+  /** The diagnostic line opens something. The hint stays static. */
+  onMessageClick?: () => void;
+  messageTestId?: string;
 }) {
+  const diagnostic = onMessageClick ? (
+    <button
+      type="button"
+      className="min-h-11 w-full text-left font-mono text-xs text-[hsl(var(--current))] underline underline-offset-2"
+      data-testid={messageTestId}
+      onClick={onMessageClick}
+    >
+      {message}
+    </button>
+  ) : (
+    <span className="font-mono text-xs">{message}</span>
+  );
   return (
     <>
-      <span className="font-mono text-xs">{message}</span>
+      {diagnostic}
       <span className="mt-2 block">{hint}</span>
     </>
   );
@@ -34,11 +51,15 @@ export function ShellInlineFault({
   hint,
   action,
   className,
+  onMessageClick,
+  messageTestId,
 }: {
   message: string;
   hint: string;
   action?: ReactNode;
   className?: string;
+  onMessageClick?: () => void;
+  messageTestId?: string;
 }) {
   return (
     <div
@@ -52,12 +73,22 @@ export function ShellInlineFault({
       {action != null ? (
         <>
           <div className="min-w-0 flex-1">
-            <ShellFaultDetail message={message} hint={hint} />
+            <ShellFaultDetail
+              message={message}
+              hint={hint}
+              onMessageClick={onMessageClick}
+              messageTestId={messageTestId}
+            />
           </div>
           <div className="ml-auto shrink-0">{action}</div>
         </>
       ) : (
-        <ShellFaultDetail message={message} hint={hint} />
+        <ShellFaultDetail
+          message={message}
+          hint={hint}
+          onMessageClick={onMessageClick}
+          messageTestId={messageTestId}
+        />
       )}
     </div>
   );

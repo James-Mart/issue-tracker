@@ -14,6 +14,7 @@ import type {
   ReviewCommits,
   ReviewDiff,
   ReviewDiffFile,
+  ReviewSubmission,
   ReviewView,
 } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
@@ -118,6 +119,11 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
     error: null,
     isLoading: false,
   }),
+  useIssuesQuery: () => ({
+    data: undefined,
+    isLoading: true,
+    error: null,
+  }),
   useCommentsQuery: () => ({
     data: { messages: [], threads: [], problems: [] },
     isLoading: false,
@@ -173,6 +179,9 @@ vi.mock("../api/mutations", () => ({
   useSyncReviewWorktree: () => ({ mutate: vi.fn(), isPending: false }),
   useStartReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
   useStopReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
+  useSubmitStandardsGroup: () => ({ mutate: vi.fn(), isPending: false }),
+  useRetryStandardsAssessment: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetStandardsProposal: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [
@@ -450,6 +459,40 @@ describe("StoryReviewPage", () => {
     ).toBe("true");
     expect(container.querySelector("[data-testid='review-agents-tab']")).not.toBeNull();
   });
+
+  it("opens the latest assessor transcript from the Standards title and returns to that round", () => {
+    state.wide = false;
+    state.reviews = [{ ...reviewFixture(), submissions: [assessedSubmission()] }];
+    state.agentRuns = [assessorRun("conv-old", "2026-10-14T15:00:00.000Z"), assessorRun("conv-new", "2026-10-14T16:00:00.000Z")];
+    const container = mountPage("tab=standards");
+    const title = container.querySelector("[data-testid='standards-round-transcript']");
+    const decision = container.querySelector("[data-testid='standards-decision-accepted']");
+    const submit = container.querySelector("[data-testid='standards-submit']");
+    expect(title?.textContent).toBe("Round 1");
+    expect(title?.contains(decision!)).toBe(false);
+    expect(title?.contains(submit!)).toBe(false);
+
+    click(decision!);
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(container.querySelector("[data-testid='standards-submit']")).not.toBeNull();
+
+    click(title!);
+
+    const screen = container.querySelector("[data-testid='review-phone-transcript']");
+    expect(screen?.getAttribute("data-conversation-id")).toBe("conv-new");
+    expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
+      "Back to Standards",
+    );
+
+    click(screen!.querySelector("[data-testid='review-transcript-back']")!);
+
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(
+      container.querySelector('[data-review-tab="standards"]')?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(container.querySelector("#standards-group-sub-1")?.textContent).toBe("Round 1");
+    expect(container.querySelector("[data-testid='standards-decision-accepted']")).not.toBeNull();
+  });
 });
 
 function researcherRun(): ReviewAgentRun {
@@ -462,5 +505,49 @@ function researcherRun(): ReviewAgentRun {
     endedAt: "2026-10-14T16:42:00.000Z",
     questionExcerpt: "Should expired tokens 401?",
     threadId: "thread-1",
+  };
+}
+
+function doneSubmission(): Extract<ReviewSubmission, { status: "done" }> {
+  return {
+    id: "sub-1",
+    at: "2026-10-14T16:00:00.000Z",
+    status: "done",
+    threadIds: ["thread-1"],
+    taskIds: ["task-1"],
+  };
+}
+
+function assessedSubmission(): ReviewSubmission {
+  return {
+    ...doneSubmission(),
+    standards: {
+      status: "ready",
+      doc: { type: "attachment", name: "coding-standards.md" },
+      proposals: [
+        {
+          id: "prop-1",
+          section: "Errors",
+          before: "old",
+          after: "new",
+          rationale: "Say what failed.",
+          threadIds: ["thread-1"],
+        },
+      ],
+    },
+  };
+}
+
+function assessorRun(conversationId: string, startedAt: string): ReviewAgentRun {
+  return {
+    conversationId,
+    role: "issue-tracker-standards-assessor",
+    model: "composer-2.5",
+    status: "completed",
+    startedAt,
+    endedAt: startedAt,
+    round: 1,
+    submittedAt: "2026-10-14T16:00:00.000Z",
+    submissionId: "sub-1",
   };
 }

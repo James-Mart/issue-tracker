@@ -46,7 +46,14 @@ function formatResearcherElapsed(startedAt: string, now: number): string {
 }
 
 /** Live, posting, or failed researcher on an open question thread awaiting its answer. */
-export function QuestionResearcherStatus({ run }: { run: ResearcherRun }) {
+export function QuestionResearcherStatus({
+  run,
+  onOpen,
+}: {
+  run: ResearcherRun;
+  /** Called when the reader opens this researcher run's transcript from the status row or the failed-run message. */
+  onOpen?: () => void;
+}) {
   const live = run.status === "running";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -61,17 +68,16 @@ export function QuestionResearcherStatus({ run }: { run: ResearcherRun }) {
         <ShellInlineFault
           message={`Researcher couldn't get an answer — ${run.error}`}
           hint="Retry to start a fresh researcher run for this question."
+          onMessageClick={onOpen}
+          messageTestId={onOpen ? "researcher-open-transcript" : undefined}
         />
       </div>
     );
   }
 
   const elapsed = live ? formatResearcherElapsed(run.startedAt, now) : undefined;
-  return (
-    <div
-      data-testid={`researcher-${run.status}`}
-      className="flex items-center gap-2 py-2 text-sm text-[hsl(var(--current))]"
-    >
+  const body = (
+    <>
       <Loader2 className="h-4 w-4 shrink-0 motion-safe:animate-spin" aria-hidden />
       <span role="status" aria-live="polite">
         {LIVE_COPY[run.status]}
@@ -86,6 +92,24 @@ export function QuestionResearcherStatus({ run }: { run: ResearcherRun }) {
           {elapsed}
         </time>
       ) : null}
-    </div>
+    </>
+  );
+  const rowClass = "flex items-center gap-2 py-2 text-sm text-[hsl(var(--current))]";
+  if (!onOpen) {
+    return (
+      <div data-testid={`researcher-${run.status}`} className={rowClass}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-testid={`researcher-${run.status}`}
+      className={`${rowClass} min-h-11 w-full text-left underline underline-offset-2`}
+      onClick={onOpen}
+    >
+      {body}
+    </button>
   );
 }

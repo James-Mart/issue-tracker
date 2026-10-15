@@ -40,19 +40,36 @@ import {
 } from "../lib/review-submission-ui";
 import { ReviewComposer } from "./review-composer";
 import { ReviewThread } from "./review-thread";
+import {
+  ReviewTranscriptLinkButton,
+  useReviewTranscriptLinks,
+} from "./review-transcript-link";
 
 function ReviewSubmittedEvent({
   submission,
 }: {
   submission: Extract<ReviewSubmission, { status: "done" }>;
 }) {
+  const transcripts = useReviewTranscriptLinks();
+  const taskerId = transcripts?.taskerConversationId(submission.id);
+  const label = reviewSubmittedLabel(submission);
   return (
     <article
       data-testid="review-submitted-event"
       data-submission-id={submission.id}
       className="flex flex-col gap-1.5 border-b border-border py-3"
     >
-      <p className="text-sm text-foreground">{reviewSubmittedLabel(submission)}</p>
+      {transcripts && taskerId ? (
+        <ReviewTranscriptLinkButton
+          testId="review-submitted-transcript"
+          className="w-fit text-sm"
+          onClick={() => transcripts.openTasker(submission.id, taskerId)}
+        >
+          {label}
+        </ReviewTranscriptLinkButton>
+      ) : (
+        <p className="text-sm text-foreground">{label}</p>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {submission.ideaId ? (
           <IssueChip id={submission.ideaId} testId="review-submitted-idea" />

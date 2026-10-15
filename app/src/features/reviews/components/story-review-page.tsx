@@ -1,5 +1,5 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils/cn";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReviewCommits, ReviewView } from "@server/schemas";
@@ -25,8 +25,10 @@ import {
 } from "../hooks/use-review-workbench-location";
 import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
+import { reviewRunReturnFromState } from "../lib/review-run-search";
 import { reviewWorkbenchTabs } from "../lib/workbench-tabs";
 import { ReviewAgentsTab } from "./review-agents-tab";
+import { ReviewTranscriptLinkProvider } from "./review-transcript-link";
 import { ReviewPhoneTranscript } from "./review-phone-transcript";
 import { ReviewCommitsPanel } from "./review-commits-tab";
 import { ReviewConversationTab } from "./review-conversation-tab";
@@ -153,8 +155,16 @@ function StoryReviewWorkbench({
     { surface: "conversation" | "standards"; submissionId: string } | null
   >(null);
   const clearRunFocus = useCallback(() => setRunFocus(null), []);
+  const location = useLocation();
   const agentRuns = useReviewAgentRunsQuery(projectId, review.id);
   const runCount = agentRuns.data?.runs.length ?? 0;
+  const closeTranscript = useCallback(() => {
+    const returnTo = reviewRunReturnFromState(location.state);
+    if (returnTo?.surface === "conversation" || returnTo?.surface === "standards") {
+      setRunFocus({ surface: returnTo.surface, submissionId: returnTo.submissionId });
+    }
+    closeRun();
+  }, [closeRun, location.state]);
   const phoneRun =
     agentRuns.data?.runs.find((run) => run.conversationId === runId) ?? null;
   const openRunSubmission = useCallback(
@@ -172,19 +182,15 @@ function StoryReviewWorkbench({
     [setTab],
   );
 
-  if (phoneTranscript) {
-    return (
-      <ReviewPhoneTranscript
-        backLabel={tabs.find((tab) => tab.key === active)?.label ?? "Agents"}
-        run={phoneRun}
-        pending={agentRuns.isLoading}
-        errorMessage={agentRuns.error ? agentRuns.error.message : null}
-        onBack={closeRun}
-      />
-    );
-  }
-
-  return (
+  const body = phoneTranscript ? (
+    <ReviewPhoneTranscript
+      backLabel={tabs.find((tab) => tab.key === active)?.label ?? "Agents"}
+      run={phoneRun}
+      pending={agentRuns.isLoading}
+      errorMessage={agentRuns.error ? agentRuns.error.message : null}
+      onBack={closeTranscript}
+    />
+  ) : (
     <>
       <StoryReviewHeader
         projectId={projectId}
@@ -279,6 +285,12 @@ function StoryReviewWorkbench({
         )}
       </div>
     </>
+  );
+
+  return (
+    <ReviewTranscriptLinkProvider runs={agentRuns.data?.runs}>
+      {body}
+    </ReviewTranscriptLinkProvider>
   );
 }
 

@@ -2,9 +2,12 @@ import { useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   reviewRunIdFromSearch,
+  reviewRunReturnFromState,
   reviewRunWasOpened,
-  searchWithReviewRun,
+  searchClosingReviewRun,
+  searchOpeningReviewRun,
   searchWithoutReviewRun,
+  type ReviewRunReturn,
 } from "../lib/review-run-search";
 
 /** Open and close the review-run transcript in the workbench search params. */
@@ -15,15 +18,26 @@ export function useReviewRunSearch() {
   const runId = reviewRunIdFromSearch(searchParams);
 
   const openRun = useCallback(
-    (conversationId: string) => {
-      setSearchParams((prev) => searchWithReviewRun(prev, conversationId), {
-        state: { reviewRunOpened: true },
+    (
+      conversationId: string,
+      options?: { tab?: string; returnTo?: ReviewRunReturn },
+    ) => {
+      setSearchParams((prev) => searchOpeningReviewRun(prev, conversationId, options), {
+        state: {
+          reviewRunOpened: true,
+          ...(options?.returnTo ? { reviewRunReturn: options.returnTo } : {}),
+        },
       });
     },
     [setSearchParams],
   );
 
   const closeRun = useCallback(() => {
+    const returnTo = reviewRunReturnFromState(location.state);
+    if (returnTo) {
+      setSearchParams((prev) => searchClosingReviewRun(prev, returnTo), { replace: true });
+      return;
+    }
     if (reviewRunWasOpened(location.state)) {
       navigate(-1);
       return;

@@ -58,6 +58,7 @@ export function CommentThread({
   quoteCommentId,
   reveal = false,
   highlighted = false,
+  onOpenResearcher,
 }: {
   thread: CommentThreadData;
   /** Absent on a flat note: no Reply control. */
@@ -89,6 +90,8 @@ export function CommentThread({
   reveal?: boolean;
   /** The thread a link landed on. */
   highlighted?: boolean;
+  /** Called when the reader opens this thread's researcher transcript. */
+  onOpenResearcher?: () => void;
 }) {
   const [expanded, setExpanded] = useState(reveal);
   useEffect(() => {
@@ -190,7 +193,10 @@ export function CommentThread({
           ))}
 
           {thread.researcherRun && issueId ? (
-            <QuestionResearcherStatus run={thread.researcherRun} />
+            <QuestionResearcherStatus
+              run={thread.researcherRun}
+              onOpen={onOpenResearcher}
+            />
           ) : null}
 
           {thread.converted ? (
