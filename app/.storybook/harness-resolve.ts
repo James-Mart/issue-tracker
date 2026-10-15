@@ -1,23 +1,13 @@
-import { realpathSync } from "node:fs";
 import path from "node:path";
 import type { Plugin } from "vite";
-import { isSharedReactImport } from "./harness-react.js";
 import {
-  PLUGIN_APP_DIR,
-  isInsideDir,
-  sandboxNodeModulesDir,
-} from "./harness-paths.js";
-
-/** Package specifiers only: not relative, absolute, or scheme-prefixed (`virtual:`, `node:`). */
-const BARE_IMPORT_RE = /^[\w@][^:]*$/;
-
-export type HarnessResolveRoots = {
-  targetRoot: string;
-  /** Conversation scratch root holding `harness.json`. Its `node_modules` is the sandbox. */
-  scratchRoot: string;
-};
-
-type ImporterKind = "target" | "scratch";
+  BARE_IMPORT_RE,
+  harnessImporterKind,
+  harnessImporterPath,
+  prepareHarnessRoots,
+  type HarnessResolveRoots,
+} from "./harness-importer.js";
+import { isSharedReactImport } from "./harness-react.js";
 
 /**
  * Vite takes an importer ending in `*` as a file in that directory, so a bare
@@ -35,22 +25,7 @@ function importerInDir(dir: string): string {
  */
 export function harnessResolvePlugin(roots: HarnessResolveRoots): Plugin {
   // Vite hands importers with symlinks resolved.
-  const targetRoot = realpathSync(roots.targetRoot);
-  const scratchRoot = realpathSync(roots.scratchRoot);
-  const sandboxNodeModules = sandboxNodeModulesDir(scratchRoot);
-
-  /**
-   * Plugin-app files are Storybook's runtime, and sandbox `node_modules`
-   * files are installed packages resolving their own dependencies; both keep
-   * Vite's resolution.
-   */
-  function importerKind(importer: string): ImporterKind | null {
-    if (isInsideDir(PLUGIN_APP_DIR, importer)) return null;
-    if (isInsideDir(sandboxNodeModules, importer)) return null;
-    if (isInsideDir(scratchRoot, importer)) return "scratch";
-    if (isInsideDir(targetRoot, importer)) return "target";
-    return null;
-  }
+  const prepared = prepareHarnessRoots(roots);
 
   return {
     name: "harness-resolve",
@@ -58,13 +33,13 @@ export function harnessResolvePlugin(roots: HarnessResolveRoots): Plugin {
     async resolveId(source, importer, options) {
       if (importer === undefined || !BARE_IMPORT_RE.test(source)) return null;
       if (isSharedReactImport(source)) return null;
-      const importerPath = importer.replace(/[?#].*$/, "");
-      const kind = importerKind(importerPath);
+      const importerPath = harnessImporterPath(importer);
+      const kind = harnessImporterKind(importerPath, prepared);
       if (kind === null) return null;
 
       const fromImporters = [
-        kind === "target" ? importer : importerInDir(targetRoot),
-        importerInDir(scratchRoot),
+        kind === "target" ? importer : importerInDir(prepared.targetRoot),
+        importerInDir(prepared.scratchRoot),
       ];
       for (const from of fromImporters) {
         const resolved = await this.resolve(source, from, {
@@ -75,7 +50,7 @@ export function harnessResolvePlugin(roots: HarnessResolveRoots): Plugin {
       }
       this.error({
         id: importerPath,
-        message: `${importerPath} imports "${source}", which neither the target nor the mockup sandbox at ${scratchRoot} supplies`,
+        message: `${importerPath} imports "${source}", which neither the target nor the mockup sandbox at ${prepared.scratchRoot} supplies`,
       });
     },
   };

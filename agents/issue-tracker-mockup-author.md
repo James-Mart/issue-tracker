@@ -126,10 +126,17 @@ Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
    absolute glob per direction, matching `**/*.stories.tsx` under that
    direction's scratch directory. Each target-derived path field
    (`targetRoot`, `cssEntries`, `aliases`, and `viteConfigPath` when
-   set) is absolute and exists on disk. The harness resolves React
-   from an installed copy under the authored alias directories, then
-   the target, then the sandbox. If a field cannot be resolved, stop
-   and name the field and the value you would have written.
+   set) is absolute and exists on disk. The harness derives aliases
+   from `paths` in the target's tsconfig; write an `aliases` entry
+   only for a prefix those paths do not already cover, and that entry
+   wins for its prefix. PostCSS comes from the target's config, so
+   `harness.json` has no PostCSS field. `viteConfigPath`, when the
+   target needs a Vite plugin, is a config file written under the
+   scratch root whose plugin imports resolve from the sandbox. The
+   harness resolves React from an installed copy under the authored
+   alias directories, then the target, then the sandbox. If a field
+   cannot be resolved, stop and name the field and the value you
+   would have written.
 5. For each direction, write CSF files by joining the scratch root with
    `<directionId>/`. Compose **Surface** from the target's own components.
    One named export per state. Every file's default export `title` is

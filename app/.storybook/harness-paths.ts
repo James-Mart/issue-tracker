@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,4 +28,35 @@ export function harnessScratchRoot(harnessConfigPath: string): string {
 /** The conversation sandbox's installed packages, beside `harness.json`. */
 export function sandboxNodeModulesDir(scratchRoot: string): string {
   return path.join(scratchRoot, "node_modules");
+}
+
+/**
+ * Walk directories from `start` upward. A start outside the plugin app stops
+ * before that app, so the app's tsconfig and PostCSS config are not the target's.
+ * `visit` returns true to stop.
+ */
+export function walkAncestors(start: string, visit: (dir: string) => boolean): void {
+  const real = realpathSync(start);
+  let dir = statSync(real).isDirectory() ? real : path.dirname(real);
+  const startedInPlugin = isInsideDir(PLUGIN_APP_DIR, dir);
+  for (;;) {
+    if (!startedInPlugin && isInsideDir(PLUGIN_APP_DIR, dir)) return;
+    if (visit(dir)) return;
+    const parent = path.dirname(dir);
+    if (parent === dir) return;
+    dir = parent;
+  }
+}
+
+/** First ancestor for which `pick` returns a value. Same stop rule as `walkAncestors`. */
+export function findInAncestors<T>(
+  start: string,
+  pick: (dir: string) => T | undefined,
+): T | undefined {
+  let found: T | undefined;
+  walkAncestors(start, (dir) => {
+    found = pick(dir);
+    return found !== undefined;
+  });
+  return found;
 }

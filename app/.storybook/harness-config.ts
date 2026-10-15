@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { PLUGIN_APP_DIR, isInsideDir } from "./harness-paths.js";
+import { PLUGIN_APP_DIR, harnessScratchRoot, isInsideDir } from "./harness-paths.js";
 
 function absolutePathSchema(field: string) {
   return z.string().superRefine((value, ctx) => {
@@ -73,6 +73,12 @@ export function loadHarnessConfig(configPath: string): HarnessConfig {
   }
   if (config.viteConfigPath !== undefined) {
     assertExists("viteConfigPath", config.viteConfigPath);
+    const scratch = realpathSync(harnessScratchRoot(configPath));
+    if (!isInsideDir(scratch, realpathSync(config.viteConfigPath))) {
+      throw new Error(
+        `viteConfigPath: ${config.viteConfigPath} is outside the scratch root ${harnessScratchRoot(configPath)}`,
+      );
+    }
   }
 
   return config;

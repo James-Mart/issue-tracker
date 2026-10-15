@@ -2,8 +2,10 @@ import path from "node:path";
 import type { Plugin } from "vite";
 import type { HarnessConfig } from "./harness-config.js";
 import { sandboxNodeModulesDir } from "./harness-paths.js";
+import { resolveTargetPostcssConfig } from "./harness-postcss.js";
 import { buildReactAliases, resolveReactRoot } from "./harness-react.js";
-import type { HarnessResolveRoots } from "./harness-resolve.js";
+import type { HarnessResolveRoots } from "./harness-importer.js";
+import { deriveTsconfigPaths, type TsconfigPath } from "./harness-tsconfig.js";
 
 /** Committed harness smoke story — always included when a target config is loaded. */
 export const SMOKE_STORY_GLOB = "./*.stories.@(ts|tsx)";
@@ -115,6 +117,10 @@ export type HarnessStorybookOptions = {
   cssEntries: string[];
   fsAllow: string[];
   viteConfigPath: string | undefined;
+  /** Derived from the target's tsconfig `paths`. Authored aliases win on the same prefix. */
+  tsconfigPaths: TsconfigPath[];
+  /** Nearest target PostCSS config for `cssEntries`, when one exists. */
+  postcssConfigFile: string | undefined;
   /**
    * Vite's pre-bundle cache, kept per conversation so concurrent stacks share
    * nothing in the plugin app. Under the sandbox's `node_modules`, so Vite
@@ -145,13 +151,20 @@ export function buildHarnessStorybookOptions(
       `react: no installed copy in the authored alias directories, ${config.targetRoot}, or the mockup sandbox at ${scratchRoot}`,
     );
   }
+  const derived = deriveTsconfigPaths({
+    aliasDirs: Object.values(config.aliases),
+    targetRoot: config.targetRoot,
+    authoredAliases: config.aliases,
+  });
   return {
     stories: [...config.storiesGlobs, SMOKE_STORY_GLOB],
     aliases: config.aliases,
     reactAliases: buildReactAliases(reactRoot),
     cssEntries: config.cssEntries,
-    fsAllow: [...collectFsAllowPaths(config, scratchRoot), reactRoot],
+    fsAllow: [...collectFsAllowPaths(config, scratchRoot), reactRoot, ...derived.fsAllow],
     viteConfigPath: config.viteConfigPath,
+    tsconfigPaths: derived.paths,
+    postcssConfigFile: resolveTargetPostcssConfig(config.cssEntries),
     cacheDir: path.join(sandboxNodeModulesDir(scratchRoot), ".vite"),
     resolveRoots: { targetRoot: config.targetRoot, scratchRoot },
   };

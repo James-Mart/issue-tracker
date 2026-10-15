@@ -6,8 +6,10 @@ import {
   type Plugin,
 } from "vite";
 import { loadHarnessConfig } from "./harness-config.js";
+import { loadHarnessPostcss } from "./harness-postcss.js";
 import { harnessScratchRoot } from "./harness-paths.js";
 import { harnessResolvePlugin } from "./harness-resolve.js";
+import { harnessTsconfigPlugin } from "./harness-tsconfig.js";
 import {
   HARNESS_CSS_VIRTUAL_ID,
   SMOKE_STORY_GLOB,
@@ -96,9 +98,14 @@ function createConfig(): StorybookConfig {
       : "@storybook/react-vite",
     ...mockupHeads(),
     async viteFinal(viteConfig) {
+      const postcss = await loadHarnessPostcss(
+        options.postcssConfigFile,
+        options.resolveRoots.scratchRoot,
+      );
       const merged = mergeConfig(viteConfig, {
         cacheDir: options.cacheDir,
         plugins: [
+          harnessTsconfigPlugin(options.tsconfigPaths, options.resolveRoots),
           harnessResolvePlugin(options.resolveRoots),
           harnessCssEntriesPlugin(options.cssEntries),
         ],
@@ -120,6 +127,7 @@ function createConfig(): StorybookConfig {
           },
         },
       });
+      merged.css = { ...merged.css, postcss };
       applyMockupStorybookBase(merged, mockupBase);
       return merged;
     },
