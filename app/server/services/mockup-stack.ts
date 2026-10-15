@@ -15,6 +15,7 @@ import { REACT_PACKAGES, resolveReactRoot } from "../../.storybook/harness-react
 import { appDir } from "../config.js";
 import { killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
+import { assertPluginAppManifestClean } from "./mockup-app-manifest.js";
 import {
   installSandboxPackages,
   type RunSandboxNpm,
@@ -393,6 +394,7 @@ function assertHarnessConfig(conversationId: string): string {
 export async function startMockupStack(
   conversationId: string,
 ): Promise<MockupStackHandle> {
+  await assertPluginAppManifestClean();
   ensureChildReaper();
   const existing = readMockupStackState(conversationId);
   if (existing) {
