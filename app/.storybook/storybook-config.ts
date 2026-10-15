@@ -1,6 +1,8 @@
 import path from "node:path";
 import type { Plugin } from "vite";
 import type { HarnessConfig } from "./harness-config.js";
+import { sandboxNodeModulesDir } from "./harness-paths.js";
+import type { HarnessResolveRoots } from "./harness-resolve.js";
 
 /** Committed harness smoke story — always included when a target config is loaded. */
 export const SMOKE_STORY_GLOB = "./*.stories.@(ts|tsx)";
@@ -91,8 +93,11 @@ export function storiesGlobRoot(glob: string): string {
   return prefix || path.sep;
 }
 
-export function collectFsAllowPaths(config: HarnessConfig): string[] {
-  const paths = new Set<string>([config.targetRoot]);
+export function collectFsAllowPaths(
+  config: HarnessConfig,
+  scratchRoot: string,
+): string[] {
+  const paths = new Set<string>([config.targetRoot, scratchRoot]);
   for (const glob of config.storiesGlobs) {
     paths.add(storiesGlobRoot(glob));
   }
@@ -109,6 +114,13 @@ export type HarnessStorybookOptions = {
   cssEntries: string[];
   fsAllow: string[];
   viteConfigPath: string | undefined;
+  /**
+   * Vite's pre-bundle cache, kept per conversation so concurrent stacks share
+   * nothing in the plugin app. Under the sandbox's `node_modules`, so Vite
+   * treats the optimized deps as installed packages.
+   */
+  cacheDir: string;
+  resolveRoots: HarnessResolveRoots;
 };
 
 /** One React resolution root so the preview and target components share an instance. */
@@ -129,13 +141,16 @@ export const HARNESS_CSS_VIRTUAL_ID = "virtual:harness-css";
 
 export function buildHarnessStorybookOptions(
   config: HarnessConfig,
+  scratchRoot: string,
 ): HarnessStorybookOptions {
   return {
     stories: [...config.storiesGlobs, SMOKE_STORY_GLOB],
     aliases: config.aliases,
     reactAliases: buildReactAliases(config.reactRoot),
     cssEntries: config.cssEntries,
-    fsAllow: collectFsAllowPaths(config),
+    fsAllow: collectFsAllowPaths(config, scratchRoot),
     viteConfigPath: config.viteConfigPath,
+    cacheDir: path.join(sandboxNodeModulesDir(scratchRoot), ".vite"),
+    resolveRoots: { targetRoot: config.targetRoot, scratchRoot },
   };
 }

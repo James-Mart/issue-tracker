@@ -6,6 +6,8 @@ import {
   type Plugin,
 } from "vite";
 import { loadHarnessConfig } from "./harness-config.js";
+import { harnessScratchRoot } from "./harness-paths.js";
+import { harnessResolvePlugin } from "./harness-resolve.js";
 import {
   HARNESS_CSS_VIRTUAL_ID,
   SMOKE_STORY_GLOB,
@@ -75,7 +77,10 @@ function createConfig(): StorybookConfig {
   }
 
   const harness = loadHarnessConfig(harnessConfigPath);
-  const options = buildHarnessStorybookOptions(harness);
+  const options = buildHarnessStorybookOptions(
+    harness,
+    harnessScratchRoot(harnessConfigPath),
+  );
 
   return {
     stories: options.stories,
@@ -92,7 +97,11 @@ function createConfig(): StorybookConfig {
     ...mockupHeads(),
     async viteFinal(viteConfig) {
       const merged = mergeConfig(viteConfig, {
-        plugins: [harnessCssEntriesPlugin(options.cssEntries)],
+        cacheDir: options.cacheDir,
+        plugins: [
+          harnessResolvePlugin(options.resolveRoots),
+          harnessCssEntriesPlugin(options.cssEntries),
+        ],
         resolve: {
           alias: mergeAliasOptions(
             mergeAliasOptions(viteConfig.resolve?.alias, options.aliases),

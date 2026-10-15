@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { PLUGIN_APP_DIR, isInsideDir } from "./harness-paths.js";
 
 function absolutePathSchema(field: string) {
   return z.string().superRefine((value, ctx) => {
@@ -42,6 +43,12 @@ function assertExists(field: string, value: string): void {
   }
 }
 
+function assertOutsidePluginApp(field: string, value: string): void {
+  if (isInsideDir(PLUGIN_APP_DIR, realpathSync(value))) {
+    throw new Error(`${field}: ${value} is inside the plugin app ${PLUGIN_APP_DIR}`);
+  }
+}
+
 export function loadHarnessConfig(configPath: string): HarnessConfig {
   let raw: unknown;
   try {
@@ -64,6 +71,7 @@ export function loadHarnessConfig(configPath: string): HarnessConfig {
   }
   for (const [alias, aliasPath] of Object.entries(config.aliases)) {
     assertExists(`aliases.${alias}`, aliasPath);
+    assertOutsidePluginApp(`aliases.${alias}`, aliasPath);
   }
   if (config.viteConfigPath !== undefined) {
     assertExists("viteConfigPath", config.viteConfigPath);
