@@ -26,12 +26,15 @@ export function implementingSessionModel(
   return defaultConversationModel(models);
 }
 
-/** First prompt naming the work-root id and skill to load. */
-export function implementingSessionMessage(issueId: string): string {
-  return (
+/** First prompt naming the work-root id and skill to load, then any resume note. */
+export function implementingSessionMessage(
+  issueId: string,
+  resumeNote?: string,
+): string {
+  const message =
     `Work ${issueId} in the issue tracker using the issue-tracker-work skill. ` +
-    `Read ${skillPath("issue-tracker-work")} and follow it.`
-  );
+    `Read ${skillPath("issue-tracker-work")} and follow it.`;
+  return resumeNote ? `${message}\n\nMessage from the human:\n${resumeNote}` : message;
 }
 
 /** Resume prompt for an existing coordinator session from Overview. */

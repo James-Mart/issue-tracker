@@ -118,6 +118,10 @@ vi.mock("../hooks/use-confirm-channel-live-run", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-parked-root-resume", () => ({
+  useParkedRootResume: () => undefined,
+}));
+
 vi.mock("../hooks/use-issue-detail-file-upload", () => ({
   useIssueDetailFileUpload: () => ({
     rootProps: {},

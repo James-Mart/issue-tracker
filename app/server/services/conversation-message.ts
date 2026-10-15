@@ -1,6 +1,7 @@
 import type { AgentSessions } from "./agent-sessions.js";
 import {
   deliverLivePrompt,
+  readConversationMeta,
   setPendingMessage,
   startConversationPrompt,
 } from "./conversations.js";
@@ -8,6 +9,10 @@ import {
   assertGuestAllowsAgentLaunch,
   GUEST_REFUSED_CONVERSATION_MESSAGE,
 } from "./guest-agent-launch.js";
+import { readIssueOrThrow } from "./issues.js";
+import { refuseWorkQueueConflict } from "./work-queue.js";
+
+const MESSAGE_ROOT_PARKED = "parked";
 
 export type ConversationMessageSessions = Pick<
   AgentSessions,
@@ -21,9 +26,25 @@ export type ConversationMessageDelivery =
   | { status: "failed"; message: string };
 
 /**
+ * A parked root holds no implementing slot, so a new turn on its coordinator
+ * must wait in the queue: resume the root with the message as its note.
+ */
+function refuseTurnOnParkedRoot(conversationId: string): void {
+  const meta = readConversationMeta(conversationId);
+  if (meta.channel !== "implementing" || !meta.issueId) return;
+  const root = readIssueOrThrow(meta.issueId);
+  if (root.kind !== "epic" && root.kind !== "story") return;
+  if (!root.workParkedAt) return;
+  refuseWorkQueueConflict(
+    MESSAGE_ROOT_PARKED,
+    `work root "${root.title}" is parked; resume it to queue a message for its coordinator`,
+  );
+}
+
+/**
  * Deliver a user message the way `POST /api/conversations/:id/messages` does:
  * steer a live run, queue it when steer does not accept it, or start a turn
- * when the conversation is idle.
+ * when the conversation is idle and its work root is not parked.
  */
 export async function postConversationMessage(
   conversationId: string,
@@ -47,6 +68,7 @@ export async function postConversationMessage(
     };
   }
 
+  refuseTurnOnParkedRoot(conversationId);
   const result = await startConversationPrompt(conversationId, prompt, sessions, {
     attachments,
   });

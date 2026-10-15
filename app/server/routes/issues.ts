@@ -225,7 +225,13 @@ export function createIssuesRouter(
   router.post(
     "/:id/queue/resume",
     asyncRoute(async (req, res) => {
-      res.json(await resumeParkedWorkRoot(req.params.id, sessions));
+      const note = (req.body as { note?: unknown } | undefined)?.note;
+      if (note !== undefined && typeof note !== "string") {
+        throw new IssueError("validation", "note must be a string");
+      }
+      res.json(
+        await resumeParkedWorkRoot(req.params.id, sessions, note?.trim() || undefined),
+      );
     }),
   );
 

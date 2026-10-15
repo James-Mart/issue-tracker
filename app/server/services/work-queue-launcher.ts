@@ -107,6 +107,7 @@ async function noteAutoStartFailure(
       workQueuedAt: _workQueuedAt,
       workQueuePosition: _workQueuePosition,
       workParkedAt: _workParkedAt,
+      workResumeNote: _workResumeNote,
       ...cleared
     } = root;
     replaceSnapshotRoot(snapshot, cleared);
@@ -127,7 +128,7 @@ async function startQueuedRoot(
       projectId,
       issueId: root.id,
       title: implementingSessionTitle(root.title),
-      message: implementingSessionMessage(root.id),
+      message: implementingSessionMessage(root.id, root.workResumeNote),
     },
     sessions,
   );

@@ -615,7 +615,12 @@ export function update(
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
-    for (const field of ["workQueuedAt", "workQueuePosition", "workParkedAt"] as const) {
+    for (const field of [
+      "workQueuedAt",
+      "workQueuePosition",
+      "workParkedAt",
+      "workResumeNote",
+    ] as const) {
       const value = jsonPatch[field];
       if (value !== undefined && value !== null) {
         throw new IssueError("validation", `${field} is system-written`);
