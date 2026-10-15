@@ -38,9 +38,13 @@ const state = vi.hoisted(() => ({
   wide: true as boolean | undefined,
 }));
 
-vi.mock("../hooks/use-wide-review-workbench", () => ({
-  useWideReviewWorkbench: () => state.wide,
-}));
+vi.mock("../hooks/use-wide-review-workbench", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/use-wide-review-workbench")>();
+  return {
+    ...actual,
+    useWideReviewWorkbench: () => state.wide,
+  };
+});
 
 vi.mock("@/features/agents/hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
@@ -67,7 +71,9 @@ vi.mock("@/features/agents/api/queries", () => ({
 }));
 
 vi.mock("@pierre/diffs/react", () => ({
-  Virtualizer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Virtualizer: ({ children, className }: { children: ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
   useVirtualizer: () => ({
     getRoot: () => document.body,
     getOffsetInScrollContainer: () => 0,
@@ -339,13 +345,25 @@ function click(element: Element) {
   });
 }
 
-function setTextarea(textarea: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  if (!setter) throw new Error("no textarea value setter");
+function classTokens(element: Element | null): string[] {
+  return element?.className.split(/\s+/).filter(Boolean) ?? [];
+}
+
+function setControlValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype =
+    element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (!setter) throw new Error("no value setter");
   act(() => {
-    setter.call(textarea, value);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    setter.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+function searchInput(container: HTMLElement): HTMLInputElement {
+  const input = container.querySelector<HTMLInputElement>("[data-testid='review-diff-search']");
+  if (!input) throw new Error("no diff search");
+  return input;
 }
 
 beforeAll(() => {
@@ -387,7 +405,7 @@ describe("StoryReviewPage", () => {
       '[data-testid="line-annotation"][data-line="1"] [data-testid="diff-thread-composer"]',
     );
     expect(composer?.textContent).toContain("line 1");
-    setTextarea(composer!.querySelector("textarea")!, "Name this constant.");
+    setControlValue(composer!.querySelector("textarea")!, "Name this constant.");
     click(composer!.querySelector('button[aria-label="Send"]')!);
 
     expect(state.postComment).toHaveBeenCalledWith(
@@ -492,6 +510,23 @@ describe("StoryReviewPage", () => {
     ).toBe("true");
     expect(container.querySelector("#standards-group-sub-1")?.textContent).toBe("Round 1");
     expect(container.querySelector("[data-testid='standards-decision-accepted']")).not.toBeNull();
+  });
+
+  it("shows every path on phone Files and hides the search, without filtering an active query", () => {
+    state.wide = false;
+    const container = mountPage("tab=diff&pane=files");
+    expect(classTokens(container.querySelector("[data-testid='review-diff-code']"))).toEqual(
+      expect.arrayContaining(["hidden", "shell:flex"]),
+    );
+    expect(classTokens(container.querySelector("[data-testid='review-diff-files']"))).not.toContain(
+      "hidden",
+    );
+    setControlValue(searchInput(container), "done");
+    const paths = [...container.querySelectorAll("[data-testid='review-tree-file']")].map(
+      (row) => row.getAttribute("data-path"),
+    );
+    expect(paths).toEqual(["src/changed.ts", "src/done.ts", "src/big.ts"]);
+    expect(container.querySelectorAll("[data-testid='review-file']")).toHaveLength(1);
   });
 });
 

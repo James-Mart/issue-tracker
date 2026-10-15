@@ -1,4 +1,11 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils/cn";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -16,6 +23,10 @@ import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useReviewAgentRunsQuery, useReviewDiffQuery } from "../api/queries";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
+import {
+  blankReviewDiffPaneScroll,
+  type ReviewDiffPaneScroll,
+} from "../lib/review-diff-pane-scroll";
 import { useReviewRunSearch } from "../hooks/use-review-run-search";
 import { useReviewWorkbenchReads } from "../hooks/use-review-workbench-reads";
 import { useWideReviewWorkbench } from "../hooks/use-wide-review-workbench";
@@ -59,6 +70,7 @@ function DiffTabPanel({
   threadReveal,
   onThreadRevealed,
   onFocusFileMissing,
+  paneScroll,
 }: {
   projectId: string;
   storyId: string;
@@ -72,6 +84,7 @@ function DiffTabPanel({
   threadReveal: DiffThreadReveal | null;
   onThreadRevealed: (reveal: DiffThreadReveal) => void;
   onFocusFileMissing: () => void;
+  paneScroll: MutableRefObject<ReviewDiffPaneScroll>;
 }) {
   const diffReady = scope === ALL_CHANGES_SCOPE || commits.data !== undefined;
   const diff = useReviewDiffQuery(projectId, storyId, scope, {
@@ -109,6 +122,7 @@ function DiffTabPanel({
       threadReveal={threadReveal}
       onThreadRevealed={onThreadRevealed}
       onFocusFileMissing={onFocusFileMissing}
+      paneScroll={paneScroll}
     />
   );
 }
@@ -151,6 +165,12 @@ function StoryReviewWorkbench({
     retargetThreadScope,
   } = useReviewWorkbenchLocation(knownShas, tabs);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
+  const paneScroll = useRef(blankReviewDiffPaneScroll());
+  const paneScrollScope = useRef(scope);
+  if (paneScrollScope.current !== scope) {
+    paneScrollScope.current = scope;
+    paneScroll.current = blankReviewDiffPaneScroll();
+  }
   const [runFocus, setRunFocus] = useState<
     { surface: "conversation" | "standards"; submissionId: string } | null
   >(null);
@@ -281,6 +301,7 @@ function StoryReviewWorkbench({
             threadReveal={threadReveal}
             onThreadRevealed={markThreadRevealed}
             onFocusFileMissing={() => retargetThreadScope(ALL_CHANGES_SCOPE)}
+            paneScroll={paneScroll}
           />
         )}
       </div>

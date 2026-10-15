@@ -42,6 +42,7 @@ import { usePinnedHeaderCollapse } from "../hooks/use-pinned-header-collapse";
 import { useReviewSearchMarks } from "../hooks/use-review-search-marks";
 import type { DiffThreadReveal } from "../hooks/use-review-workbench-location";
 import { ChangedSinceReviewedHeaderMark } from "./changed-since-reviewed-badge";
+import { ReviewPathScroll, reviewPathKey } from "./review-path-scroll";
 import { MarkedPathText } from "./review-search-marked-text";
 import { ReviewLineThreads, ReviewOutdatedThreads } from "./review-thread";
 
@@ -309,9 +310,10 @@ export function ReviewFileDiff({
             className={cn("transition-transform", !collapsed && "rotate-90")}
           />
         </Button>
-        <span
-          className="min-w-0 flex-1 truncate text-left font-mono text-[12px] text-foreground [direction:rtl] shell:[direction:ltr]"
+        <ReviewPathScroll
+          pathKey={reviewPathKey(file.path, file.oldPath)}
           title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+          className="font-mono text-[12px] text-foreground"
         >
           {file.oldPath ? (
             <span className="hidden text-muted-foreground shell:inline">
@@ -324,7 +326,7 @@ export function ReviewFileDiff({
             </span>
           ) : null}
           <MarkedPathText text={file.path} needle={searchNeedle} occurrence={pathOccurrence} />
-        </span>
+        </ReviewPathScroll>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 shell:gap-2">
           {changedSinceReviewed ? <ChangedSinceReviewedHeaderMark /> : null}
           <Button

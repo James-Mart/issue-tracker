@@ -1,4 +1,15 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
+import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Virtualizer, type FileDiffMetadata } from "@pierre/diffs/react";
 import type { ReviewCommits, ReviewDiff, ReviewView } from "@server/schemas";
@@ -14,8 +25,10 @@ import type { DiffLayout } from "@/features/issues/lib/diff-layout-preference";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { fileDiffsFromPatch } from "@/features/issues/lib/issue-change-file-diffs";
 import { useDiffScrollAnchor } from "../hooks/use-diff-scroll-anchor";
+import { useReviewDiffPaneScroll } from "../hooks/use-review-diff-pane-scroll";
 import { useReviewDiffSearch } from "../hooks/use-review-diff-search";
 import { useReviewFileMarks } from "../hooks/use-review-file-marks";
+import { useWideReviewWorkbench } from "../hooks/use-wide-review-workbench";
 import type { DiffThreadReveal } from "../hooks/use-review-workbench-location";
 import {
   fileShowingThread,
@@ -38,9 +51,12 @@ import {
   type ReviewMarkOverrides,
 } from "../lib/review-scope";
 import { ReviewFileDiff, type ReviewFileDiffSource } from "./review-file-diff";
+import { ReviewDiffPaneBar } from "./review-diff-pane-bar";
 import { ReviewDiffSearch } from "./review-diff-search";
 import { ReviewFileListLayout } from "./review-file-list-resize";
 import { ReviewFileTree } from "./review-file-tree";
+import { reviewDiffPaneFromSearch, writeReviewDiffPane } from "../lib/review-diff-pane";
+import { REVIEW_DIFF_SCROLLER_CLASS, type ReviewDiffPaneScroll } from "../lib/review-diff-pane-scroll";
 import {
   filesMatchingSearch,
   snapshotSearchableDiff,
@@ -50,15 +66,13 @@ import {
 type ScrollRequest = { path: string; nonce: number; scope: string };
 
 /**
- * The search bar over the diff scroller, which pins the bar while the diff
- * scrolls. Desktop's bounded page gives the stack the diff pane's height. On
- * phone the page scrolls, so the stack is capped at the viewport under the
- * sticky app bar (3rem) less the page's bottom padding (2rem): scrolled to
- * the end, the bar rests at the top of the screen and the page cannot carry
- * it under the app bar.
+ * Search sits over the diff scroller. Desktop's bounded page gives the stack
+ * the diff pane's height. On phone the page scrolls, so the stack is capped
+ * at the viewport under the sticky app bar (3rem) and above the pinned Files
+ * and Code bar (3rem). Scrolled to the end, the stack rests between them.
  */
 const DIFF_STACK_CLASS =
-  "flex max-h-[calc(100svh-5rem)] min-h-0 min-w-0 flex-1 flex-col gap-2 shell:max-h-none";
+  "flex max-h-[calc(100svh-6rem-env(safe-area-inset-bottom,0px))] min-h-0 min-w-0 flex-1 flex-col gap-2 shell:max-h-none";
 
 function ScopeStep({
   label,
@@ -247,6 +261,7 @@ export function ReviewDiffTab({
   threadReveal,
   onThreadRevealed,
   onFocusFileMissing,
+  paneScroll,
 }: {
   projectId: string;
   storyId: string;
@@ -262,8 +277,21 @@ export function ReviewDiffTab({
   threadReveal: DiffThreadReveal | null;
   onThreadRevealed: (reveal: DiffThreadReveal) => void;
   onFocusFileMissing: () => void;
+  /** Files and Code offsets for as long as the review page stays mounted. */
+  paneScroll: MutableRefObject<ReviewDiffPaneScroll>;
 }) {
   const { layout, setLayout, diffLayout, isMobile } = useDiffLayoutPreference();
+  const wide = useWideReviewWorkbench();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pane = reviewDiffPaneFromSearch(searchParams);
+  const setPane = useCallback(
+    (next: typeof pane) =>
+      setSearchParams((prev) => writeReviewDiffPane(prev, next), { replace: true }),
+    [setSearchParams],
+  );
+  const pathJump = useRef(false);
+  const pendingPath = useRef<{ path: string; matched: boolean } | null>(null);
+  useReviewDiffPaneScroll(pane, scope, wide, paneScroll, pathJump);
   const { rows, isCollapsed, toggleCollapsed, setReviewed } = useReviewFileMarks(
     projectId,
     review,
@@ -273,6 +301,15 @@ export function ReviewDiffTab({
     setOverrides,
   );
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest>();
+  const requestFileScroll = useCallback(
+    (path: string) =>
+      setScrollRequest((prev) => ({
+        path,
+        scope,
+        nonce: (prev?.nonce ?? 0) + 1,
+      })),
+    [scope],
+  );
   const activeScroll = scrollRequest?.scope === scope ? scrollRequest : undefined;
   const contentsCache = useDiffContentsCache(commits.tip);
   const viewedSha = scope === ALL_CHANGES_SCOPE ? commits.tip : scope;
@@ -312,6 +349,40 @@ export function ReviewDiffTab({
   const visibleRows = search.filtering
     ? rows.filter((row) => matchedPaths.has(row.file.path))
     : rows;
+  // Phone Files lists every path. The desktop column keeps the filtered list.
+  const treeRows = wide === false ? rows : visibleRows;
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  // The address update that reveals Code commits after this click's state, so
+  // scrolling in the click itself measures a hidden pane and lands at the top.
+  useLayoutEffect(() => {
+    if (wide !== false || pane !== "code") return;
+    const pending = pendingPath.current;
+    if (pending == null) return;
+    pendingPath.current = null;
+    if (pending.matched) {
+      searchRef.current.goToPath(pending.path);
+      return;
+    }
+    requestFileScroll(pending.path);
+  }, [pane, requestFileScroll, wide]);
+  const openPath = (path: string) => {
+    if (wide !== false) {
+      if (search.filtering) {
+        search.goToPath(path);
+        return;
+      }
+      requestFileScroll(path);
+      return;
+    }
+    pathJump.current = true;
+    pendingPath.current = {
+      path,
+      matched: search.filtering && matchedPaths.has(path),
+    };
+    if (search.filtering && !matchedPaths.has(path)) search.onQueryChange("");
+    setPane("code");
+  };
   // A path hit sits in the file's header, so it lands with the file's top; a
   // content hit lands on its own line.
   const searchScroll =
@@ -345,21 +416,13 @@ export function ReviewDiffTab({
       {/* A third column to the right of the stack is reserved for future review tools. */}
       {rows.length > 0 ? (
         <ReviewFileListLayout
+          pane={pane}
+          paneTabs={wide === false}
           tree={
             <ReviewFileTree
-              rows={visibleRows}
+              rows={treeRows}
               selectedPath={search.filtering ? search.current?.path : activeScroll?.path}
-              onSelect={(path) => {
-                if (search.filtering) {
-                  search.goToPath(path);
-                  return;
-                }
-                setScrollRequest((prev) => ({
-                  path,
-                  scope,
-                  nonce: (prev?.nonce ?? 0) + 1,
-                }));
-              }}
+              onSelect={openPath}
             />
           }
         >
@@ -381,7 +444,10 @@ export function ReviewDiffTab({
               </p>
             ) : (
               // useDiffScrollAnchor holds the reader in place; native anchoring would fight it.
-              <Virtualizer className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]">
+              <Virtualizer
+                className={`${REVIEW_DIFF_SCROLLER_CLASS} min-h-0 flex-1 overflow-auto [overflow-anchor:none]`}
+                contentClassName="pb-12 shell:pb-0"
+              >
                 {/* New threads anchor to the commit being viewed; the tip for All changes. */}
                 <DiffComposerProvider
                   key={scope}
@@ -420,6 +486,7 @@ export function ReviewDiffTab({
           </div>
         </ReviewFileListLayout>
       ) : null}
+      {rows.length > 0 ? <ReviewDiffPaneBar pane={pane} onPaneChange={setPane} /> : null}
     </div>
   );
 }

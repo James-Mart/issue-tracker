@@ -8,6 +8,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils/cn";
 import { useReviewFileListWidth } from "../hooks/use-review-file-list-width";
+import type { ReviewDiffPane } from "../lib/review-diff-pane";
 import {
   MIN_REVIEW_FILE_LIST_WIDTH,
 } from "../lib/review-file-list-width";
@@ -100,13 +101,21 @@ function ReviewFileListResizeHandle({
   );
 }
 
-/** Desktop row: file list, resize handle, diff. Phone stays a stack; the handle is `hidden` until `shell`. */
+/**
+ * Desktop row: file list, resize handle, diff. Below `shell`, `pane` shows
+ * one of them; `shell:` puts both back. The handle stays `hidden` until `shell`.
+ */
 export function ReviewFileListLayout({
   tree,
   children,
+  pane,
+  paneTabs,
 }: {
   tree: ReactNode;
   children: ReactNode;
+  pane: ReviewDiffPane;
+  /** Phone Files/Code tabs are showing, so the columns are those tabs' panels. */
+  paneTabs: boolean;
 }) {
   const splitRef = useRef<HTMLDivElement>(null);
   const fileList = useReviewFileListWidth(splitRef);
@@ -124,7 +133,13 @@ export function ReviewFileListLayout({
     >
       <div
         id="review-file-list"
-        className="min-w-0 shell:min-h-0 shell:w-[var(--review-file-list-width)] shell:shrink-0 shell:overflow-y-auto"
+        role={paneTabs ? "tabpanel" : undefined}
+        aria-labelledby={paneTabs ? "review-diff-pane-files-tab" : undefined}
+        data-testid="review-diff-files"
+        className={cn(
+          "min-w-0 pb-4 shell:min-h-0 shell:w-[var(--review-file-list-width)] shell:shrink-0 shell:overflow-y-auto shell:pb-0",
+          pane === "code" && "hidden shell:block",
+        )}
       >
         {tree}
       </div>
@@ -136,7 +151,18 @@ export function ReviewFileListLayout({
         onStep={fileList.step}
         onReset={fileList.reset}
       />
-      {children}
+      <div
+        id="review-diff-code"
+        role={paneTabs ? "tabpanel" : undefined}
+        aria-labelledby={paneTabs ? "review-diff-pane-code-tab" : undefined}
+        data-testid="review-diff-code"
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col",
+          pane === "files" && "hidden shell:flex",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
