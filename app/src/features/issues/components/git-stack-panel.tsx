@@ -13,6 +13,10 @@ import {
   TaskGitMetaScalars,
 } from "./issue-git-meta-scalars";
 import { PrStatusPanel } from "./pr-status-panel";
+import {
+  RootMergeSettingsRows,
+  rootMergeSettingsFor,
+} from "./issue-root-merge-settings";
 
 /** Git/spec scalar rows for story/task detail (fragment; no card chrome). */
 export function GitStackPanel({ issue }: { issue: IssueDetail }) {
@@ -39,12 +43,18 @@ export function GitStackPanel({ issue }: { issue: IssueDetail }) {
   );
   if (issue.kind === "story") {
     const state = data.derived[issue.id];
+    const mergeSettings = rootMergeSettingsFor(issue, data);
     return (
       <>
         {resolution}
         <StoryGitMetaScalars
           issue={issue}
-          mergeBase={state?.mergeBase}
+          mergeBase={mergeSettings ? undefined : state?.mergeBase}
+          mergeSettings={
+            mergeSettings ? (
+              <RootMergeSettingsRows issue={issue} {...mergeSettings} />
+            ) : null
+          }
           beforeStackedOn={
             <StoryCodeReviewRow projectId={projectId} story={issue} />
           }

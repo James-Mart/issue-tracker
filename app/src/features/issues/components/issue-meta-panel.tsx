@@ -16,6 +16,7 @@ import { IssueSourceIdeaField } from "./issue-source-idea-field";
 import { IssueStakeholderField } from "./issue-stakeholder-field";
 import { CompactMetaBlock } from "./compact-meta";
 import { GitStackPanel } from "./git-stack-panel";
+import { RootMergeSettingsMeta } from "./issue-root-merge-settings";
 import { MetaRow } from "./meta-row";
 
 /**
@@ -116,6 +117,10 @@ export function IssueMetaPanel({
         />,
       );
     }
+  }
+
+  if (issue.kind === "epic") {
+    rows.push(<RootMergeSettingsMeta key="merge-settings" issue={issue} />);
   }
 
   if (issue.kind === "story" || issue.kind === "task") {
