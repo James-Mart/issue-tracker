@@ -19,10 +19,10 @@ see before anyone implements them.
 
 ## Invariants
 
-- **Never write the target.** Story files, mock data, and harness
-  configuration live only under the conversation scratch in **## Procedure**.
-  The target project's tree is untouched — not a source file, not a
-  gitignore entry, not a manifest change.
+- **Write only under the scratch root.** Story files, mock data, and harness
+  configuration live there (**## Procedure**). Every other tree is read-only.
+- **Resolve target imports from the target's installed dependencies or the
+  sandbox.** Otherwise follow **Sandbox packages**.
 - **Author responsively.** Every direction must compose at phone width as
   well as desktop. A layout that is only legible at desktop width is a
   defect.
@@ -110,6 +110,17 @@ From `/root/.cursor/plugins/local/issue-tracker/app`, run
 Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
 `conversations/<resolvedConversationId>/mockups/`.
 
+**Sandbox packages.** When an import from a target file resolves from
+neither the target's installed dependencies nor the sandbox, install
+that package from `/root/.cursor/plugins/local/issue-tracker/app`:
+
+`npm run mockup-deps -- <conversationId> --from <importing file> <package...>`
+
+When start or capture reported the import, retry the command that
+reported it. When `mockup-deps` refuses the package, or the import is
+not a package at all, stop and name the importing file and the
+unresolved import.
+
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target
    workspace** as `working_directory` for grep. Resolve every harness path
@@ -143,7 +154,7 @@ Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
    `<directionId>/<component>`.
 6. From `/root/.cursor/plugins/local/issue-tracker/app`, start the
    harness and review each direction. Start is idempotent. Leave the
-   stack running.
+   stack running. An unresolved target import follows **Sandbox packages**.
    - `npm run mockup-stack -- start <conversationId>`
    - For each direction,
      `npm run mockup-capture -- --conversation <conversationId> --direction <directionId>`
