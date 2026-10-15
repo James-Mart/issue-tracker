@@ -758,6 +758,11 @@ export interface ProjectWorktreesResponse {
   worktrees: Record<string, ProjectStoryWorktree>;
 }
 
+/** Derived lock for root merge-base and merge-policy writes. */
+export type MergeSettingsLock =
+  | { locked: false }
+  | { locked: true; reason: string };
+
 export interface DerivedState {
   blocked: boolean;
   storyStatus?: StoryStatus;
@@ -779,6 +784,11 @@ export interface DerivedState {
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
+  /**
+   * Present on Epics and project-level root Stories. The reason matches the
+   * `merge-settings-locked` error `setRootMergeSettings` throws in human mode.
+   */
+  mergeSettingsLock?: MergeSettingsLock;
 }
 
 export interface IssuesResponse {

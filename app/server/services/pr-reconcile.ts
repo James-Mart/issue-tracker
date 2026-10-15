@@ -13,6 +13,7 @@ import {
 import { IssueError } from "./errors.js";
 import { getOriginRemoteUrl } from "./git-read.js";
 import { readAll, readIssueOrThrow, update } from "./issues.js";
+import { closedPullRequestAttentionReason } from "./merge-settings-lock.js";
 import { subtreeIds } from "./subtree.js";
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -178,10 +179,6 @@ function unfinishedTaskReason(ids: string[]): string {
   return `Tasks not done: ${ids.join(", ")}`;
 }
 
-function closedPrReason(url: string): string {
-  return `Closed pull request ${url}`;
-}
-
 function attentionIfChanged(
   story: Story,
   reason: string,
@@ -213,7 +210,7 @@ function outcomePatch(
       attentionIfChanged(story, unfinishedTaskReason(unfinished), fields);
     }
   } else if (winner.facts.state === "closed") {
-    attentionIfChanged(story, closedPrReason(winner.facts.url), fields);
+    attentionIfChanged(story, closedPullRequestAttentionReason(winner.facts.url), fields);
   }
 
   return Object.keys(fields).length > 0 ? fields : undefined;

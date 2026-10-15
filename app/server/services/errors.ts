@@ -16,7 +16,8 @@ export type IssueErrorCode =
   | "attachment-too-large"
   | "not-github-pr-url"
   | "pr-not-found"
-  | "pr-wrong-repository";
+  | "pr-wrong-repository"
+  | "merge-settings-locked";
 
 const STATUS: Record<IssueErrorCode, number> = {
   not_found: 404,
@@ -37,6 +38,7 @@ const STATUS: Record<IssueErrorCode, number> = {
   "not-github-pr-url": 400,
   "pr-not-found": 404,
   "pr-wrong-repository": 400,
+  "merge-settings-locked": 409,
 };
 
 export class IssueError extends Error {

@@ -28,19 +28,11 @@ async function loadService() {
 }
 
 describe("project mergePolicy", () => {
-  it("accepts mergePolicy on a story and inherits when unset", async () => {
-    writeIssue("e", {
-      kind: "epic",
-      title: "E",
-      partOf: "p",
-      order: 0,
-      createdAt: AT,
-      updatedAt: AT,
-    });
+  it("accepts mergePolicy on a root Story and inherits when unset", async () => {
     writeIssue("s", {
       kind: "story",
       title: "S",
-      partOf: "e",
+      partOf: "p",
       order: 0,
       merged: false,
       createdAt: AT,

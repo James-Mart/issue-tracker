@@ -167,11 +167,44 @@ issue epic set <epicId> mergeBase <branch>
 ```
 
 `issue story get <storyId> mergeBase` stays the **derived** value (override
-already layered in). Setting `mergeBase` on a stacked Story or a first-layer
-Epic Story is refused (`mergeBase can only be set on a root-level Story or an
-Epic`). First-layer Epic Stories inherit the Epic's base and cannot carry
-their own override (keeps one base per Epic). `apply` never reads or writes
-`mergeBaseOverride`.
+already layered in). First-layer Epic Stories inherit the Epic's base and
+cannot carry their own override (keeps one base per Epic). `apply` never
+reads or writes `mergeBaseOverride`.
+
+**One operation.** Every PATCH or CLI write of a root merge-base override or
+merge-policy override calls
+`setRootMergeSettings(id, { mergeBase?: string | null, mergePolicy?: MergePolicy | "inherit" }, { mode: "human" | "system-revert" })`
+(`app/server/services/root-merge-settings.ts`). Null or `""` `mergeBase`
+clears `mergeBaseOverride` so the root inherits Project trunk. `"inherit"`
+clears the stored merge-policy override. PATCH
+`/api/issues/:id` and `issue epic|story set <id> mergeBase|mergePolicy` call
+it in `human` mode (`mergePolicy inherit`, or `--clear` on either field,
+clears that override). `system-revert` bypasses the lock and nothing else.
+
+**Eligibility.** Only an Epic or a project-level root Story (`partOf` the
+Project, no `stackedOn`). A stacked Story or a first-layer Epic Story is
+refused on every caller: `mergeBase can only be set on a root-level Story or
+an Epic` when the write includes merge base, and `mergePolicy can only be set
+on a root-level Story or an Epic` when it includes only merge policy.
+
+**Lock.** In `human` mode the write is refused while the root Story has an
+open pull request or is merged; for an Epic, while any child Story (`partOf`
+the Epic, stacked Stories included) has an open pull request or is merged.
+A pull request GitHub has closed is not open: reconcile's closed-pull-request
+attention (`Closed pull request <url>`) is that signal, so the lock lifts
+when that attention is current. The error code is `merge-settings-locked`
+and its message is the same `reason` the derived payload exposes. A root
+Story's lock considers that Story only, not its stacked children.
+
+**`mergeSettingsLock`.** `derive()` sets this on Epic and project-level root
+Story payloads only:
+`{ locked: false }` or `{ locked: true, reason: string }`. The reason names
+the way out. A Story with an open pull request uses `Locked while this Story
+has an open pull request. Close it to change the base.` A merged Story or
+Epic child names the actual base branch it merged into (`Locked while …
+already merged into <branch>`). When that base cannot be resolved the reason
+is `already merged` — never the word `trunk`. `issue epic|story get <id>
+mergeSettingsLock` prints the object as JSON; other kinds omit the field.
 
 - **Resolver** — canonical algorithm (same as `derive()` /
   `issue story get … mergeBase` / `app/server/resolve-merge-base.ts`):
@@ -539,7 +572,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `worktree`, `openLinkedThreadRoots`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -549,8 +582,9 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 - Per-kind **set** allowlists (not a flat shared allowlist). Shared machinery is
   only coerce/dispatch (bool/enum/JSON/array/`--clear`/`--file`/`--reason`).
 - `order` is not settable. Story `mergeBase` on **get** is derived; on **set**
-  it writes `mergeBaseOverride` on eligible nodes only (see
-  [stacked-PR merge model](#the-stacked-pr-merge-model)).
+  it writes `mergeBaseOverride` on eligible nodes only. Epic and Story
+  `mergeBase` and `mergePolicy` sets call `setRootMergeSettings` in `human`
+  mode (see [stacked-PR merge model](#the-stacked-pr-merge-model)).
 - `attentionReason` is not directly settable (see
   [`needsAttention`](#needsattention)).
 - **CLI/UI parity:** `set` can do anything the UI edit form can, including
@@ -994,7 +1028,11 @@ opens and merges PRs.
 **Per-node storage.** Set with `issue project set <projectId> mergePolicy
 <policy>`, `issue epic set <epicId> mergePolicy <policy>`, or `issue story set
 <storyId> mergePolicy <policy>`. Project stores a required value; Epic and Story
-store an optional override (absent means inherit).
+store an optional override (absent means inherit). Epic and Story writes go
+through `setRootMergeSettings` in `human` mode (eligibility, lock, and
+`mergeSettingsLock` — see [the stacked-PR merge model](#the-stacked-pr-merge-model)).
+`inherit` or `--clear` on an Epic or Story clears the override. Project
+`mergePolicy` stays on the project set path and cannot be cleared.
 
 **Effective policy.** Each node has an **effective** policy: its stored value
 when set, otherwise inherited from its parent — Epic → Project; root Story →
@@ -2078,7 +2116,7 @@ preserves everything else from the existing same-kind issue.
 | `workQueuePosition` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `workParkedAt` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `planQueuedAt` (Idea) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
-| `mergePolicy` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; effective value derived on get |
+| `mergePolicy` (Epic / Story) | imperative only via `setRootMergeSettings` (kind [`set`](#kind-scoped-get--set) field `mergePolicy`, or PATCH); `inherit` / `--clear` / JSON `null` clears the override; `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `runtime` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `secrets` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); stored outside the repo; `apply` never touches |
@@ -2097,7 +2135,7 @@ preserves everything else from the existing same-kind issue.
 | `status`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `appended` (Task) | append path only (`issue story append`, `issue story update-from-merge-base`); readable via kind [`get`](#kind-scoped-get--set); not settable; `apply` preserves |
 | `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `mergedAt`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `mergedAt` is system-written on the `merged` false→true flip (optional caller timestamp); `apply` preserves |
-| `mergeBaseOverride` (Epic / Story) | imperative only via kind [`set`](#kind-scoped-get--set) field `mergeBase` (stores as `mergeBaseOverride`); `apply` preserves |
+| `mergeBaseOverride` (Epic / Story) | imperative only via `setRootMergeSettings` (kind [`set`](#kind-scoped-get--set) field `mergeBase`, or PATCH); null / `""` / `--clear` clears it; `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
@@ -2119,6 +2157,8 @@ so cannot drift:
   (`partOf`) exists with a `branchName` and is not merged, and all earlier
   sibling Tasks (by sequence) are `done`.
 - **Story mergeBase** — see [stacked-PR merge model](#the-stacked-pr-merge-model).
+- **`mergeSettingsLock`** — on Epic and project-level root Story derived
+  payloads only. See [stacked-PR merge model](#the-stacked-pr-merge-model).
 - **Story status** — `merged` if `merged`; else `pr-open` if it has Tasks,
   all are `done`, and `prUrl` is set; else `in-progress` if `branchName` is set;
   else `not-started`.

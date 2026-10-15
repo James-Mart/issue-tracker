@@ -5,7 +5,6 @@ import { resolveRuntimeSet, RUNTIME_PHASES_HELP } from "./cli-runtime-set.js";
 import { resolveSecretsSet } from "./cli-project-secrets.js";
 import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
 import {
-  assertStoryCanSetMergeBase,
   isClearableSetField,
   KIND_GET_FIELDS,
   KIND_SET_FIELDS,
@@ -20,6 +19,8 @@ import {
   renameProjectLabel,
   update,
 } from "./server/services/issues.js";
+import { applyMergeSettingsSet, isMergePolicyInheritValue } from "./cli-merge-settings.js";
+import { setRootMergeSettings } from "./server/services/root-merge-settings.js";
 import { openLinkedThreadRootIds } from "./server/services/thread-state.js";
 import { reviewStatus } from "./server/services/review-lifecycle.js";
 import { storedReviewForStory } from "./server/services/reviews.js";
@@ -902,14 +903,15 @@ export function kindSet(
     );
   }
 
-  if (detail.kind === "story" && field === "mergeBase") {
-    const parent = read(detail.partOf);
-    assertStoryCanSetMergeBase(detail, parent.kind);
+  if (isMergePolicyInheritValue(detail.kind, field, value, opts)) {
+    return setRootMergeSettings(id, { mergePolicy: "inherit" }, { mode: "human" });
   }
 
   const currentArray =
     spec.type === "array" ? currentArrayValue(detail, field) : undefined;
   const patch = coerceSetPatch(kind, field, value, opts, currentArray);
+  const mergeSettings = applyMergeSettingsSet(detail.kind, id, field, patch);
+  if (mergeSettings) return mergeSettings;
   return update(id, patch);
 }
 

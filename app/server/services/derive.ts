@@ -10,7 +10,8 @@ import { bySequence } from "../order.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
 import { effectiveMergePolicy } from "./merge-policy.js";
-import { projectContaining } from "./subtree.js";
+import { mergeSettingsLockFor } from "./merge-settings-lock.js";
+import { projectContaining, projectTrunk } from "./subtree.js";
 
 export interface DeriveResult {
   byId: Record<string, DerivedState>;
@@ -99,14 +100,7 @@ export function derive(issues: Issue[]): DeriveResult {
   for (const issue of issues) {
     if (issue.kind === "story") storiesById.set(issue.id, issue);
   }
-  const trunkByProject = new Map<string, string>();
-  for (const issue of issues) {
-    if (issue.kind === "project") trunkByProject.set(issue.id, issue.trunk);
-  }
-  const trunkForStory = (story: Story): string => {
-    const projectId = projectContaining(story, byId);
-    return (projectId && trunkByProject.get(projectId)) || "main";
-  };
+  const trunkForStory = (story: Story): string => projectTrunk(story, byId);
   // Cache stacked walks only (siblings share stackedOn + trunk). Unstacked is a
   // single override/trunk lookup — resolve directly so the cache cannot drift.
   const mergeBaseCache = new Map<string, string | undefined>();
@@ -129,12 +123,14 @@ export function derive(issues: Issue[]): DeriveResult {
   for (const story of storiesById.values()) {
     const storyStatus = storyStatusOf(story);
     const mergeBase = mergeBaseFor(story);
+    const mergeSettingsLock = mergeSettingsLockFor(story, issues, byId);
     state[story.id] = {
       blocked: storyStatus === "not-started" && !parentTipDone(story),
       storyStatus,
       reviewCurrent: reviewCurrentOf(story),
       planNotFinal: planNotFinalOf(story, byId),
       ...(mergeBase !== undefined ? { mergeBase } : {}),
+      ...(mergeSettingsLock ? { mergeSettingsLock } : {}),
     };
   }
 
@@ -163,10 +159,17 @@ export function derive(issues: Issue[]): DeriveResult {
         : started.length > 0
           ? "in-progress"
           : "todo";
+    const mergeSettingsLock = mergeSettingsLockFor(
+      epic,
+      issues,
+      byId,
+      storiesOf.get(epic.id) ?? [],
+    );
     state[epic.id] = {
       blocked: false,
       epicStatus,
       planNotFinal: planNotFinalOf(epic, byId),
+      ...(mergeSettingsLock ? { mergeSettingsLock } : {}),
     };
   }
 
