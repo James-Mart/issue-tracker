@@ -326,4 +326,51 @@ describe("submitting a decided standards group", () => {
       "standards assessment is applied",
     );
   });
+
+  it("sends the section-end line for an accepted pure addition", async () => {
+    await seedReady([
+      proposal("add", "accepted", {
+        before: "",
+        after: "Name the boundary.",
+        editedAfter: "Name a function for its intent.",
+      }),
+      proposal("kept", "accepted"),
+    ]);
+    const { submitStandardsGroup, launchStandardsRun } = await load();
+    const sent: { prompt: string }[] = [];
+    const sessions = {
+      getActiveRun: () => undefined,
+      sendPrompt: async (_id: string, options: { prompt: string }) => {
+        sent.push({ prompt: options.prompt });
+        return { ok: true as const, run: { id: "run-apply" } as never };
+      },
+    } as unknown as Parameters<typeof launchStandardsRun>[3];
+
+    submitStandardsGroup("p", REVIEW_ID, "sub-1", {}, sessions);
+    await launchStandardsRun("p", REVIEW_ID, "sub-1", sessions);
+
+    const prompt = sent[0]!.prompt;
+    const accepted = JSON.parse(prompt.slice(prompt.indexOf("["))) as {
+      id: string;
+      section: string;
+      before: string;
+      after: string;
+      line?: number;
+    }[];
+    expect(accepted).toEqual([
+      {
+        id: "add",
+        section: "Implementation",
+        before: "",
+        after: "Name a function for its intent.",
+        line: 6,
+      },
+      {
+        id: "kept",
+        section: "Implementation",
+        before: "Be clear.",
+        after: "Be clear (kept).",
+      },
+    ]);
+  });
 });
