@@ -24,6 +24,20 @@ export type NestedTranscriptRenderSegment =
 
 export type ToolUseGroupStatus = OrdinaryToolCallEvent["status"];
 
+/** True when no later thinking, assistant, or tool call has superseded this row. */
+export function isLiveThinking(
+  events: readonly TranscriptEvent[],
+  index: number,
+): boolean {
+  for (let i = index + 1; i < events.length; i++) {
+    const kind = events[i]?.type;
+    if (kind === "thinking" || kind === "assistant" || kind === "tool_call") {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** True when a tool_call row renders as TranscriptToolCall, not SubagentCard. */
 export function isOrdinaryToolCall(
   event: TranscriptEvent,

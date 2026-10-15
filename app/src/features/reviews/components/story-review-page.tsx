@@ -1,5 +1,6 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
-import { useParams } from "react-router-dom";
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import { useLocation, useParams } from "react-router-dom";
+import { cn } from "@/lib/utils/cn";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReviewCommits, ReviewView } from "@server/schemas";
 import {
@@ -13,16 +14,22 @@ import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
-import { useReviewDiffQuery } from "../api/queries";
+import { useReviewAgentRunsQuery, useReviewDiffQuery } from "../api/queries";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
+import { useReviewRunSearch } from "../hooks/use-review-run-search";
 import { useReviewWorkbenchReads } from "../hooks/use-review-workbench-reads";
+import { useWideReviewWorkbench } from "../hooks/use-wide-review-workbench";
 import {
   useReviewWorkbenchLocation,
   type DiffThreadReveal,
 } from "../hooks/use-review-workbench-location";
 import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
+import { reviewRunReturnFromState } from "../lib/review-run-search";
 import { reviewWorkbenchTabs } from "../lib/workbench-tabs";
+import { ReviewAgentsTab } from "./review-agents-tab";
+import { ReviewTranscriptLinkProvider } from "./review-transcript-link";
+import { ReviewPhoneTranscript } from "./review-phone-transcript";
 import { ReviewCommitsPanel } from "./review-commits-tab";
 import { ReviewConversationTab } from "./review-conversation-tab";
 import { ReviewDiffTab } from "./review-diff-tab";
@@ -33,6 +40,10 @@ import { StoryReviewHeader } from "./story-review-header";
 /** Desktop bounds the page so the file tree and diff stack scroll on their own. */
 const BOUNDED_REVIEW_SHELL_CLASS =
   "shell:h-[calc(100svh-3rem)] shell:min-h-0 shell:overflow-hidden";
+
+/** Phone transcript fills the viewport under the app bar, inside the page shell. */
+const PHONE_TRANSCRIPT_SHELL_CLASS =
+  "h-[calc(100svh-3rem)] min-h-0 overflow-hidden px-0 py-0";
 
 /** Gates the Diff tab on its queries so `ReviewDiffTab` only sees loaded data. */
 function DiffTabPanel({
@@ -109,6 +120,9 @@ function StoryReviewWorkbench({
   review,
   commits,
   merged,
+  phoneTranscript,
+  runId,
+  closeRun,
 }: {
   projectId: string;
   storyId: string;
@@ -116,6 +130,9 @@ function StoryReviewWorkbench({
   review: ReviewView;
   commits: UseQueryResult<ReviewCommits, Error>;
   merged: boolean;
+  phoneTranscript: boolean;
+  runId: string | null;
+  closeRun: () => void;
 }) {
   const knownShas = commits.data?.commits.map((commit) => commit.sha);
   const tabs = reviewWorkbenchTabs(review.submissions);
@@ -128,13 +145,52 @@ function StoryReviewWorkbench({
     threadReveal,
     markThreadRevealed,
     openThreadInDiff,
+    openThreadInConversation,
     conversationThreadSearch,
     openThread,
     retargetThreadScope,
   } = useReviewWorkbenchLocation(knownShas, tabs);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
+  const [runFocus, setRunFocus] = useState<
+    { surface: "conversation" | "standards"; submissionId: string } | null
+  >(null);
+  const clearRunFocus = useCallback(() => setRunFocus(null), []);
+  const location = useLocation();
+  const agentRuns = useReviewAgentRunsQuery(projectId, review.id);
+  const runCount = agentRuns.data?.runs.length ?? 0;
+  const closeTranscript = useCallback(() => {
+    const returnTo = reviewRunReturnFromState(location.state);
+    if (returnTo?.surface === "conversation" || returnTo?.surface === "standards") {
+      setRunFocus({ surface: returnTo.surface, submissionId: returnTo.submissionId });
+    }
+    closeRun();
+  }, [closeRun, location.state]);
+  const phoneRun =
+    agentRuns.data?.runs.find((run) => run.conversationId === runId) ?? null;
+  const openRunSubmission = useCallback(
+    (submissionId: string) => {
+      setRunFocus({ surface: "conversation", submissionId });
+      setTab("conversation");
+    },
+    [setTab],
+  );
+  const openStandardsRound = useCallback(
+    (submissionId: string) => {
+      setRunFocus({ surface: "standards", submissionId });
+      setTab("standards");
+    },
+    [setTab],
+  );
 
-  return (
+  const body = phoneTranscript ? (
+    <ReviewPhoneTranscript
+      backLabel={tabs.find((tab) => tab.key === active)?.label ?? "Agents"}
+      run={phoneRun}
+      pending={agentRuns.isLoading}
+      errorMessage={agentRuns.error ? agentRuns.error.message : null}
+      onBack={closeTranscript}
+    />
+  ) : (
     <>
       <StoryReviewHeader
         projectId={projectId}
@@ -155,8 +211,17 @@ function StoryReviewWorkbench({
             key={tab.key}
             selected={active === tab.key}
             onClick={() => setTab(tab.key)}
+            data-review-tab={tab.key}
           >
             {tab.label}
+            {tab.key === "agents" && runCount > 0 ? (
+              <span
+                className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold tabular-nums leading-none text-muted-foreground"
+                data-tab-count={runCount}
+              >
+                {runCount}
+              </span>
+            ) : null}
           </TabButton>
         ))}
       </div>
@@ -167,6 +232,10 @@ function StoryReviewWorkbench({
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
             focusThreadId={threadId}
+            focusSubmissionId={
+              runFocus?.surface === "conversation" ? runFocus.submissionId : null
+            }
+            onSubmissionFocused={clearRunFocus}
           />
         ) : active === "standards" ? (
           <ReviewStandardsTab
@@ -174,6 +243,19 @@ function StoryReviewWorkbench({
             reviewId={review.id}
             submissions={review.submissions}
             threadSearch={conversationThreadSearch}
+            focusSubmissionId={
+              runFocus?.surface === "standards" ? runFocus.submissionId : null
+            }
+            onSubmissionFocused={clearRunFocus}
+          />
+        ) : active === "agents" ? (
+          <ReviewAgentsTab
+            projectId={projectId}
+            reviewId={review.id}
+            onOpenThread={openThread}
+            onOpenThreadId={openThreadInConversation}
+            onOpenSubmission={openRunSubmission}
+            onOpenStandardsRound={openStandardsRound}
           />
         ) : active === "commits" ? (
           <ReviewCommitsPanel
@@ -204,14 +286,26 @@ function StoryReviewWorkbench({
       </div>
     </>
   );
+
+  return (
+    <ReviewTranscriptLinkProvider runs={agentRuns.data?.runs}>
+      {body}
+    </ReviewTranscriptLinkProvider>
+  );
 }
 
 function StoryReviewBody({
   projectId,
   reviewId,
+  phoneTranscript,
+  runId,
+  closeRun,
 }: {
   projectId: string;
   reviewId: string;
+  phoneTranscript: boolean;
+  runId: string | null;
+  closeRun: () => void;
 }) {
   const { review, commits, readsReady } = useReviewWorkbenchReads(projectId, reviewId);
   const storyId = review.data?.story ?? "";
@@ -299,15 +393,33 @@ function StoryReviewBody({
       review={ready.review}
       commits={commits}
       merged={ready.merged}
+      phoneTranscript={phoneTranscript}
+      runId={runId}
+      closeRun={closeRun}
     />
   );
 }
 
 export function StoryReviewPage() {
   const { projectId = "", id = "" } = useParams();
+  const wide = useWideReviewWorkbench();
+  const { runId, closeRun } = useReviewRunSearch();
+  const phoneTranscript = wide === false && runId !== null;
   return (
-    <PageShell className={BOUNDED_REVIEW_SHELL_CLASS} data-testid="story-review-page">
-      <StoryReviewBody projectId={projectId} reviewId={id} />
+    <PageShell
+      className={cn(
+        BOUNDED_REVIEW_SHELL_CLASS,
+        phoneTranscript && PHONE_TRANSCRIPT_SHELL_CLASS,
+      )}
+      data-testid="story-review-page"
+    >
+      <StoryReviewBody
+        projectId={projectId}
+        reviewId={id}
+        phoneTranscript={phoneTranscript}
+        runId={runId}
+        closeRun={closeRun}
+      />
     </PageShell>
   );
 }

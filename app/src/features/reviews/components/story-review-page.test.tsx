@@ -10,9 +10,11 @@ import type {
   SelectedLineRange,
 } from "@pierre/diffs/react";
 import type {
+  ReviewAgentRun,
   ReviewCommits,
   ReviewDiff,
   ReviewDiffFile,
+  ReviewSubmission,
   ReviewView,
 } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
@@ -32,6 +34,28 @@ const state = vi.hoisted(() => ({
   setMark: vi.fn(),
   postComment: vi.fn(),
   commentThreads: [] as CommentThread[],
+  agentRuns: [] as ReviewAgentRun[],
+  wide: true as boolean | undefined,
+}));
+
+vi.mock("../hooks/use-wide-review-workbench", () => ({
+  useWideReviewWorkbench: () => state.wide,
+}));
+
+vi.mock("@/features/agents/hooks/use-conversation-events", () => ({
+  useConversationEvents: () => ({
+    events: [
+      { type: "assistant", text: "Tokens should 401.", at: "t1", seq: 1 },
+    ],
+    ready: true,
+    historyFailed: false,
+    historyError: null,
+    refetchHistory: vi.fn(),
+    isRefetchingHistory: false,
+    pendingText: null,
+    streamRunActive: null,
+    loadOlder: vi.fn(),
+  }),
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -95,6 +119,11 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
     error: null,
     isLoading: false,
   }),
+  useIssuesQuery: () => ({
+    data: undefined,
+    isLoading: true,
+    error: null,
+  }),
   useCommentsQuery: () => ({
     data: { messages: [], threads: [], problems: [] },
     isLoading: false,
@@ -133,6 +162,11 @@ vi.mock("../api/queries", () => ({
     isPending: false,
     isLoading: false,
   }),
+  useReviewAgentRunsQuery: () => ({
+    data: { runs: state.agentRuns },
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 vi.mock("../api/mutations", () => ({
@@ -145,6 +179,9 @@ vi.mock("../api/mutations", () => ({
   useSyncReviewWorktree: () => ({ mutate: vi.fn(), isPending: false }),
   useStartReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
   useStopReviewRuntime: () => ({ mutate: vi.fn(), isPending: false }),
+  useSubmitStandardsGroup: () => ({ mutate: vi.fn(), isPending: false }),
+  useRetryStandardsAssessment: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetStandardsProposal: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const FILES: ReviewDiffFile[] = [
@@ -323,6 +360,8 @@ beforeEach(() => {
   state.byScope = {};
   state.commits = commitsFixture();
   state.commentThreads = [];
+  state.agentRuns = [];
+  state.wide = true;
 });
 
 afterEach(() => {
@@ -385,4 +424,130 @@ describe("StoryReviewPage", () => {
       container.querySelector('[data-testid="review-progress"]')?.textContent,
     ).toBe("2 / 3 files reviewed");
   });
+
+  it("opens a phone transcript over the workbench and returns to the Agents tab", () => {
+    state.wide = false;
+    state.agentRuns = [researcherRun()];
+    const container = mountPage("tab=agents");
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(container.querySelector("[data-testid='story-review-header']")).not.toBeNull();
+    expect(
+      container.querySelector('[data-conversation-id="conv-q"]')?.hasAttribute("data-expanded"),
+    ).toBe(false);
+
+    click(container.querySelector("[data-testid='agent-run-card-header']")!);
+
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector("[data-testid='story-review-header']")).toBeNull();
+    const screen = container.querySelector("[data-testid='review-phone-transcript']");
+    expect(screen?.textContent).toContain("Agents");
+    expect(screen?.textContent).toContain("Question researcher");
+    expect(screen?.textContent).toContain("Tokens should 401.");
+    expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
+      "Back to Agents",
+    );
+    const open = screen?.querySelector("[data-testid='agent-run-open-in-agents']");
+    expect(open?.getAttribute("href")).toBe("/agents/conv-q");
+    expect(open?.querySelector("svg")).toBeNull();
+
+    click(screen!.querySelector("[data-testid='review-transcript-back']")!);
+
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-review-tab="agents"]')?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(container.querySelector("[data-testid='review-agents-tab']")).not.toBeNull();
+  });
+
+  it("opens the latest assessor transcript from the Standards title and returns to that round", () => {
+    state.wide = false;
+    state.reviews = [{ ...reviewFixture(), submissions: [assessedSubmission()] }];
+    state.agentRuns = [assessorRun("conv-old", "2026-10-14T15:00:00.000Z"), assessorRun("conv-new", "2026-10-14T16:00:00.000Z")];
+    const container = mountPage("tab=standards");
+    const title = container.querySelector("[data-testid='standards-round-transcript']");
+    const decision = container.querySelector("[data-testid='standards-decision-accepted']");
+    const submit = container.querySelector("[data-testid='standards-submit']");
+    expect(title?.textContent).toBe("Round 1");
+    expect(title?.contains(decision!)).toBe(false);
+    expect(title?.contains(submit!)).toBe(false);
+
+    click(decision!);
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(container.querySelector("[data-testid='standards-submit']")).not.toBeNull();
+
+    click(title!);
+
+    const screen = container.querySelector("[data-testid='review-phone-transcript']");
+    expect(screen?.getAttribute("data-conversation-id")).toBe("conv-new");
+    expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
+      "Back to Standards",
+    );
+
+    click(screen!.querySelector("[data-testid='review-transcript-back']")!);
+
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(
+      container.querySelector('[data-review-tab="standards"]')?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(container.querySelector("#standards-group-sub-1")?.textContent).toBe("Round 1");
+    expect(container.querySelector("[data-testid='standards-decision-accepted']")).not.toBeNull();
+  });
 });
+
+function researcherRun(): ReviewAgentRun {
+  return {
+    conversationId: "conv-q",
+    role: "issue-tracker-review-question",
+    model: "composer-2.5",
+    status: "completed",
+    startedAt: "2026-10-14T16:40:00.000Z",
+    endedAt: "2026-10-14T16:42:00.000Z",
+    questionExcerpt: "Should expired tokens 401?",
+    threadId: "thread-1",
+  };
+}
+
+function doneSubmission(): Extract<ReviewSubmission, { status: "done" }> {
+  return {
+    id: "sub-1",
+    at: "2026-10-14T16:00:00.000Z",
+    status: "done",
+    threadIds: ["thread-1"],
+    taskIds: ["task-1"],
+  };
+}
+
+function assessedSubmission(): ReviewSubmission {
+  return {
+    ...doneSubmission(),
+    standards: {
+      status: "ready",
+      doc: { type: "attachment", name: "coding-standards.md" },
+      proposals: [
+        {
+          id: "prop-1",
+          section: "Errors",
+          before: "old",
+          after: "new",
+          rationale: "Say what failed.",
+          threadIds: ["thread-1"],
+        },
+      ],
+    },
+  };
+}
+
+function assessorRun(conversationId: string, startedAt: string): ReviewAgentRun {
+  return {
+    conversationId,
+    role: "issue-tracker-standards-assessor",
+    model: "composer-2.5",
+    status: "completed",
+    startedAt,
+    endedAt: startedAt,
+    round: 1,
+    submittedAt: "2026-10-14T16:00:00.000Z",
+    submissionId: "sub-1",
+  };
+}

@@ -1,6 +1,11 @@
 import type { ReviewSubmission } from "@server/schemas";
 
-export type ReviewWorkbenchTab = "conversation" | "commits" | "diff" | "standards";
+export type ReviewWorkbenchTab =
+  | "conversation"
+  | "commits"
+  | "diff"
+  | "standards"
+  | "agents";
 
 type WorkbenchTabEntry = { key: ReviewWorkbenchTab; label: string };
 
@@ -11,16 +16,21 @@ export const REVIEW_WORKBENCH_TABS: WorkbenchTabEntry[] = [
 ];
 
 const STANDARDS_TAB: WorkbenchTabEntry = { key: "standards", label: "Standards" };
+const AGENTS_TAB: WorkbenchTabEntry = { key: "agents", label: "Agents" };
 
 export const DEFAULT_REVIEW_WORKBENCH_TAB: ReviewWorkbenchTab = "conversation";
 
-/** Standards joins the tabs once any submission carries a standards assessment. */
+/**
+ * Standards joins once any submission carries an assessment. Agents is always
+ * last, including when Standards is absent.
+ */
 export function reviewWorkbenchTabs(
   submissions: readonly Pick<ReviewSubmission, "standards">[],
 ): WorkbenchTabEntry[] {
-  return submissions.some((submission) => submission.standards !== undefined)
+  const tabs = submissions.some((submission) => submission.standards !== undefined)
     ? [...REVIEW_WORKBENCH_TABS, STANDARDS_TAB]
     : REVIEW_WORKBENCH_TABS;
+  return [...tabs, AGENTS_TAB];
 }
 
 export function resolveReviewWorkbenchTab(

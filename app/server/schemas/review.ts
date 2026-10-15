@@ -60,6 +60,39 @@ export type ReviewView = ReviewRecordView & {
   worktreeSync?: ReviewWorktreeSyncHold;
 };
 
+/** Lifecycle of one top-level review conversation on the Agents tab. */
+export const reviewAgentRunStatusSchema = z.enum([
+  "running",
+  "completed",
+  "error",
+  "unknown",
+]);
+
+export type ReviewAgentRunStatus = z.infer<typeof reviewAgentRunStatusSchema>;
+
+/**
+ * One top-level review run. Nested delegates stay in that conversation's
+ * transcript and are not records. `submittedEntry` is tasker-only.
+ */
+export const reviewAgentRunSchema = z
+  .object({
+    conversationId: nonEmpty,
+    role: nonEmpty,
+    model: nonEmpty,
+    status: reviewAgentRunStatusSchema,
+    startedAt: nonEmpty,
+    endedAt: nonEmpty.optional(),
+    questionExcerpt: nonEmpty.optional(),
+    threadId: nonEmpty.optional(),
+    round: z.number().int().positive().optional(),
+    submittedAt: nonEmpty.optional(),
+    submissionId: nonEmpty.optional(),
+    submittedEntry: z.boolean().optional(),
+  })
+  .strict();
+
+export type ReviewAgentRun = z.infer<typeof reviewAgentRunSchema>;
+
 /** A Story with at least one Task commit, offered when starting a review. */
 export type ReviewCandidate = {
   storyId: string;

@@ -1,4 +1,4 @@
-import { formatRunDurationMs } from "@/features/issues/components/agent-runs-panel";
+import { formatRunDurationMs } from "@/features/issues/lib/run-time-format";
 import {
   formatSequenceCostClause,
   type SequenceCost,

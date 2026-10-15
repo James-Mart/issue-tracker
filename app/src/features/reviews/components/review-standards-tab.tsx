@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { ChevronRight, Loader2, RotateCcw } from "lucide-react";
 import type { ReviewSubmission } from "@server/schemas";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
@@ -17,6 +17,10 @@ import {
   type StandardsGroup,
 } from "../lib/review-standards-ui";
 import { StandardsProposalCard } from "./review-standards-proposal";
+import {
+  ReviewTranscriptLinkButton,
+  useReviewTranscriptLinks,
+} from "./review-transcript-link";
 
 function GroupStatus({ status }: { status: StandardsGroup["standards"]["status"] }) {
   if (status === "assessing" || status === "applying") {
@@ -194,7 +198,10 @@ function StandardsGroupBody(props: GroupProps) {
 function StandardsGroupSection(props: GroupProps) {
   const { group } = props;
   const { standards } = group;
+  const transcripts = useReviewTranscriptLinks();
+  const assessorId = transcripts?.assessorConversationId(group.submissionId);
   const headingId = `standards-group-${group.submissionId}`;
+  const title = `Round ${group.round}`;
   return (
     <section
       aria-labelledby={headingId}
@@ -206,7 +213,17 @@ function StandardsGroupSection(props: GroupProps) {
       <header className="flex items-start justify-between gap-2 px-1">
         <div className="min-w-0">
           <h3 id={headingId} className="truncate text-sm font-semibold text-foreground">
-            Round {group.round}
+            {transcripts && assessorId ? (
+              <ReviewTranscriptLinkButton
+                testId="standards-round-transcript"
+                className="truncate font-semibold"
+                onClick={() => transcripts.openAssessor(group.submissionId, assessorId)}
+              >
+                {title}
+              </ReviewTranscriptLinkButton>
+            ) : (
+              title
+            )}
           </h3>
           <p className="font-mono text-[11px] text-muted-foreground">
             {commentDayLabel(group.at)}
@@ -226,11 +243,16 @@ export function ReviewStandardsTab({
   reviewId,
   submissions,
   threadSearch,
+  focusSubmissionId = null,
+  onSubmissionFocused,
 }: {
   projectId: string;
   reviewId: string;
   submissions: readonly ReviewSubmission[];
   threadSearch: (threadId: string) => string;
+  /** Round to open and scroll into view after an Agents card names it. */
+  focusSubmissionId?: string | null;
+  onSubmissionFocused?: () => void;
 }) {
   const { threads } = useReviewCommentThreads(reviewId);
   const threadsById = useMemo(
@@ -238,6 +260,17 @@ export function ReviewStandardsTab({
     [threads],
   );
   const { open, submitted } = standardsGroups(submissions);
+
+  useLayoutEffect(() => {
+    if (!focusSubmissionId) return;
+    const heading = document.getElementById(`standards-group-${focusSubmissionId}`);
+    const section = heading?.closest("section");
+    if (!section) return;
+    const details = section.closest("details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    section.scrollIntoView({ block: "nearest" });
+    onSubmissionFocused?.();
+  }, [focusSubmissionId, onSubmissionFocused, submissions]);
   const section = (group: StandardsGroup) => (
     <StandardsGroupSection
       key={group.submissionId}

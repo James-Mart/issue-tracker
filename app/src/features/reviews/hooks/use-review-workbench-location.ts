@@ -7,10 +7,8 @@ import {
   resolveReviewScope,
   writeReviewWorkbenchSearch,
 } from "../lib/review-scope";
-import {
-  resolveReviewWorkbenchTab,
-  type ReviewWorkbenchTab,
-} from "../lib/workbench-tabs";
+import { resolveReviewWorkbenchTabForRun, reviewRunIdFromSearch } from "../lib/review-run-search";
+import type { ReviewWorkbenchTab } from "../lib/workbench-tabs";
 
 /** One request to scroll the Diff to a thread: a page load with `?thread=`, or one open. */
 export type DiffThreadReveal = {
@@ -47,7 +45,11 @@ export function useReviewWorkbenchLocation(
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get("tab");
   const rawScope = searchParams.get("scope");
-  const active = resolveReviewWorkbenchTab(rawTab, tabs);
+  const active = resolveReviewWorkbenchTabForRun(
+    rawTab,
+    reviewRunIdFromSearch(searchParams),
+    tabs,
+  );
   const scope = resolveReviewScope(rawScope, knownShas);
   const threadId = readDiffThreadSearchParam(searchParams);
   const [threadRequest, setThreadRequest] = useState(0);

@@ -666,15 +666,13 @@ export function failReviewTaskingClassification(
   return true;
 }
 
-function agentRunStatus(
+export function taskerAgentRunStatus(
   live: boolean,
-  submission: ReviewSubmission,
+  status: ReviewSubmission["status"],
 ): AgentRun["status"] {
   if (live) return "running";
-  if (submission.status === "failed") return "error";
-  if (submission.status === "done" || submission.status === "incomplete") {
-    return "completed";
-  }
+  if (status === "failed") return "error";
+  if (status === "done" || status === "incomplete") return "completed";
   return "unknown";
 }
 
@@ -720,7 +718,7 @@ function reviewTaskerAgentRun(
   issueId: string,
   submission: ReviewSubmission,
 ): AgentRun {
-  const status = agentRunStatus(isRunLive(meta.id), submission);
+  const status = taskerAgentRunStatus(isRunLive(meta.id), submission.status);
   return {
     delegationId: reviewTaskerDelegationId(meta.id),
     agentId: meta.agentId ?? meta.id,

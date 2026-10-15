@@ -40,19 +40,36 @@ import {
 } from "../lib/review-submission-ui";
 import { ReviewComposer } from "./review-composer";
 import { ReviewThread } from "./review-thread";
+import {
+  ReviewTranscriptLinkButton,
+  useReviewTranscriptLinks,
+} from "./review-transcript-link";
 
 function ReviewSubmittedEvent({
   submission,
 }: {
   submission: Extract<ReviewSubmission, { status: "done" }>;
 }) {
+  const transcripts = useReviewTranscriptLinks();
+  const taskerId = transcripts?.taskerConversationId(submission.id);
+  const label = reviewSubmittedLabel(submission);
   return (
     <article
       data-testid="review-submitted-event"
       data-submission-id={submission.id}
       className="flex flex-col gap-1.5 border-b border-border py-3"
     >
-      <p className="text-sm text-foreground">{reviewSubmittedLabel(submission)}</p>
+      {transcripts && taskerId ? (
+        <ReviewTranscriptLinkButton
+          testId="review-submitted-transcript"
+          className="w-fit text-sm"
+          onClick={() => transcripts.openTasker(submission.id, taskerId)}
+        >
+          {label}
+        </ReviewTranscriptLinkButton>
+      ) : (
+        <p className="text-sm text-foreground">{label}</p>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {submission.ideaId ? (
           <IssueChip id={submission.ideaId} testId="review-submitted-idea" />
@@ -187,12 +204,17 @@ export function ReviewConversationTab({
   submissions = [],
   onOpenInDiff,
   focusThreadId = null,
+  focusSubmissionId = null,
+  onSubmissionFocused,
 }: {
   reviewId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
   /** Thread from `?thread=`: scrolled to, highlighted, and kept past the filter. */
   focusThreadId?: string | null;
+  /** Submitted round to scroll into view after an Agents card names it. */
+  focusSubmissionId?: string | null;
+  onSubmissionFocused?: () => void;
 }) {
   const comments = useReviewCommentsQuery(reviewId);
   const { threads, problems } = useReviewCommentThreads(reviewId);
@@ -213,6 +235,16 @@ export function ReviewConversationTab({
     if (!panel) return;
     return scrollThreadNodeInPanel(panel, focusThreadId, { block: "center" });
   }, [commentsReady, focusThreadId, threads]);
+
+  useLayoutEffect(() => {
+    if (!focusSubmissionId || !commentsReady) return;
+    const node = scrollerRef.current?.querySelector(
+      `[data-submission-id="${CSS.escape(focusSubmissionId)}"]`,
+    );
+    if (!node) return;
+    node.scrollIntoView({ block: "nearest" });
+    onSubmissionFocused?.();
+  }, [commentsReady, focusSubmissionId, onSubmissionFocused, submissions, threads]);
 
   return (
     <div

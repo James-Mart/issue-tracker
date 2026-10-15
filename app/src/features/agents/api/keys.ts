@@ -5,6 +5,8 @@ export const agentsKeys = {
     [...agentsKeys.conversationsPrefix(), { showArchived }] as const,
   transcript: (id: string) =>
     [...agentsKeys.conversationsPrefix(), id, "transcript"] as const,
+  detail: (id: string) =>
+    [...agentsKeys.conversationsPrefix(), id, "detail"] as const,
   attachments: (id: string) =>
     [...agentsKeys.conversationsPrefix(), id, "attachments"] as const,
   models: () => [...agentsKeys.all, "models"] as const,
