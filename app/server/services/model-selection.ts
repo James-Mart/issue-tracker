@@ -45,10 +45,7 @@ const MODEL_PINS: Record<string, ModelSelection> = {
   },
   "claude-opus-5-5-thinking-high": {
     id: "claude-opus-5-5",
-    params: [
-      { id: "thinking", value: "true" },
-      { id: "effort", value: "high" },
-    ],
+    params: [{ id: "effort", value: "high" }],
   },
 };
 

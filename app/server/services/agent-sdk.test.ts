@@ -37,7 +37,7 @@ function expectCachedComposedStore(
   expect(isAppendingRunEventsStore(store!.runEvents)).toBe(true);
 }
 
-const MODEL = parseModelKey("claude-opus-5-5-thinking-high");
+const MODEL = parseModelKey("composer-2.5");
 const STORE_DIR = "/data/conversations/my-conv/agent-state";
 
 const SAMPLE_CUSTOM_TOOLS: Record<string, SDKCustomTool> = {
@@ -148,13 +148,7 @@ describe("createAgent", () => {
     ]);
     expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
-    expect(options.model).toEqual({
-      id: "claude-opus-5-5",
-      params: [
-        { id: "thinking", value: "true" },
-        { id: "effort", value: "high" },
-      ],
-    });
+    expect(options.model).toEqual({ id: "composer-2.5" });
     expect(options.agentId).toBe("resume-me");
     expect(options.disallowedTools).toEqual(["task"]);
     expectPlaywrightMcpServers(options);
