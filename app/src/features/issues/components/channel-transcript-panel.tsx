@@ -32,6 +32,7 @@ import {
   launchTranscriptSession,
 } from "../lib/detail-launch-sync";
 import { exportDraftCount } from "../lib/export-tab";
+import { useParkedRootResume } from "../hooks/use-parked-root-resume";
 import { isImplementingWorkRoot } from "@server/services/implementing-launch";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
@@ -150,6 +151,7 @@ function ChannelTranscriptBody({
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel, {
     awaitingLaunchSession: Boolean(pendingLaunch && !pendingLaunch.resumeSession),
   });
+  const parkedResume = useParkedRootResume(issueId, channel);
   const thisFault =
     fault?.issueId === issueId &&
     launchOverlaysChannel(issueId, channel, fault)
@@ -439,6 +441,7 @@ function ChannelTranscriptBody({
         composerDisabled={composerDisabled}
         composerDisabledPlaceholder={composerDisabledPlaceholder}
         pauseCancel={channel === "implementing"}
+        parkedResume={parkedResume}
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
         headerActions={mobileFullViewport ? overflowActions : undefined}

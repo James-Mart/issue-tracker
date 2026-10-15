@@ -47,6 +47,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
+  "workResumeNote",
 ] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
@@ -76,6 +77,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
+  "workResumeNote",
 ] as const;
 
 export const STORY_FIELD_KEYS = [
@@ -102,6 +104,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
+  "workResumeNote",
 ] as const;
 
 // Imperative Idea fields `apply` preserves from disk.
@@ -162,6 +165,7 @@ export const CLEARABLE_KEYS = [
   "appendTo",
   "workQueuedAt",
   "workParkedAt",
+  "workResumeNote",
   "planQueuedAt",
 ] as const;
 
@@ -243,6 +247,7 @@ export const FIELD_LABELS = {
   workQueuedAt: "Work queued",
   workQueuePosition: "Queue position",
   workParkedAt: "Parked",
+  workResumeNote: "Resume note",
   planQueuedAt: "Plan queued",
 } as const;
 

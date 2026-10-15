@@ -214,6 +214,7 @@ export const EPIC_GET_FIELDS = {
   workQueuedAt: STORED,
   workQueuePosition: STORED,
   workParkedAt: STORED,
+  workResumeNote: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const IDEA_GET_FIELDS = {
@@ -278,6 +279,7 @@ export const STORY_GET_FIELDS = {
   workQueuedAt: STORED,
   workQueuePosition: STORED,
   workParkedAt: STORED,
+  workResumeNote: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {

@@ -36,11 +36,13 @@ export const RESUME_RUNNING = "running";
  * Return a parked root to the front of its Project's waiting roots.
  * Open implementing sessions are archived, and a failed-start
  * `needsAttention` is cleared, so the root waits in line instead of
- * reclaiming a slot.
+ * reclaiming a slot. A `note` rides with the root and reaches the next
+ * coordinator in its first prompt.
  */
 export async function resumeParkedWorkRoot(
   id: string,
   sessions: { getActiveRun(conversationId: string): unknown },
+  note?: string,
 ): Promise<IssueDetail> {
   await serialize(() => {
     ensureMigrations();
@@ -103,7 +105,7 @@ export async function resumeParkedWorkRoot(
       const position = positions[place]!;
       const updated: WorkRoot =
         existing.id === root.id
-          ? unparkedRoot(root, position, now)
+          ? unparkedRoot(root, position, now, note)
           : existing.workQueuePosition === position
             ? existing
             : { ...existing, workQueuePosition: position, updatedAt: now };
@@ -124,14 +126,20 @@ export async function resumeParkedWorkRoot(
   return read(id);
 }
 
-function unparkedRoot(root: WorkRoot, position: number, now: string): WorkRoot {
-  const { workParkedAt: _parked, ...rest } = root;
+function unparkedRoot(
+  root: WorkRoot,
+  position: number,
+  now: string,
+  note: string | undefined,
+): WorkRoot {
+  const { workParkedAt: _parked, workResumeNote: _note, ...rest } = root;
   return {
     ...rest,
     needsAttention: false,
     attentionReason: null,
     workQueuedAt: root.workQueuedAt ?? now,
     workQueuePosition: position,
+    ...(note ? { workResumeNote: note } : {}),
     updatedAt: now,
   };
 }

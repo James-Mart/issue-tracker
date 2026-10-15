@@ -9,6 +9,7 @@ import { ShellInlineFault, ShellState } from "@/app/shell-state";
 import { ApiError } from "@/lib/api/errors";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { useParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
 import {
   useConversationDetailQuery,
   useConversationsQuery,
@@ -91,6 +92,10 @@ export function AgentsPage() {
       ? "missing"
       : "failed";
   const held = holdOffRosterConversation(conversationId, resolved, lookup);
+  const parkedResume = useParkedRootResume(
+    offRoster.data?.meta.issueId,
+    offRoster.data?.meta.channel,
+  );
   const selectedConversationId =
     conversations === undefined ? (conversationId ?? null) : held.selectedId;
   const selectedTitle =
@@ -150,6 +155,8 @@ export function AgentsPage() {
                 }
               : undefined
           }
+          hideComposer={offRoster.data?.meta.archived === true}
+          parkedResume={parkedResume}
         />
       ) : (
         <ShellState

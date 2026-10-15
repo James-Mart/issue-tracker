@@ -29,6 +29,27 @@ export function validateNonClearablePatch(
   }
 }
 
+/** Refuse values for fields only the server writes; clearing them stays allowed. */
+export function validateSystemWrittenPatch(patch: IssuePatch): void {
+  for (const field of [
+    "workQueuedAt",
+    "workQueuePosition",
+    "workParkedAt",
+    "workResumeNote",
+  ] as const) {
+    const value = patch[field];
+    if (value !== undefined && value !== null) {
+      throw new IssueError("validation", `${field} is system-written`);
+    }
+  }
+  if (patch.planQueuedAt !== undefined && patch.planQueuedAt !== null) {
+    throw new IssueError(
+      "validation",
+      "planQueuedAt is system-written; clear it to dequeue",
+    );
+  }
+}
+
 export function validateSourceIdeaPatch(
   existing: Issue,
   patch: IssuePatch,

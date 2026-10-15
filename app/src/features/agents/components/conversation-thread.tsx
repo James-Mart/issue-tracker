@@ -20,6 +20,7 @@ import {
   formatAttachmentSize,
   isImageMime,
 } from "@/features/issues/lib/attachments";
+import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
 import { useConversationsQuery, useConversationAttachmentsQuery } from "../api/queries";
 import {
   conversationAttachmentApiPath,
@@ -836,6 +837,7 @@ export function ConversationThread({
   composerDisabled = false,
   composerDisabledPlaceholder,
   pauseCancel = false,
+  parkedResume,
   banner,
 }: {
   conversationId: string;
@@ -859,6 +861,8 @@ export function ConversationThread({
   composerDisabledPlaceholder?: string;
   /** Implementing channel: the cancel control is Pause. */
   pauseCancel?: boolean;
+  /** Parked work root: an idle send resumes it with the draft as a note. */
+  parkedResume?: ParkedRootResume;
   /** Sits under the thread chrome, above the transcript. */
   banner?: ReactNode;
 }) {
@@ -952,6 +956,7 @@ export function ConversationThread({
           disabled={composerDisabled}
           disabledPlaceholder={composerDisabledPlaceholder}
           pauseCancel={pauseCancel}
+          parkedResume={parkedResume}
         />
       ) : null}
     </div>

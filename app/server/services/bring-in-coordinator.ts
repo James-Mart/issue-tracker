@@ -10,6 +10,8 @@ import {
 } from "./enqueue-work-root.js";
 import { IssueError } from "./errors.js";
 import { implementingResumePrompt } from "./implementing-launch.js";
+import { readIssueOrThrow } from "./issues.js";
+import { resumeParkedWorkRoot } from "./resume-work-root.js";
 
 function enqueueReason(err: unknown): string | undefined {
   if (!(err instanceof IssueError)) return undefined;
@@ -57,8 +59,9 @@ export async function resumeCoordinator(
 
 /**
  * Bring the work root's coordinator in with a message.
- * A root that holds a slot is messaged on its existing session. Any other
- * root is queued; a queued start carries only the work-loop start message.
+ * A parked root is resumed with the message as its note. A root that holds a
+ * slot is messaged on its existing session. Any other root is queued; a queued
+ * start carries only the work-loop start message.
  */
 export async function bringInCoordinator(
   workRootId: string,
@@ -68,6 +71,11 @@ export async function bringInCoordinator(
   const text = message.trim();
   if (!text) {
     throw new IssueError("validation", "coordinator message is required");
+  }
+  const root = readIssueOrThrow(workRootId);
+  if ((root.kind === "epic" || root.kind === "story") && root.workParkedAt) {
+    await resumeParkedWorkRoot(workRootId, sessions, text);
+    return;
   }
   const existing = activeImplementingConversationId(workRootId);
   if (existing) {

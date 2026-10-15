@@ -65,6 +65,7 @@ import {
   validateExecutionGatePatch,
   validateNonClearablePatch,
   validateSourceIdeaPatch,
+  validateSystemWrittenPatch,
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
@@ -627,21 +628,7 @@ export function update(
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
-    for (const field of ["workQueuedAt", "workQueuePosition", "workParkedAt"] as const) {
-      const value = jsonPatch[field];
-      if (value !== undefined && value !== null) {
-        throw new IssueError("validation", `${field} is system-written`);
-      }
-    }
-    if (
-      jsonPatch.planQueuedAt !== undefined &&
-      jsonPatch.planQueuedAt !== null
-    ) {
-      throw new IssueError(
-        "validation",
-        "planQueuedAt is system-written; clear it to dequeue",
-      );
-    }
+    validateSystemWrittenPatch(jsonPatch);
 
     const merged = mergeIssue(existing, jsonPatch);
 

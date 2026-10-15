@@ -26,9 +26,14 @@ export function compareWorkQueuedAtThenId(a: WorkRoot, b: WorkRoot): number {
   );
 }
 
-/** Clear queue membership. A root leaves the queue when all three are gone. */
+/** Clear queue membership and any resume note waiting with it. */
 export function queueDeparturePatch(): IssuePatch {
-  return { workQueuedAt: null, workQueuePosition: null, workParkedAt: null };
+  return {
+    workQueuedAt: null,
+    workQueuePosition: null,
+    workParkedAt: null,
+    workResumeNote: null,
+  };
 }
 
 function blockersOf(root: WorkRoot): string[] {

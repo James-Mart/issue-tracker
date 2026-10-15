@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { Mic, Paperclip, Pause, Send, Square, Upload, X } from "lucide-react";
+import { Mic, Paperclip, Pause, Play, Send, Square, Upload, X } from "lucide-react";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { currentGlow } from "@/components/ui/overlay-surfaces";
@@ -48,6 +48,7 @@ import {
   formatAttachmentSize,
   isImageMime,
 } from "@/features/issues/lib/attachments";
+import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
 import {
   useCancelConversationRun,
   useDeleteConversationAttachment,
@@ -217,6 +218,7 @@ export function Composer({
   disabled = false,
   disabledPlaceholder,
   pauseCancel = false,
+  parkedResume,
 }: {
   conversationId: string;
   /** Conversation meta model — remembered default for the picker. */
@@ -228,6 +230,8 @@ export function Composer({
   disabledPlaceholder?: string;
   /** Implementing loops label the cancel control Pause. */
   pauseCancel?: boolean;
+  /** Parked work root: an idle send resumes it with the draft as a note. */
+  parkedResume?: ParkedRootResume;
 }) {
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const {
@@ -315,8 +319,11 @@ export function Composer({
   const showVoiceError = voiceState === "error";
   const voiceLocked = voiceState === "transcribing";
   const voiceSessionActive = voiceState !== "idle";
-  const composerBusy = sendMessage.isPending;
-  const attachDisabled = composerBusy || voiceLocked;
+  const composerBusy = sendMessage.isPending || parkedResume?.pending === true;
+  // A resume note is plain text; attachments stay on the parked session.
+  const resumeOnSend = parkedResume !== undefined && !runActive;
+  const stagingBlocked = disabled || composerBusy || resumeOnSend;
+  const attachDisabled = stagingBlocked || voiceLocked;
   const micDisabled =
     composerBusy ||
     voiceLocked ||
@@ -471,7 +478,7 @@ export function Composer({
   // model change to be stored.
   const canSubmit =
     !disabled &&
-    (draft.trim().length > 0 || stagedAttachments.length > 0) &&
+    (draft.trim().length > 0 || (!resumeOnSend && stagedAttachments.length > 0)) &&
     !composerBusy &&
     !updateConversation.isPending;
   const sendDisabled =
@@ -479,6 +486,10 @@ export function Composer({
 
   const send = () => {
     if (disabled || !canSubmit) return;
+    if (resumeOnSend) {
+      parkedResume.resume(draft.trim(), onSuccessfulSend);
+      return;
+    }
     sendMessage.mutate(
       { id: conversationId, body: messageBody() },
       { onSuccess: onSuccessfulSend },
@@ -507,7 +518,7 @@ export function Composer({
   };
 
   const stageFiles = async (files: File[]) => {
-    if (disabled || composerBusy || files.length === 0) return;
+    if (stagingBlocked || files.length === 0) return;
 
     for (const raw of files) {
       const file = ensureAttachmentFileName(raw);
@@ -537,7 +548,7 @@ export function Composer({
   };
 
   const onDragEnter = (e: DragEvent<HTMLDivElement>) => {
-    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (stagingBlocked || !dataTransferHasFiles(e.dataTransfer)) return;
     e.preventDefault();
     dragDepthRef.current += 1;
     setDragActive(true);
@@ -550,14 +561,14 @@ export function Composer({
   };
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
-    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (stagingBlocked || !dataTransferHasFiles(e.dataTransfer)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     clearDrag();
-    if (disabled || composerBusy || !dataTransferHasFiles(e.dataTransfer)) return;
+    if (stagingBlocked || !dataTransferHasFiles(e.dataTransfer)) return;
     const files = filesFromDataTransfer(e.dataTransfer);
     if (files.length === 0) return;
     e.preventDefault();
@@ -569,8 +580,13 @@ export function Composer({
     setStagedAttachments((prev) => prev.filter((item) => item.name !== name));
   };
 
-  const sendLabel = runActive ? "Steer" : "Send";
-  const sendTitle = sendLabel;
+  const sendLabel = resumeOnSend ? "Resume" : runActive ? "Steer" : "Send";
+  const sendTitle = resumeOnSend
+    ? "Resume through the queue with this message for the next coordinator"
+    : sendLabel;
+  const messagePlaceholder = resumeOnSend
+    ? "Parked. Resume with a message for the next coordinator"
+    : "Message the agent";
   const cancelLabel = pauseCancel ? "Pause" : "Stop";
 
   return (
@@ -677,8 +693,8 @@ export function Composer({
                   onKeyDown={onKeyDown}
                   placeholder={
                     disabled
-                      ? (disabledPlaceholder ?? "Message the agent")
-                      : "Message the agent"
+                      ? (disabledPlaceholder ?? messagePlaceholder)
+                      : messagePlaceholder
                   }
                   title={
                     isCoarsePointer
@@ -803,7 +819,11 @@ export function Composer({
                     title={sendTitle}
                     aria-label={sendLabel}
                   >
-                    <Send className="h-4 w-4" />
+                    {resumeOnSend ? (
+                      <Play className="h-4 w-4" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
                   </Button>
                 )}
               </div>

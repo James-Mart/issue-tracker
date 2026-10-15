@@ -504,16 +504,17 @@ export function useReorderQueuePosition() {
   });
 }
 
-function useQueueMembershipMutation(
+function useQueueMembershipMutation<Input>(
   issueId: string,
   path: "park" | "resume",
+  body: (input: Input) => Record<string, unknown>,
 ) {
   const qc = useQueryClient();
-  return useMutation<IssueDetail, Error, void>({
-    mutationFn: () =>
+  return useMutation<IssueDetail, Error, Input>({
+    mutationFn: (input) =>
       request<IssueDetail>(
         `/api/issues/${encodeURIComponent(issueId)}/queue/${path}`,
-        { method: "POST" },
+        { method: "POST", body: body(input) },
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
@@ -531,12 +532,16 @@ function useQueueMembershipMutation(
 
 /** Park a paused root, freeing its implementing slot. */
 export function useParkWorkRoot(issueId: string) {
-  return useQueueMembershipMutation(issueId, "park");
+  return useQueueMembershipMutation<void>(issueId, "park", () => ({}));
 }
 
-/** Place a parked root first among waiting roots. */
+/** Place a parked root first among waiting roots, with an optional note for its next coordinator. */
 export function useResumeParkedWorkRoot(issueId: string) {
-  return useQueueMembershipMutation(issueId, "resume");
+  return useQueueMembershipMutation<{ note?: string } | void>(
+    issueId,
+    "resume",
+    (input) => (input?.note === undefined ? {} : { note: input.note }),
+  );
 }
 
 export function useDequeueWorkRoot(issueId: string) {

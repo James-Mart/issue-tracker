@@ -38,6 +38,10 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
+vi.mock("../hooks/use-parked-root-resume", () => ({
+  useParkedRootResume: () => undefined,
+}));
+
 vi.mock("./planning-launch-control", () => ({
   PlanningChannelEmptyState: () => (
     <div data-testid="planning-channel-empty-state" />
