@@ -14,6 +14,7 @@ import {
   replacePrFactsCacheFromMap,
   clearPrFactsCache,
 } from "./pr-facts-cache.js";
+import { revertLandedRootMergeBases } from "./merge-base-auto-revert.js";
 import {
   reconcileProjectPrs,
   type PrReconcileResult,
@@ -79,10 +80,12 @@ export function prSyncStatus(projectId: string): ProjectPrSyncStatus {
 }
 
 /**
- * One Project's sync pass. Reconcile runs first; registered steps follow in
- * order, each handed the previous result. Step errors are joined into the
- * pass error; a throw, or a step result with only `error`, stops the pass.
- * Passes for one Project queue behind the one already running.
+ * One Project's sync pass. Landed root merge-base overrides are reverted
+ * first, then reconcile; registered steps follow in order, each handed the
+ * previous result. Step errors are joined into the pass error; a throw, or
+ * a step result with only `error`, stops the pass. A revert read failure is
+ * joined the same way and does not stop reconcile. Passes for one Project
+ * queue behind the one already running.
  */
 export function runSyncPass(projectId: string): Promise<PrSyncPassResult> {
   const previous = tails.get(projectId) ?? Promise.resolve();
@@ -175,11 +178,12 @@ async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
     withIssuesStoreLock(() => {
       ensureMigrations();
     });
+    const reverted = await revertLandedRootMergeBases(projectId);
     const reconciled = await reconcileProjectPrs(projectId);
     let result: PrSyncPassResult = reconciled;
+    const stepErrors: string[] = [];
     if (!reconciled.error) {
       let previous: PrSyncStepResult = reconciled;
-      const stepErrors: string[] = [];
       for (const step of [...steps]) {
         result = await step(projectId, previous);
         if (result.error) stepErrors.push(result.error);
@@ -187,9 +191,12 @@ async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
         const { error: _error, ...passed } = result;
         previous = passed;
       }
-      if (stepErrors.length > 0) result = { ...result, error: stepErrors.join("; ") };
+      const stepError = joinPassErrors(stepErrors);
+      if (stepError) result = { ...result, error: stepError };
       replacePrFactsCacheFromMap(projectId, result.facts ?? reconciled.facts);
     }
+    const error = joinPassErrors([reverted.error, result.error]);
+    if (error) result = { ...result, error };
     if (result.error) {
       recordError(projectId, result.error, at);
       logPrSyncFailure(projectId, result.error);
@@ -205,6 +212,15 @@ async function executeSyncPass(projectId: string): Promise<PrSyncPassResult> {
   } finally {
     publishPrSyncFinished(projectId);
   }
+}
+
+/** Join pass errors in order, keeping one copy of a repeated message. */
+function joinPassErrors(segments: readonly (string | undefined)[]): string | undefined {
+  const unique = [
+    ...new Set(segments.filter((error): error is string => error !== undefined)),
+  ];
+  if (unique.length === 0) return undefined;
+  return unique.join("; ");
 }
 
 function recordSuccess(projectId: string, at: string): void {

@@ -206,6 +206,28 @@ already merged into <branch>`). When that base cannot be resolved the reason
 is `already merged` — never the word `trunk`. `issue epic|story get <id>
 mergeSettingsLock` prints the object as JSON; other kinds omit the field.
 
+**Auto-revert.** Each PR sync pass checks every Epic and every project-level
+root Story whose stored `mergeBaseOverride` names a different branch from the
+Project trunk. Remote-tracking prefixes (`origin/` and `refs/remotes/origin/`)
+are stripped before that comparison and before the GitHub query, the same way
+reconcile reads `baseRefName`. The pass asks GitHub for a merged pull request
+with that override branch as head and the Project trunk as base. When one
+exists, the pass calls `setRootMergeSettings` in `system-revert` mode with
+`mergeBase: null`. The lock does not apply, so the clear lands while a pull
+request is open. The stored merge-policy override is not changed. The root
+Story's derived `mergeBase`, and the derived `mergeBase` of each of that
+Epic's first-layer Stories, then resolve to the Project trunk. If the GitHub
+read fails, every override stays and the pass reports the failure the same
+way it reports any other sync failure.
+
+**Auto-delete.** This revert assumes the repository deletes a branch when its
+pull request merges. GitHub then retargets dependent pull requests onto the
+trunk, so reconcile's head-plus-base match (`branchName` against the derived
+`mergeBase`) still finds those pull requests after the override is cleared.
+The tracker does not edit pull requests on GitHub and does not set a rebase
+flag on revert. A Story that is behind the new trunk is caught up by the
+Update from merge base Task at Story review.
+
 - **Resolver** — canonical algorithm (same as `derive()` /
   `issue story get … mergeBase` / `app/server/resolve-merge-base.ts`):
   - no `stackedOn`, `partOf` a Project (root Story) → that Story's
