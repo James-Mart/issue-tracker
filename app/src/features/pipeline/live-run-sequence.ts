@@ -5,6 +5,7 @@ import type {
 import {
   applyAttributedCost,
   mergeSequenceCost,
+  usageTokenTotal,
 } from "@server/services/run-sequence-cost";
 import { roleFamilyCaption, roleFamilyTitle } from "./role-family";
 import {
@@ -414,7 +415,7 @@ function applyUsage(
   sequence: RunSequence,
   event: Extract<ConversationStreamEvent, { type: "usage" | "run_usage" }>,
 ): RunSequence {
-  const tokens = event.usage.totalTokens;
+  const tokens = usageTokenTotal(event.usage);
   const tokenTotal = (sequence.tokenTotal ?? 0) + tokens;
   const beats = sequence.beats.slice();
   const index = beatIndexForCost(beats, event);

@@ -162,6 +162,17 @@ function targetRow(
   return enclosingHumanTurn(rows, event);
 }
 
+/**
+ * Tokens a run used. The SDK's `totalTokens` adds cache reads and writes on
+ * top of `inputTokens`, which already includes them.
+ */
+export function usageTokenTotal(usage: {
+  inputTokens: number;
+  outputTokens: number;
+}): number {
+  return usage.inputTokens + usage.outputTokens;
+}
+
 function addTokenTotal(row: AttributableRow, tokens: number): void {
   row.beat.tokenTotal = (row.beat.tokenTotal ?? 0) + tokens;
 }
@@ -199,7 +210,7 @@ export function attributeUsageAndCost(
       continue;
     }
     sawUsage = true;
-    const tokens = event.usage.totalTokens;
+    const tokens = usageTokenTotal(event.usage);
     tokenTotal += tokens;
     if (!row) continue;
     addTokenTotal(row, tokens);
