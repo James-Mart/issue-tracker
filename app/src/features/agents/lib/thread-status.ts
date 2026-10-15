@@ -1,4 +1,5 @@
 import type { TranscriptEvent } from "@server/schemas";
+import { usageTokenTotal } from "@server/services/run-sequence-cost";
 
 /** Running totals across every `usage` event in a transcript. */
 export type UsageTotals = {
@@ -32,7 +33,7 @@ export function sumUsageTotals(
     ) {
       continue;
     }
-    totalTokens += event.usage.totalTokens;
+    totalTokens += usageTokenTotal(event.usage);
     inputTokens += event.usage.inputTokens;
     outputTokens += event.usage.outputTokens;
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveModelSelection } from "./model-selection.js";
+import { parseModelKey, toModelSelection } from "./model-selection.js";
 
-describe("resolveModelSelection", () => {
+describe("toModelSelection", () => {
   // The SDK reads `id` and `params` and nothing else, so a parameter promoted
   // to a top-level key is dropped in silence and the pin runs at the backend's
   // defaults. Every pin previously did exactly that.
@@ -12,7 +12,7 @@ describe("resolveModelSelection", () => {
       "cursor-grok-4.5-high-fast",
       "claude-opus-5-5-thinking-high",
     ]) {
-      const selection = resolveModelSelection(pin);
+      const selection = toModelSelection(parseModelKey(pin));
       expect(Object.keys(selection).sort()).toEqual(
         selection.params ? ["id", "params"] : ["id"],
       );

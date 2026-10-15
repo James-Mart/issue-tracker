@@ -40,6 +40,7 @@ import {
 } from "./browser-origin-allowlist.js";
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
+import { toModelSelection, type ModelKey } from "./model-selection.js";
 
 export { CursorAgentError };
 
@@ -84,7 +85,7 @@ export interface AgentSdk {
 
 export interface CreateAgentOptions {
   cwd: string;
-  model: ModelSelection;
+  model: ModelKey;
   agentId?: string;
   storeDir: string;
   /**
@@ -101,7 +102,7 @@ export interface CreateAgentOptions {
 
 export interface ResumeAgentOptions {
   cwd: string;
-  model: ModelSelection;
+  model: ModelKey;
   /**
    * App conversation that owns the live stack this session may browse.
    * Omitted sessions have no stack, so every browser navigation is refused.
@@ -115,7 +116,7 @@ export interface ResumeAgentOptions {
 }
 
 export interface AgentSendOptions {
-  model?: ModelSelection;
+  model?: ModelKey;
 }
 
 /** Base64 image payload accepted at the app's SDK send boundary. */
@@ -307,7 +308,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
 
   function conversationAgentOptions(input: {
     cwd: string;
-    model?: ModelSelection;
+    model?: ModelKey;
     agentId?: string;
     storeDir?: string;
     agents?: Record<string, AgentDefinition>;
@@ -322,7 +323,9 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
   }): AgentOptions {
     return {
       apiKey: deps.apiKey,
-      ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.model !== undefined
+        ? { model: toModelSelection(input.model) }
+        : {}),
       ...(input.includeAgentId ? { agentId: input.agentId } : {}),
       ...(input.includeAgents ? { agents: input.agents } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
@@ -492,7 +495,8 @@ async function startSend(
   const queue = new EventQueue<AgentStreamEvent>();
 
   const sendOptions: SendOptions = {
-    model: options.model,
+    model:
+      options.model === undefined ? undefined : toModelSelection(options.model),
     onDelta: ({ update }) => {
       const nested = toNestedEvent(update);
       if (nested) queue.push(nested);

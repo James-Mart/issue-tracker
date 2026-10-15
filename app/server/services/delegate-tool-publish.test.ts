@@ -14,7 +14,7 @@ import {
 } from "./delegate-tool.fixtures.js";
 import {
   formatEffectiveModel,
-  resolveModelSelection,
+  parseModelKey,
 } from "./model-selection.js";
 
 beforeEach(() => {
@@ -68,7 +68,7 @@ describe("delegate publishes nested run frames", () => {
     unsubscribe();
 
     const expectedModel = formatEffectiveModel(
-      resolveModelSelection("cursor-grok-4.5-high-fast"),
+      parseModelKey("cursor-grok-4.5-high-fast"),
     );
     const nested = frames.filter(
       (f): f is ConversationFrame & { event: { type: "subagent_update" } } =>

@@ -452,7 +452,10 @@ export function Composer({
     setModel(next);
     // Always PATCH — skipping when `next === initialModel` races A→B→A while
     // the B write is in flight and leaves the server on B after invalidate.
-    updateConversation.mutate({ id: conversationId, patch: { model: next } });
+    updateConversation.mutate(
+      { id: conversationId, patch: { model: next } },
+      { onError: () => setModel(initialModel) },
+    );
   };
 
   const messageBody = () => {
@@ -460,15 +463,17 @@ export function Composer({
     const attachmentNames = stagedAttachments.map((item) => item.name);
     return {
       prompt,
-      ...(model.trim() ? { model: model.trim() } : {}),
       ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
     };
   };
 
+  // A send runs on the conversation's stored model, so it waits for a
+  // model change to be stored.
   const canSubmit =
     !disabled &&
     (draft.trim().length > 0 || stagedAttachments.length > 0) &&
-    !composerBusy;
+    !composerBusy &&
+    !updateConversation.isPending;
   const sendDisabled =
     disabled || !canSubmit || voiceLocked || showRecordingBar || showVoiceError;
 

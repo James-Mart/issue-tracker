@@ -317,7 +317,6 @@ async function launchTasking(
   submission: ReviewSubmission,
   conversationId: string,
   prompt: string,
-  model: string,
   sessions: AgentSessions,
   persistPrompt: boolean,
 ): Promise<void> {
@@ -325,7 +324,6 @@ async function launchTasking(
     const started = await startConversationPrompt(
       conversationId,
       prompt,
-      model,
       sessions,
       persistPrompt ? undefined : { persistPrompt: false },
     );
@@ -408,14 +406,13 @@ export async function launchRecordedSubmission(
 
     const threadIds = linked.openThreadIds;
     const prompt = taskingPrompt(review, threadIds);
-    const model = loadRoleModelPin(REVIEW_TASKER_ROLE);
     let current: ReviewSubmission = submission;
     const persisted = submission.conversationId !== undefined;
     if (!submission.conversationId) {
       const meta = await createConversation({
         title: `Tasking ${story.title}`,
         projectId,
-        model,
+        model: loadRoleModelPin(REVIEW_TASKER_ROLE),
         issueId: reviewId,
         channel: "review",
         role: REVIEW_TASKER_ROLE,
@@ -443,7 +440,6 @@ export async function launchRecordedSubmission(
       current,
       conversationId,
       prompt,
-      model,
       sessions,
       kind === "retry" && persisted,
     );

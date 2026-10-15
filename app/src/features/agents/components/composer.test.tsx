@@ -144,7 +144,7 @@ describe("Composer during active run", () => {
     expect(sendMutate).toHaveBeenCalledWith(
       {
         id: "conv-1",
-        body: { prompt: "mid-run steer", model: "composer-2.5-fast" },
+        body: { prompt: "mid-run steer" },
       },
       expect.any(Object),
     )

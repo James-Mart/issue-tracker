@@ -45,7 +45,6 @@ export async function startImplementingChannelSession(
   const started = await startConversationPrompt(
     meta.id,
     initialPrompt,
-    model,
     sessions,
     { persistPrompt: false },
   );

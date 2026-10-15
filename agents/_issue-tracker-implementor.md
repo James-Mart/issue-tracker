@@ -61,6 +61,12 @@ Pass each stub's delegate arguments (`role`, `issueId`, `prompt`; plus
 `resumeId` when resuming) and inline the fields it lists. Channel rules are in
 the Delegation include already Read above.
 
+**Research** — `role: issue-tracker-research`, `issueId: <id>`
+
+`<workspace>` is the summary `Workspace:` line.
+
+> Research: `<one question>`. Workspace: `<workspace>`. Seed paths (if any): `<paths>`.
+
 **Record commit** — `role: issue-tracker-git`, `issueId: <id>`
 
 `<id>` is this Task. `<branchName>` is the parent Story `branchName` from

@@ -495,7 +495,6 @@ function ThreadBody({
   pendingSteerFallback,
   runActive,
   conversationId,
-  model,
   keyboardInset,
   forkedAtSeq,
 }: {
@@ -514,7 +513,6 @@ function ThreadBody({
   pendingSteerFallback: boolean;
   runActive: boolean;
   conversationId: string;
-  model: string;
   keyboardInset: number;
   forkedAtSeq?: number;
 }) {
@@ -701,7 +699,6 @@ function ThreadBody({
             conversationId={conversationId}
             text={pendingMessageText}
             runActive={runActive}
-            model={model}
             steerFallback={pendingSteerFallback}
           />
         ) : null}
@@ -943,7 +940,6 @@ export function ConversationThread({
           pendingSteerFallback={pendingSteerFallback}
           runActive={runActive}
           conversationId={conversationId}
-          model={meta?.model ?? ""}
           keyboardInset={keyboardInset}
           forkedAtSeq={forkedAtSeq}
         />

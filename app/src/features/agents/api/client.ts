@@ -105,7 +105,6 @@ export function listAgentModels(): Promise<AgentModelsResponse> {
 
 export type SendConversationMessageBody = {
   prompt: string;
-  model?: string;
   attachments?: string[];
 };
 

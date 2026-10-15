@@ -55,6 +55,7 @@ import { awaitingHumanAfterTurnBoundary } from "./awaiting-human.js";
 import { awaitingHumanFromTranscriptFile } from "./transcript-page.js";
 import { readTranscriptPage } from "./transcript-page.js";
 import { IssueError } from "./errors.js";
+import { parseModelKey, type ModelKey } from "./model-selection.js";
 import {
   assertGuestAllowsAgentLaunch,
   GUEST_REFUSED_CHANNEL_SESSION,
@@ -179,6 +180,12 @@ function writeMeta(meta: ConversationMeta): void {
   persistConversationMeta(meta);
 }
 
+function requireModel(raw: string): ModelKey {
+  const model = raw.trim();
+  if (!model) throw new IssueError("validation", "model is required");
+  return parseModelKey(model);
+}
+
 /**
  * Allocate a conversation id and write its on-disk bootstrap (meta + empty
  * transcript/delegations), optionally persisting the first prompt line.
@@ -235,8 +242,7 @@ export function persistForkedConversation(
   if (!title) throw new IssueError("validation", "title is required");
   const projectId = input.projectId.trim();
   if (!projectId) throw new IssueError("validation", "projectId is required");
-  const model = input.model.trim();
-  if (!model) throw new IssueError("validation", "model is required");
+  const model = requireModel(input.model);
   const agentId = input.agentId.trim();
   if (!agentId) throw new IssueError("validation", "agentId is required");
   const forkedFrom = input.forkedFrom.trim();
@@ -275,8 +281,7 @@ export function createConversation(
     if (!title) throw new IssueError("validation", "title is required");
     const projectId = input.projectId.trim();
     if (!projectId) throw new IssueError("validation", "projectId is required");
-    const model = input.model.trim();
-    if (!model) throw new IssueError("validation", "model is required");
+    const model = requireModel(input.model);
 
     const anchor = validateAnchor(
       input.issueId?.trim() || undefined,
@@ -397,8 +402,7 @@ export async function createIssueChannelSession(
     if (!projectId) throw new IssueError("validation", "projectId is required");
     const title = input.title.trim();
     if (!title) throw new IssueError("validation", "title is required");
-    const model = input.model.trim();
-    if (!model) throw new IssueError("validation", "model is required");
+    const model = requireModel(input.model);
     const initialPrompt = input.message?.trim() || undefined;
 
     // Refuse before any mutation.
@@ -752,7 +756,6 @@ export async function deliverLivePrompt(
 export async function startConversationPrompt(
   conversationId: string,
   prompt: string,
-  model: string | undefined,
   sessions: Pick<AgentSessions, "sendPrompt">,
   opts?: { persistPrompt?: boolean; attachments?: string[] },
 ): Promise<{ ok: true; runId: string } | { ok: false; message: string }> {
@@ -779,7 +782,6 @@ export async function startConversationPrompt(
   );
   const result = await sessions.sendPrompt(conversationId, {
     prompt: assembled.prompt,
-    model,
     ...(assembled.images ? { images: assembled.images } : {}),
   });
   if (!result.ok) {
@@ -808,9 +810,7 @@ export function updateMeta(
       next.title = title;
     }
     if (patch.model !== undefined) {
-      const model = patch.model.trim();
-      if (!model) throw new IssueError("validation", "model is required");
-      next.model = model;
+      next.model = requireModel(patch.model);
     }
     if (patch.agentId !== undefined) {
       const agentId = patch.agentId.trim();

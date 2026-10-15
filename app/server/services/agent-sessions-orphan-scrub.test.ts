@@ -141,7 +141,9 @@ describe("scrub before resume or send", () => {
     expect(fake.created).toHaveLength(0);
     expect(fake.resumed).toHaveLength(1);
     expect(fake.resumed[0]?.agentId).toBe("agent-orphaned");
-    expect(fake.handles[0]?.sends).toEqual([{ message: "again", options: {} }]);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "again", options: { model: "auto" } },
+    ]);
     expect(JSON.stringify(readConversation(id).transcript)).not.toContain(
       ACTIVE_RUN,
     );

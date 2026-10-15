@@ -2,8 +2,7 @@
 name: issue-tracker-research
 model: composer-2.5
 description: >-
-  Answers one focused research question with a concise factual summary. Used by
-  issue-tracker-plan.
+  Answers one focused codebase question with a cited factual summary.
 readonly: true
 ---
 
@@ -45,8 +44,16 @@ reporting only that.
    **Workspace** (per step 2 — not via Read cwd).
 7. Investigate only enough to answer **Research** — do not hunt broadly.
 
+## Answer
+
+Your final message is only the answer to **Research**:
+
+- Cite each fact as `path:start-end`.
+- Quote the signature of each helper or type you name.
+- For a question about every instance, list each one with the search that
+  found them.
+- Mark each inference `(inferred)`.
+
 ## Stop conditions
 
-- Return **only** a concise factual summary as your entire final message — no
-  preamble, no JSON, no follow-up questions.
 - Do not implement product work, write tracker issues, or edit source files.

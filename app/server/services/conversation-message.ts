@@ -29,7 +29,7 @@ export async function postConversationMessage(
   conversationId: string,
   prompt: string,
   sessions: ConversationMessageSessions,
-  options?: { model?: string; attachments?: string[] },
+  options?: { attachments?: string[] },
 ): Promise<ConversationMessageDelivery> {
   const attachments = options?.attachments ?? [];
   const activeRun = sessions.getActiveRun(conversationId);
@@ -47,13 +47,9 @@ export async function postConversationMessage(
     };
   }
 
-  const result = await startConversationPrompt(
-    conversationId,
-    prompt,
-    options?.model,
-    sessions,
-    { attachments },
-  );
+  const result = await startConversationPrompt(conversationId, prompt, sessions, {
+    attachments,
+  });
   if (!result.ok) return { status: "failed", message: result.message };
   return { status: "started", runId: result.runId };
 }

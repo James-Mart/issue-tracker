@@ -5,7 +5,7 @@ import { Agent } from "@cursor/sdk";
 import { describe, expect, it } from "vitest";
 import { cursorApiKey } from "../config.js";
 import { agentSdk } from "./agent-sdk.js";
-import { resolveModelSelection } from "./model-selection.js";
+import { parseModelKey } from "./model-selection.js";
 
 const LIVE_TIMEOUT_MS = 300_000;
 
@@ -18,7 +18,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)(
         const storeDir = mkdtempSync(join(tmpdir(), "run-cost-live-"));
         await using agent = await agentSdk.createAgent({
           cwd: process.cwd(),
-          model: resolveModelSelection("composer-2.5-fast"),
+          model: parseModelKey("composer-2.5-fast"),
           storeDir,
         });
 

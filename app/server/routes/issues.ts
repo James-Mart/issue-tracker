@@ -299,7 +299,6 @@ export function createIssuesRouter(
         const started = await startConversationPrompt(
           created.id,
           initialPrompt,
-          model,
           sessions,
           { persistPrompt: false },
         );

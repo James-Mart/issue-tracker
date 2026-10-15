@@ -5,15 +5,26 @@ import {
   splitFrontmatter,
   type AgentFrontmatter,
 } from "./agent-definitions.js";
+import { isModelPin, type ModelKey } from "./model-selection.js";
 
 function defaultAgentsDir(): string {
   return join(pluginDir, "agents");
 }
 
-function hasModelPin(model: unknown): boolean {
+function hasModelPin(model: unknown): model is string {
   return (
     typeof model === "string" && model.length > 0 && model !== "inherit"
   );
+}
+
+function requireModelPin(fileName: string, model: unknown): ModelKey {
+  if (!hasModelPin(model)) {
+    throw new Error(`${fileName}: missing model pin`);
+  }
+  if (!isModelPin(model)) {
+    throw new Error(`${fileName}: unknown model pin "${model}"`);
+  }
+  return model;
 }
 
 function readRoleFile(
@@ -45,12 +56,9 @@ export function loadRoleBody(
 export function loadRoleModelPin(
   name: string,
   agentsDir: string = defaultAgentsDir(),
-): string {
+): ModelKey {
   const { fileName, frontmatter } = readRoleFile(name, agentsDir);
-  if (!hasModelPin(frontmatter.model)) {
-    throw new Error(`${fileName}: missing model pin`);
-  }
-  return frontmatter.model as string;
+  return requireModelPin(fileName, frontmatter.model);
 }
 
 /**
@@ -90,9 +98,7 @@ export function validateRoleBodies(
     if (typeof name !== "string" || name.length === 0) {
       throw new Error(`${entry}: missing name`);
     }
-    if (!hasModelPin(model)) {
-      throw new Error(`${entry}: missing model pin`);
-    }
+    requireModelPin(entry, model);
     if (worktree !== undefined && worktree !== "exclusive") {
       throw new Error(`${entry}: worktree must be "exclusive" when set`);
     }

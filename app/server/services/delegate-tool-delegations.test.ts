@@ -17,7 +17,7 @@ import {
 } from "./delegate-tool.fixtures.js";
 import {
   formatEffectiveModel,
-  resolveModelSelection,
+  parseModelKey,
 } from "./model-selection.js";
 
 beforeEach(() => {
@@ -90,7 +90,7 @@ describe("delegate delegations listing and lifecycle", () => {
     );
 
     const expectedModel = formatEffectiveModel(
-      resolveModelSelection("cursor-grok-4.5-high-fast"),
+      parseModelKey("cursor-grok-4.5-high-fast"),
     );
     const listedA = delegationsListingOf(
       await toolsA.delegations!.execute({}, {}),

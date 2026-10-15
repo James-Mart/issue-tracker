@@ -56,7 +56,7 @@ function toAgentDefinition(
     // The pin slug is the id this surface wants. Subagent definitions take
     // compound slugs (`claude-opus-5-5-thinking-high`) and reject base catalog
     // ids; `Agent.create` is the opposite, which is what
-    // `resolveModelSelection` exists for. Do not route this through it.
+    // `toModelSelection` exists for. Do not route this through it.
     definition.model = { id: frontmatter.model };
   }
 

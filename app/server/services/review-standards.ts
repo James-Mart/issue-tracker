@@ -318,11 +318,10 @@ async function launchStandardsAssessment(
 
   try {
     const prompt = await assessmentPrompt(projectId, review, submission, standards);
-    const model = loadRoleModelPin(STANDARDS_ASSESSOR_ROLE);
     const meta = await createConversation({
       title: "Coding standards assessment",
       projectId,
-      model,
+      model: loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
       issueId: reviewId,
       channel: "review",
       role: STANDARDS_ASSESSOR_ROLE,
@@ -350,7 +349,6 @@ async function launchStandardsAssessment(
     const started = await startConversationPrompt(
       meta.id,
       prompt,
-      model,
       sessions,
       { persistPrompt: false },
     );
@@ -658,7 +656,6 @@ async function launchStandardsApply(
     const started = await startConversationPrompt(
       conversationId,
       applyPrompt(projectId, reviewId, submissionId, standards),
-      loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
       sessions,
     );
     if (!started.ok) {

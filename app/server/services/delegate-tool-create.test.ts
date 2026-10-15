@@ -16,7 +16,6 @@ import {
   teardownDelegateToolTest,
   waitForHandleSend,
 } from "./delegate-tool.fixtures.js";
-import { resolveModelSelection } from "./model-selection.js";
 import { loadRoleBody } from "./role-bodies.js";
 
 function sentText(send: FakeSend): string {
@@ -48,9 +47,7 @@ describe("createDelegateCustomTools", () => {
     );
 
     expect(fake.created).toHaveLength(1);
-    expect(fake.created[0]!.model).toEqual(
-      resolveModelSelection("cursor-grok-4.5-high-fast"),
-    );
+    expect(fake.created[0]!.model).toBe("cursor-grok-4.5-high-fast");
     expect(fake.handles[0]!.sends).toHaveLength(1);
     expect(sentText(fake.handles[0]!.sends[0]!).startsWith(roleBody)).toBe(true);
     expect(sentText(fake.handles[0]!.sends[0]!).endsWith("do the thing")).toBe(

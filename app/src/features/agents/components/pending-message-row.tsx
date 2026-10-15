@@ -12,13 +12,11 @@ export function PendingMessageRow({
   conversationId,
   text,
   runActive,
-  model,
   steerFallback = false,
 }: {
   conversationId: string;
   text: string;
   runActive: boolean;
-  model: string;
   /** Queued because mid-run steer fell back to follow-up. */
   steerFallback?: boolean;
 }) {
@@ -54,13 +52,7 @@ export function PendingMessageRow({
 
   const sendNow = () => {
     if (sendMessage.isPending) return;
-    sendMessage.mutate({
-      id: conversationId,
-      body: {
-        prompt: text,
-        ...(model.trim() ? { model: model.trim() } : {}),
-      },
-    });
+    sendMessage.mutate({ id: conversationId, body: { prompt: text } });
   };
 
   return (

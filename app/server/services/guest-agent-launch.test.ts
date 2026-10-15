@@ -287,6 +287,7 @@ describe("guest agent launch refusals", () => {
     const resumeSdkAgent = vi.fn();
     const createPlatform = vi.fn();
     const { createAgentSdk } = await import("./agent-sdk.js");
+    const { parseModelKey } = await import("./model-selection.js");
     const sdk = createAgentSdk({
       createSdkAgent,
       resumeSdkAgent,
@@ -294,7 +295,7 @@ describe("guest agent launch refusals", () => {
       listSdkModels: async () => [],
       apiKey: "test",
     });
-    const model = { id: "composer-2.5" };
+    const model = parseModelKey("composer-2.5");
     await expect(
       sdk.createAgent({ cwd: "/repo", model, storeDir: "/store" }),
     ).rejects.toMatchObject({
