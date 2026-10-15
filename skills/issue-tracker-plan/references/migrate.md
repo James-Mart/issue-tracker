@@ -95,9 +95,9 @@ for each chosen direction on that surface:
    - Where the Story's prose and the attached mockup disagree, the prose wins
      on the point it names. The mockup stays the direction for everything the
      prose does not change.
-   - Where a mockup diverges from the `designSystem` supporting doc or from the
-     app's real components, those still win. Better spacing, copy, or polish is
-     expected rather than deviation.
+   - Where a mockup diverges from the `designSystem` supporting doc, existing
+     repo conventions, or the app's real components, those still win. Better
+     spacing, copy, or polish is expected rather than deviation.
    - No gate compares an implementation against the captures.
    - The named archive is reference material. Read it for composition, layout,
      class structure, and the enumeration of states the surface has to support.

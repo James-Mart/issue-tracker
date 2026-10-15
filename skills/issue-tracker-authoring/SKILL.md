@@ -235,8 +235,8 @@ support, where affordances live, how interactions behave) and an implementor
 honors those decisions while owning the execution; where the Story's prose
 and the attached mockup disagree, the prose wins on the point it names and
 the mockup stays the direction for everything the prose does not change;
-where a mockup diverges from the `designSystem` supporting doc or from the
-app's real components, those still win and better spacing, copy, or polish
+where a mockup diverges from the `designSystem` supporting doc, existing
+repo conventions, or the app's real components, those still win and better spacing, copy, or polish
 is expected rather than deviation; no gate compares an implementation
 against the captures; the archive is reference material for composition,
 layout, class structure, and state enumeration (lift deliberately); prop shapes were invented for rendering
