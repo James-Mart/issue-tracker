@@ -533,6 +533,12 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `<file>` is JSON `{ proposals }` (`-` reads stdin). An empty list moves the
   assessment to `noGaps`; any proposal moves it to `ready`. See
   [Standards assessment](#standards-assessment).
+- **`standards iterated`** (review only) —
+  `issue review standards iterated <reviewId> <submissionId> <file>` reports
+  an iterate pass on a submission whose assessment is `iterating`. `<file>` is
+  JSON `{ outcomes, added }` (`-` reads stdin). It moves the assessment back to
+  `ready`; a refused report also fails the pass. See
+  [Standards assessment](#standards-assessment).
 - **`standards applied`** (review only) —
   `issue review standards applied <reviewId> <submissionId>` reports that the
   accepted proposals were written to the coding-standards doc and moves an
@@ -1575,18 +1581,52 @@ conversation is listed among the review's agent runs with role
 `issue-tracker-standards-assessor`.
 
 `PATCH /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/proposals/:proposalId`
-with `{ decision?: "accepted" | "rejected" | null, editedAfter?: string | null }`
-records a human decision or an inline edit of `after` on one proposal and
-returns the review. At least one key is required; `null` clears that field and
-an absent key leaves it as stored. Setting one does not change the other. The
-request is refused unless the assessment is `ready`, and `editedAfter` is
-refused on a proposal whose `after` is empty.
+with `{ decision?: "accepted" | "rejected" | "iterate" | null, editedAfter?: string | null, feedback?: string | null }`
+records a human decision, an inline edit of `after`, or the Iterate feedback
+draft on one proposal and returns the review. At least one key is required;
+`null` clears that field and an absent key leaves it as stored. Setting one
+does not change the others, so `feedback` stays while another decision is
+chosen. The request is refused unless the assessment is `ready`, refused on a
+withdrawn proposal, and `editedAfter` is refused on a proposal whose `after`
+is empty.
 
 `POST /api/projects/:projectId/reviews/:reviewId/submissions/:submissionId/standards/submit`
-with an empty body submits a `ready` group and returns the review. It is
-refused unless every proposal has a `decision`, and refused when `doc` is
-workspace-backed. When any proposal is accepted, the assessment moves to
-`applying` and the server resumes the assessor conversation with the accepted
+with an empty body submits a `ready` group, clears any `error`, and returns
+the review. It is refused unless every proposal that is not withdrawn is
+accepted, rejected, or `iterate` with `feedback` that is not blank, and
+refused when `doc` is workspace-backed.
+
+When any proposal is `iterate`, the assessment moves to `iterating` and
+nothing is applied. The server sends every proposal (`after` is `editedAfter`
+when present, `decision`, and trimmed `feedback` on `iterate` proposals) to
+the assessor conversation, or to a new assessor conversation with the
+first-pass inputs when the recorded one is missing or archived. The pass does
+not create a submission; it is refused with `conflict` while the assessor
+conversation still has a run. `issue review standards iterated` reads
+`{ outcomes, added }`. Each `iterate` proposal has exactly one outcome
+`{ id, kind, proposal, reply? }`, where `proposal` is
+`{ section, before, after, rationale, threadIds }`:
+
+- `revise` replaces that proposal's text and clears its `decision`,
+  `editedAfter`, and `feedback`.
+- `push-back` requires `proposal` equal to the text sent and clears
+  `decision` and `feedback`.
+- `withdraw` requires `proposal` equal to the text sent, clears `decision`
+  and `feedback`, and sets `withdrawn: true`. A withdrawn proposal takes no
+  decision and is never applied.
+
+Each outcome stores the sent feedback as `sentFeedback` and replaces `reply`,
+clearing it when the outcome has none. `added` items
+`{ id, section, before, after, rationale, threadIds, reply? }` are appended
+undecided under new ids. Other proposals stay as they were. The command moves
+`iterating` back to `ready`. A report that misses an `iterate` proposal, names
+any other proposal, or fails these rules is refused, and the refusal fails the
+pass. A failed pass, including a run that ends while status is still
+`iterating`, moves the assessment back to `ready` with its pre-pass proposals
+and records `error`.
+
+When no proposal is `iterate` and any proposal is accepted, the assessment
+moves to `applying` and the server resumes the assessor conversation with the accepted
 proposals (`editedAfter` in place of `after` when present); that is refused
 with `conflict` while the assessor conversation still has a run. The assessor
 merges them into the full doc and writes it with `issue project attach --replace`,
@@ -1594,8 +1634,8 @@ and reports with `issue review standards applied <reviewId> <submissionId>`,
 which moves `applying` to `applied`. A pure addition is inserted at `line`,
 the end of its section in the doc as it reads at apply time. A run that ends while status is still
 `applying` moves it to `applyFailed` and records `error`. When every proposal
-is rejected, submit moves the assessment straight to `applied` without
-resuming the assessor.
+that is not withdrawn is rejected, submit moves the assessment straight to
+`applied` without resuming the assessor.
 
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via

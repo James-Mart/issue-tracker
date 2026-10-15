@@ -1,7 +1,8 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Check, X } from "lucide-react";
+import { ArrowUpRight, Check, MessageSquarePlus, X } from "lucide-react";
 import { proposalAfterText } from "@server/review-standards-status";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,7 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { cn } from "@/lib/utils/cn";
 import { useSetStandardsProposal } from "../api/mutations";
-import { proposalEditBody, type StandardsProposal } from "../lib/review-standards-ui";
+import {
+  proposalEditBody,
+  proposalFeedbackBody,
+  type StandardsProposal,
+} from "../lib/review-standards-ui";
 import { reviewThreadExcerpt, reviewThreadLocation } from "../lib/review-thread-label";
 import { StandardsProposalDiff } from "./review-standards-proposal-diff";
 
@@ -23,6 +28,8 @@ const DECISION_SELECTED: Record<Decision, string> = {
     "border-transparent bg-success/20 [color:hsl(var(--success))] hover:border-transparent",
   rejected:
     "border-transparent bg-destructive/20 [color:hsl(var(--blocked))] hover:border-transparent",
+  iterate:
+    "border-transparent bg-primary/20 [color:hsl(var(--current))] hover:border-transparent",
 };
 
 function ThreadSource({
@@ -136,6 +143,31 @@ function DecisionToggles({
     <div className="flex gap-1.5" role="group" aria-label="Decision">
       {toggle("accepted", "Accept", Check)}
       {toggle("rejected", "Reject", X)}
+      {toggle("iterate", "Iterate", MessageSquarePlus)}
+    </div>
+  );
+}
+
+function IterateNotes({ proposal }: { proposal: StandardsProposal }) {
+  const notes = [
+    { label: "Your feedback", body: proposal.sentFeedback, testId: "standards-sent-feedback" },
+    { label: "Assessor reply", body: proposal.reply, testId: "standards-assessor-reply" },
+  ].filter((note) => note.body);
+  if (notes.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {notes.map((note) => (
+        <div
+          key={note.label}
+          className="space-y-1 rounded-md border border-border bg-muted/20 p-2"
+          data-testid={note.testId}
+        >
+          <p className="text-xs text-muted-foreground">{note.label}</p>
+          <p className="whitespace-pre-wrap text-xs leading-snug text-foreground">
+            {note.body}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -208,7 +240,9 @@ export function StandardsProposalCard({
   fileText,
   fileLoading,
   fileError,
-  editable,
+  editable: groupEditable,
+  feedbackDraft,
+  onFeedbackDraft,
   threadsById,
   threadSearch,
 }: {
@@ -223,15 +257,21 @@ export function StandardsProposalCard({
   /** Set when the standards file could not be read. */
   fileError?: string;
   editable: boolean;
+  /** Iterate feedback as typed, when it differs from what is stored. */
+  feedbackDraft?: string;
+  onFeedbackDraft?: (draft: string) => void;
   threadsById: ReadonlyMap<string, CommentThread>;
   threadSearch: (threadId: string) => string;
 }) {
   // Clicking a toggle while editing blurs the editor first, so an edit and a decision
   // can be in flight together; each keeps its own pending value on screen.
-  const decide = useSetStandardsProposal(projectId);
-  const edit = useSetStandardsProposal(projectId);
+  const decide = useSetStandardsProposal(projectId, submissionId);
+  const edit = useSetStandardsProposal(projectId, submissionId);
+  const saveFeedback = useSetStandardsProposal(projectId, submissionId);
   const [editing, setEditing] = useState<{ initial: string } | null>(null);
-  const target = { reviewId, submissionId, proposalId: proposal.id };
+  const target = { reviewId, proposalId: proposal.id };
+  const withdrawn = proposal.withdrawn === true;
+  const editable = groupEditable && !withdrawn;
 
   const pendingDecision = decide.isPending ? decide.variables?.decision : undefined;
   const decision =
@@ -241,6 +281,7 @@ export function StandardsProposalCard({
     pendingEdit === undefined
       ? proposalAfterText(proposal)
       : (pendingEdit ?? proposal.after);
+  const feedback = feedbackDraft ?? proposal.feedback ?? "";
 
   const canEdit = editable && proposal.after.length > 0;
   const openEditor = useCallback(() => setEditing({ initial: after }), [after]);
@@ -255,10 +296,34 @@ export function StandardsProposalCard({
     );
   };
 
+  const commitFeedback = () => {
+    const body = proposalFeedbackBody(proposal, feedback);
+    if (body) saveFeedback.mutate({ ...target, ...body });
+  };
+
   return (
-    <Card className="space-y-2 p-3" data-testid="standards-proposal" data-proposal-id={proposal.id}>
+    <Card
+      className={cn("space-y-2 p-3", withdrawn && "bg-muted/20")}
+      data-testid="standards-proposal"
+      data-proposal-id={proposal.id}
+      data-withdrawn={withdrawn || undefined}
+    >
       <div className="space-y-0.5">
-        <h4 className="text-sm font-semibold text-foreground">{proposal.section}</h4>
+        <div className="flex flex-wrap items-center gap-2">
+          <h4
+            className={cn(
+              "text-sm font-semibold",
+              withdrawn ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {proposal.section}
+          </h4>
+          {withdrawn ? (
+            <Badge variant="todo" data-testid="standards-withdrawn">
+              Withdrawn
+            </Badge>
+          ) : null}
+        </div>
         <ProposalSourceLinks
           proposal={proposal}
           threadsById={threadsById}
@@ -285,22 +350,38 @@ export function StandardsProposalCard({
           />
         </div>
       ) : (
-        <StandardsProposalDiff
-          fileName={docFileName}
-          section={proposal.section}
-          before={proposal.before}
-          after={after}
-          fileText={fileText}
-          fileLoading={fileLoading}
-          fileError={fileError}
-          onEditAdded={canEdit ? openEditor : undefined}
+        <div className={cn(withdrawn && "opacity-60")}>
+          <StandardsProposalDiff
+            fileName={docFileName}
+            section={proposal.section}
+            before={proposal.before}
+            after={after}
+            fileText={fileText}
+            fileLoading={fileLoading}
+            fileError={fileError}
+            onEditAdded={canEdit ? openEditor : undefined}
+          />
+        </div>
+      )}
+      {withdrawn ? null : (
+        <DecisionToggles
+          decision={decision}
+          disabled={!editable || decide.isPending}
+          onDecide={(next) => decide.mutate({ ...target, decision: next })}
         />
       )}
-      <DecisionToggles
-        decision={decision}
-        disabled={!editable || decide.isPending}
-        onDecide={(next) => decide.mutate({ ...target, decision: next })}
-      />
+      <IterateNotes proposal={proposal} />
+      {editable && decision === "iterate" ? (
+        <Textarea
+          aria-label="Feedback for the assessor"
+          placeholder="What should change in this proposal?"
+          data-testid="standards-iterate-feedback"
+          value={feedback}
+          className="min-h-16 text-sm [field-sizing:content]"
+          onChange={(event) => onFeedbackDraft?.(event.target.value)}
+          onBlur={commitFeedback}
+        />
+      ) : null}
     </Card>
   );
 }

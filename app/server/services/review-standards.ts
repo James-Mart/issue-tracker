@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "fs";
-import { z } from "zod";
 import type { AgentRun, ConversationMeta, Issue } from "../schemas.js";
 import { formatZodError } from "../schemas.js";
 import type {
@@ -12,7 +11,6 @@ import {
   parseRetryReviewSubmissionBody,
   setStandardsProposalBodySchema,
 } from "../schemas/review.js";
-import { standardsProposalSchema } from "../schemas/review-state.js";
 import {
   everyProposalDecided,
   proposalAfterText,
@@ -22,6 +20,7 @@ import { applyPureAddition } from "../standards-proposal-anchor.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { prepareStoryChange } from "./change.js";
+import { conversationExists } from "./conversation-ids.js";
 import {
   createConversation,
   deleteConversation,
@@ -31,6 +30,12 @@ import {
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { readAll, readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
+import {
+  iterateRequestProposals,
+  mergeIterateReport,
+  proposalThreadError,
+  standardsSetFileSchema,
+} from "./review-standards-proposals.js";
 import { presentSubmissions } from "./review-submission-threads.js";
 import { launchRecordedSubmission, reviewOfConversation } from "./review-tasking.js";
 import { liveReviewWorktreePath } from "./review-worktree.js";
@@ -42,23 +47,6 @@ import { resolveSupportingDocPath } from "./supporting-docs.js";
 export const STANDARDS_ASSESSOR_ROLE = "issue-tracker-standards-assessor";
 
 const STANDARDS_ASSESSOR_DELEGATION_PREFIX = "standards-assessor:";
-
-const standardsSetProposalSchema = standardsProposalSchema
-  .omit({ decision: true, editedAfter: true })
-  .refine((proposal) => proposal.before.length > 0 || proposal.after.length > 0, {
-    message: "a proposal needs before or after text",
-  })
-  .refine((proposal) => !/[\r\n]/.test(proposal.rationale), {
-    message: "rationale is one line",
-  });
-
-const standardsSetFileSchema = z
-  .object({
-    proposals: z.array(standardsSetProposalSchema),
-  })
-  .strict();
-
-type StandardsSetProposal = z.infer<typeof standardsSetProposalSchema>;
 
 export type StandardsRunOutcome = {
   status: AgentRunStatus;
@@ -210,16 +198,21 @@ async function assessmentPrompt(
   ].join("\n");
 }
 
-/** The status a run works in, and where it lands when it ends without its verb. */
-type StandardsRunPhase = "assessing" | "applying";
+/**
+ * The status a run works in, and where it lands when it ends without its verb.
+ * A failed iterate pass leaves the round `ready` with its pre-pass proposals.
+ */
+type StandardsRunPhase = "assessing" | "iterating" | "applying";
 
 const PHASE_FAILED = {
   assessing: "assessFailed",
+  iterating: "ready",
   applying: "applyFailed",
 } as const satisfies Record<StandardsRunPhase, StandardsAssessment["status"]>;
 
 const PHASE_LABEL: Record<StandardsRunPhase, string> = {
   assessing: "standards assessment",
+  iterating: "standards revision",
   applying: "standards apply",
 };
 
@@ -317,48 +310,82 @@ async function launchStandardsAssessment(
   // Already recorded: a second route fire must not start another assessor.
   if (standards.conversationId) return;
 
-  try {
-    const prompt = await assessmentPrompt(projectId, review, submission, standards);
-    const meta = await createConversation({
-      title: "Coding standards assessment",
-      projectId,
-      model: loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
-      issueId: reviewId,
-      channel: "review",
-      role: STANDARDS_ASSESSOR_ROLE,
-      message: prompt,
-    });
-    try {
-      const recorded = patchSubmission(projectId, reviewId, submissionId, (stored) => {
-        const currentStandards = stored.standards;
-        if (!currentStandards || currentStandards.status !== "assessing") return stored;
-        if (currentStandards.conversationId) return stored;
-        return {
-          ...stored,
-          standards: { ...currentStandards, conversationId: meta.id },
-        };
-      });
-      const saved = recorded.submissions.find((item) => item.id === submissionId);
-      if (saved?.standards?.conversationId !== meta.id) {
-        await deleteConversation(meta.id);
-        return;
-      }
-    } catch (err) {
-      await deleteConversation(meta.id);
-      throw err;
-    }
-    const started = await startConversationPrompt(
-      meta.id,
-      prompt,
+  const launch = { projectId, reviewId, submissionId, phase: "assessing" } as const;
+  await runPhaseLaunch(launch, async () =>
+    startNewAssessor(
+      launch,
+      undefined,
+      await assessmentPrompt(projectId, review, submission, standards),
       sessions,
-      { persistPrompt: false },
-    );
-    if (!started.ok) {
-      markPhaseFailed(projectId, reviewId, submissionId, "assessing", started.message);
+    ),
+  );
+}
+
+type AssessorLaunch = {
+  projectId: string;
+  reviewId: string;
+  submissionId: string;
+  phase: StandardsRunPhase;
+};
+
+type PromptStart = Awaited<ReturnType<typeof startConversationPrompt>>;
+
+/** A start that does not run, or throws, fails the launch's phase. */
+async function runPhaseLaunch(
+  { projectId, reviewId, submissionId, phase }: AssessorLaunch,
+  start: () => Promise<PromptStart | undefined>,
+): Promise<void> {
+  try {
+    const started = await start();
+    if (started && !started.ok) {
+      markPhaseFailed(projectId, reviewId, submissionId, phase, started.message);
     }
   } catch (err) {
-    recordLaunchFailure(projectId, reviewId, submissionId, "assessing", err);
+    recordLaunchFailure(projectId, reviewId, submissionId, phase, err);
   }
+}
+
+/**
+ * Open an assessor conversation on `prompt` and record it in place of
+ * `priorConversationId`, then start the run. Returns `undefined` without
+ * starting when the submission has left `phase` or another launch recorded
+ * its conversation first.
+ */
+async function startNewAssessor(
+  { projectId, reviewId, submissionId, phase }: AssessorLaunch,
+  priorConversationId: string | undefined,
+  prompt: string,
+  sessions: AgentSessions,
+): Promise<PromptStart | undefined> {
+  const meta = await createConversation({
+    title: "Coding standards assessment",
+    projectId,
+    model: loadRoleModelPin(STANDARDS_ASSESSOR_ROLE),
+    issueId: reviewId,
+    channel: "review",
+    role: STANDARDS_ASSESSOR_ROLE,
+    message: prompt,
+  });
+  try {
+    const recorded = patchSubmission(projectId, reviewId, submissionId, (stored) => {
+      const currentStandards = stored.standards;
+      if (!currentStandards || currentStandards.status !== phase) return stored;
+      if (currentStandards.conversationId !== priorConversationId) return stored;
+      return {
+        ...stored,
+        standards: { ...currentStandards, conversationId: meta.id },
+      };
+    });
+    const saved = recorded.submissions.find((item) => item.id === submissionId);
+    if (saved?.standards?.conversationId !== meta.id) {
+      await deleteConversation(meta.id);
+      return undefined;
+    }
+  } catch (err) {
+    await deleteConversation(meta.id);
+    throw err;
+  }
+  return startConversationPrompt(meta.id, prompt, sessions, { persistPrompt: false });
 }
 
 /** The HTTP response has been sent, so a failed write is logged rather than thrown. */
@@ -389,7 +416,7 @@ function submissionNeedsStandardsLaunch(
 }
 
 function isRunPhase(status: StandardsAssessment["status"]): status is StandardsRunPhase {
-  return status === "assessing" || status === "applying";
+  return status === "assessing" || status === "iterating" || status === "applying";
 }
 
 function findRunning(conversationId: string):
@@ -419,7 +446,8 @@ function findRunning(conversationId: string):
 
 /**
  * A run that ends while still assessing did not report proposals; one that
- * ends while still applying did not report the apply.
+ * ends while still iterating did not report its outcomes; one that ends
+ * while still applying did not report the apply.
  */
 export function classifyStandardsAssessmentRun(
   conversationId: string,
@@ -449,17 +477,6 @@ export function failStandardsAssessmentClassification(
     found.phase,
     message.trim() || `${PHASE_LABEL[found.phase]} classification failed`,
   );
-}
-
-function proposalThreadError(
-  proposal: StandardsSetProposal,
-  allowed: ReadonlySet<string>,
-): string | undefined {
-  const unknown = proposal.threadIds.find((id) => !allowed.has(id));
-  if (unknown) {
-    return `proposal "${proposal.id}" names thread "${unknown}" outside the submission`;
-  }
-  return undefined;
 }
 
 /**
@@ -516,7 +533,10 @@ export function setReviewStandards(
   return status;
 }
 
-/** Record a human decision or inline edit on one proposal of a `ready` assessment. */
+/**
+ * Record a human decision, inline edit, or Iterate feedback draft on one
+ * proposal of a `ready` assessment. Withdrawn proposals take none.
+ */
 export function setStandardsProposal(
   projectId: string,
   reviewId: string,
@@ -531,7 +551,7 @@ export function setStandardsProposal(
       formatZodError(parsed.error, "invalid standards proposal body"),
     );
   }
-  const { decision, editedAfter } = parsed.data;
+  const { decision, editedAfter, feedback } = parsed.data;
   return patchSubmission(projectId, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "ready") {
@@ -544,8 +564,15 @@ export function setStandardsProposal(
     if (index < 0) {
       throw new IssueError("not_found", `unknown proposal "${proposalId}"`);
     }
-    const { decision: priorDecision, editedAfter: priorEdit, ...proposal } =
-      standards.proposals[index]!;
+    const {
+      decision: priorDecision,
+      editedAfter: priorEdit,
+      feedback: priorFeedback,
+      ...proposal
+    } = standards.proposals[index]!;
+    if (proposal.withdrawn) {
+      throw new IssueError("validation", `proposal "${proposalId}" was withdrawn`);
+    }
     if (typeof editedAfter === "string" && proposal.after.length === 0) {
       throw new IssueError(
         "validation",
@@ -554,11 +581,13 @@ export function setStandardsProposal(
     }
     const nextDecision = decision === undefined ? priorDecision : decision;
     const nextEdit = editedAfter === undefined ? priorEdit : editedAfter;
+    const nextFeedback = feedback === undefined ? priorFeedback : feedback;
     const proposals = standards.proposals.slice();
     proposals[index] = {
       ...proposal,
       ...(nextDecision ? { decision: nextDecision } : {}),
       ...(nextEdit ? { editedAfter: nextEdit } : {}),
+      ...(nextFeedback ? { feedback: nextFeedback } : {}),
     };
     return { ...stored, standards: { ...standards, proposals } };
   });
@@ -574,9 +603,10 @@ function assertAssessorIdle(
 }
 
 /**
- * Submit a `ready` group once every proposal is decided. Any accepted
- * proposal moves it to `applying` and the route resumes the assessor; an
- * all-rejected group lands on `applied` with no doc change.
+ * Submit a `ready` group once every proposal is decided. Any Iterate mark
+ * moves it to `iterating` and nothing is applied. Otherwise any accepted
+ * proposal moves it to `applying`; either way the route resumes the
+ * assessor. An all-rejected group lands on `applied` with no doc change.
  */
 export function submitStandardsGroup(
   projectId: string,
@@ -601,14 +631,16 @@ export function submitStandardsGroup(
     if (!everyProposalDecided(standards.proposals)) {
       throw new IssueError("validation", "every proposal needs a decision");
     }
-    const accepted = standards.proposals.some(
-      (proposal) => proposal.decision === "accepted",
-    );
-    if (accepted) assertAssessorIdle(standards, sessions);
-    return {
-      ...stored,
-      standards: { ...standards, status: accepted ? "applying" : "applied" },
-    };
+    const someMarked = (decision: "accepted" | "iterate") =>
+      standards.proposals.some((proposal) => proposal.decision === decision);
+    const status = someMarked("iterate")
+      ? "iterating"
+      : someMarked("accepted")
+        ? "applying"
+        : "applied";
+    if (status !== "applied") assertAssessorIdle(standards, sessions);
+    const { error: _error, ...rest } = standards;
+    return { ...stored, standards: { ...rest, status } };
   });
 }
 
@@ -646,15 +678,28 @@ function applyPrompt(
     .filter((proposal) => proposal.decision === "accepted")
     .map((proposal) => acceptedProposalForApply(proposal, fileText));
   return [
-    "Mode: apply",
-    `Review: ${reviewId}`,
-    `Submission: ${submissionId}`,
-    `Project: ${projectId}`,
-    docLine(standards.doc),
-    `Path: ${path}`,
+    ...assessorPromptHeader("apply", projectId, reviewId, submissionId, standards.doc, path),
     "Accepted proposals:",
     JSON.stringify(accepted, null, 2),
   ].join("\n");
+}
+
+function assessorPromptHeader(
+  mode: "apply" | "iterate",
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  doc: StandardsAssessment["doc"],
+  path: string,
+): string[] {
+  return [
+    `Mode: ${mode}`,
+    `Review: ${reviewId}`,
+    `Submission: ${submissionId}`,
+    `Project: ${projectId}`,
+    docLine(doc),
+    `Path: ${path}`,
+  ];
 }
 
 /**
@@ -668,28 +713,109 @@ async function launchStandardsApply(
   standards: StandardsAssessment,
   sessions: AgentSessions,
 ): Promise<void> {
-  try {
+  await runPhaseLaunch({ projectId, reviewId, submissionId, phase: "applying" }, () => {
     const conversationId = standards.conversationId;
     if (!conversationId) {
       throw new Error(`submission "${submissionId}" has no assessor conversation`);
     }
-    const started = await startConversationPrompt(
+    return startConversationPrompt(
       conversationId,
       applyPrompt(projectId, reviewId, submissionId, standards),
       sessions,
     );
-    if (!started.ok) {
-      markPhaseFailed(projectId, reviewId, submissionId, "applying", started.message);
+  });
+}
+
+function iteratePrompt(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  standards: StandardsAssessment,
+): string {
+  const path = standardsDocPath(projectId, standards.doc);
+  return [
+    ...assessorPromptHeader("iterate", projectId, reviewId, submissionId, standards.doc, path),
+    "Proposals:",
+    JSON.stringify(iterateRequestProposals(standards.proposals), null, 2),
+  ].join("\n");
+}
+
+/** A recorded assessor conversation that can still take a prompt. */
+function resumableAssessor(conversationId: string | undefined): conversationId is string {
+  if (!conversationId || !conversationExists(conversationId)) return false;
+  return !readConversationMeta(conversationId).archived;
+}
+
+/**
+ * Send an `iterating` group's marks to its assessor: the same conversation
+ * when it can still take a prompt, else a new assessor that also gets the
+ * first-pass inputs. A failure returns the group to `ready` with `error`.
+ */
+async function launchStandardsIterate(
+  projectId: string,
+  review: ReviewRecordView,
+  submission: ReviewSubmission,
+  standards: StandardsAssessment,
+  sessions: AgentSessions,
+): Promise<void> {
+  const reviewId = review.id;
+  const submissionId = submission.id;
+  const launch = { projectId, reviewId, submissionId, phase: "iterating" } as const;
+  await runPhaseLaunch(launch, async () => {
+    const prompt = iteratePrompt(projectId, reviewId, submissionId, standards);
+    const conversationId = standards.conversationId;
+    if (resumableAssessor(conversationId)) {
+      return startConversationPrompt(conversationId, prompt, sessions);
     }
-  } catch (err) {
-    recordLaunchFailure(projectId, reviewId, submissionId, "applying", err);
-  }
+    const firstPass = await assessmentPrompt(projectId, review, submission, standards);
+    return startNewAssessor(
+      launch,
+      conversationId,
+      [firstPass, "", prompt].join("\n"),
+      sessions,
+    );
+  });
+}
+
+/**
+ * Handler for `issue review standards iterated`. Lands an iterate pass's
+ * outcomes and added proposals and returns the group to `ready`. A refused
+ * report fails the pass: the group returns to `ready` with its pre-pass
+ * proposals and the refusal as `error`, and the refusal is thrown.
+ */
+export function recordStandardsIterate(
+  reviewId: string,
+  submissionId: string,
+  raw: unknown,
+): void {
+  const review = readReviewOrThrow(reviewId);
+  let refused: IssueError | undefined;
+  patchSubmission(review.partOf, reviewId, submissionId, (stored) => {
+    const standards = stored.standards;
+    if (!standards || standards.status !== "iterating") {
+      throw new IssueError(
+        "validation",
+        `standards assessment is ${standards?.status ?? "absent"}`,
+      );
+    }
+    try {
+      const proposals = mergeIterateReport(standards.proposals, stored.threadIds, raw);
+      const { error: _error, ...rest } = standards;
+      return { ...stored, standards: { ...rest, status: "ready", proposals } };
+    } catch (err) {
+      if (!(err instanceof IssueError)) throw err;
+      refused = err;
+      return { ...stored, standards: { ...standards, status: "ready", error: err.message } };
+    }
+  });
+  if (refused) throw refused;
 }
 
 /**
  * Start the run a submit or retry left the assessment waiting on: a fresh
- * assessor while `assessing` with no conversation, or a resumed apply while
- * `applying`. Any other status starts nothing.
+ * assessor while `assessing` with no conversation, the assessor on the
+ * Iterate marks while `iterating`, or a resumed apply while `applying`. Any
+ * other status starts nothing.
  */
 export async function launchStandardsRun(
   projectId: string,
@@ -702,6 +828,8 @@ export async function launchStandardsRun(
   const standards = submission?.standards;
   if (submissionNeedsStandardsLaunch(submission)) {
     await launchStandardsAssessment(projectId, reviewId, submissionId, sessions);
+  } else if (submission && standards?.status === "iterating") {
+    await launchStandardsIterate(projectId, review, submission, standards, sessions);
   } else if (standards?.status === "applying") {
     await launchStandardsApply(projectId, reviewId, submissionId, standards, sessions);
   }
@@ -774,7 +902,7 @@ export function standardsAgentRunStatus(
 ): AgentRun["status"] {
   if (live) return "running";
   if (status === "assessFailed" || status === "applyFailed") return "error";
-  if (status === "assessing" || status === "applying") return "unknown";
+  if (isRunPhase(status)) return "unknown";
   return "completed";
 }
 
