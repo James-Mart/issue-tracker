@@ -225,6 +225,14 @@ const work: Pipeline = {
       source: "agents/_issue-tracker-implementor.md",
     },
     {
+      id: "research",
+      name: "Focused codebase research",
+      shortLabel: "Research",
+      kind: "step",
+      pipeline: "work",
+      source: "agents/issue-tracker-research.md",
+    },
+    {
       id: "record-commit",
       name: "Record commit",
       kind: "step",
@@ -317,6 +325,7 @@ const work: Pipeline = {
     },
   ],
   edges: [
+    { from: "implement", to: "research", kind: "spawn" },
     { from: "implement", to: "record-commit", kind: "spawn" },
     // Each reviewer returns its findings to the implementor, as
     // `record-commit` does, so none has an edge of its own onward.

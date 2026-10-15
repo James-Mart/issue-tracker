@@ -7,7 +7,13 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-implement.md`
 
-1. Implement what the Task's `description.md` specifies. Also do anything
+1. **Research first.** Delegate each question that needs a search across
+   files — where a behavior lives, what depends on it, which helper already
+   exists — as a **Research** stub, at most three at a time. Take facts about
+   code you won't edit from the replies, and send a follow-up **Research**
+   when a reply leaves the question open. Questions that come up later go
+   the same way.
+   Implement what the Task's `description.md` specifies. Also do anything
    that obviously belongs with it for internal consistency.
    When `issue task get <id> appended` prints `true`, read
    `issue story get <storyId> mergeBaseRef` (`<storyId>` is the parent Story
