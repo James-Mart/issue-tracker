@@ -143,18 +143,42 @@ function portRows(rail: HTMLElement): HTMLElement[] {
   );
 }
 
+/** Vertical center of a node row, px from the rail's top. */
+function rowCenter(railBox: DOMRect, row: HTMLElement): number {
+  const box = row.getBoundingClientRect();
+  return box.top - railBox.top + box.height / 2;
+}
+
 /**
  * Vertical center (px from the rail's top) of the port at `index`, taken from
  * the node row itself so a wrapped or taller row carries its port — and the
  * work-cursor — with it.
  */
 function portCenter(rail: HTMLElement, index: number): number {
-  const row = portRows(rail)[index].getBoundingClientRect();
-  return row.top - rail.getBoundingClientRect().top + row.height / 2;
+  return rowCenter(rail.getBoundingClientRect(), portRows(rail)[index]);
 }
 
 /** Work-cursor travel time; keep in step with the `duration-700` class below. */
 const WORK_CURSOR_TRAVEL_MS = 700;
+
+/**
+ * `inset` keeps a stub past the end ports. `ports` draws the spine from the
+ * first port to the last, so a headed group starts on its heading node.
+ * Fewer than two ports keeps the inset stub — a first-to-last span has no length.
+ */
+export type RailSpine = "inset" | "ports";
+
+/** First-to-last port span. `null` when the rail has fewer than two ports. */
+function portSpineSpan(
+  rail: HTMLElement,
+): { top: number; bottom: number } | null {
+  const rows = portRows(rail);
+  if (rows.length < 2) return null;
+  const railBox = rail.getBoundingClientRect();
+  const top = rowCenter(railBox, rows[0]);
+  const last = rowCenter(railBox, rows[rows.length - 1]);
+  return { top, bottom: Math.max(0, railBox.height - last) };
+}
 
 export interface RailProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
@@ -164,10 +188,22 @@ export interface RailProps extends React.HTMLAttributes<HTMLDivElement> {
    * the position on its own.
    */
   live?: boolean;
+  /**
+   * Where the spine starts and ends. Defaults to the inset stub.
+   * `ports` with a single node stays on that stub.
+   */
+  spine?: RailSpine;
 }
 
 /** Single-spine lifecycle Rail: an ordered dependency spine of state-encoded ports. */
-export function Rail({ className, children, live, ...props }: RailProps) {
+export function Rail({
+  className,
+  children,
+  live,
+  spine = "inset",
+  style,
+  ...props
+}: RailProps) {
   const states = React.Children.toArray(children).flatMap((child) =>
     React.isValidElement(child) &&
     (child.props as Partial<RailNodeProps>).state != null
@@ -179,21 +215,45 @@ export function Rail({ className, children, live, ...props }: RailProps) {
   const [center, setCenter] = React.useState<number | null>(null);
   const [traveling, setTraveling] = React.useState(false);
   const restingAt = React.useRef<number | null>(null);
+  const [spineSpan, setSpineSpan] = React.useState<{
+    top: number;
+    bottom: number;
+  } | null>(null);
 
   React.useLayoutEffect(() => {
-    if (target == null) {
+    if (target == null && spine !== "ports") {
       setCenter(null);
+      setSpineSpan(null);
       return;
     }
     const rail = railRef.current;
     if (!rail) return;
-    const measure = () => setCenter(portCenter(rail, target));
+    const measure = () => {
+      setCenter(target == null ? null : portCenter(rail, target));
+      if (spine !== "ports") {
+        setSpineSpan(null);
+        return;
+      }
+      const next = portSpineSpan(rail);
+      setSpineSpan((prev) => {
+        if (prev == null && next == null) return prev;
+        if (
+          prev != null &&
+          next != null &&
+          prev.top === next.top &&
+          prev.bottom === next.bottom
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    };
     measure();
-    // Row height is content-driven (labels wrap), so the port center moves.
+    // Row height is content-driven (labels wrap), so port centers move.
     const observer = new ResizeObserver(measure);
     observer.observe(rail);
     return () => observer.disconnect();
-  }, [target]);
+  }, [target, spine, states.length]);
 
   React.useLayoutEffect(() => {
     const from = restingAt.current;
@@ -213,18 +273,35 @@ export function Rail({ className, children, live, ...props }: RailProps) {
     return () => window.clearTimeout(timer);
   }, [target]);
 
+  const clipSpine = spine === "ports" && spineSpan != null;
+
   return (
     <div
       ref={railRef}
       role="list"
+      data-spine={clipSpine ? "ports" : "inset"}
       className={cn(
         "relative pl-[26px]",
         // Spine (2px at left-7), ports (12px at -24 from each node), and the
         // work-cursor bead (10px at left-3) share horizontal center at 8px.
         // the mainline spine: a 2px vertical gradient (rail-lit -> rail)
-        "before:absolute before:left-[7px] before:bottom-2 before:top-2 before:w-[2px] before:rounded-[2px] before:bg-gradient-to-b before:from-[hsl(var(--rail-lit))] before:to-[hsl(var(--rail))] before:content-['']",
+        "before:absolute before:left-[7px] before:w-[2px] before:rounded-[2px] before:bg-gradient-to-b before:from-[hsl(var(--rail-lit))] before:to-[hsl(var(--rail))] before:content-['']",
+        clipSpine
+          ? "before:top-[var(--rail-spine-top)] before:bottom-[var(--rail-spine-bottom)]"
+          : "before:bottom-2 before:top-2",
         className,
       )}
+      style={
+        {
+          ...style,
+          ...(clipSpine
+            ? {
+                "--rail-spine-top": `${spineSpan.top}px`,
+                "--rail-spine-bottom": `${spineSpan.bottom}px`,
+              }
+            : null),
+        } as React.CSSProperties
+      }
       {...props}
     >
       {center != null && (

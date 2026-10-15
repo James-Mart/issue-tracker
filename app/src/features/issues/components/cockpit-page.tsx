@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
 import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
@@ -7,6 +7,7 @@ import { outlineIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { COCKPIT_COLUMN_CLASS, PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
+import { RailNode, type RailSpine } from "@/components/ui/rail";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -32,12 +33,15 @@ import {
   projectIdOf,
   type ProjectRecord,
 } from "../lib/build-tree";
-import { isReadyToLandFromIndexes } from "../lib/derived";
 import {
   buildTreeRowIndexes,
   type TreeRowIndexes,
 } from "../lib/tree-row-indexes";
 import { flowBuckets, type FlowBuckets, type FlowItem } from "../lib/flow";
+import {
+  groupSectionRows,
+  type SectionGroup,
+} from "../lib/group-section-rows";
 import { issuePath, projectPath } from "../lib/links";
 import {
   cockpitLaunchFaultMessage,
@@ -148,49 +152,152 @@ type ProjectFlowGroup = {
   items: FlowItem[];
 };
 
-/**
- * Parent-Epic caption for a Ready-to-land Story at `index` when it starts a
- * run of adjacent epic-child siblings. Project-level Stories return null.
- */
-export function readyToLandEpicCaption(
-  items: readonly FlowItem[],
-  index: number,
-  indexes: TreeRowIndexes,
-): { id: string; title: string } | null {
-  const item = items[index];
-  if (!item || item.issue.kind !== "story") return null;
-  if (!isReadyToLandFromIndexes(item.issue, item.state, indexes)) return null;
-  const parent = indexes.byId.get(item.issue.partOf);
-  if (parent?.kind !== "epic") return null;
-  const prev = items[index - 1];
-  if (
-    prev?.issue.kind === "story" &&
-    prev.issue.partOf === parent.id &&
-    isReadyToLandFromIndexes(prev.issue, prev.state, indexes)
-  ) {
-    return null;
-  }
-  return { id: parent.id, title: parent.title };
-}
+const SECTION_SCOPED_BUCKETS: ReadonlySet<FlowBucketKey> = new Set([
+  "readyToLand",
+  "needsAttention",
+]);
 
-function CockpitEpicCaption({
+/** Title node that opens the epic. The group stays expanded. */
+function EpicGroupTitle({
+  projectId,
+  epicId,
   title,
-  first,
 }: {
+  projectId: string;
+  epicId: string;
   title: string;
-  first: boolean;
 }) {
   return (
-    <p
-      data-testid="ready-to-land-epic-caption"
-      className={cn(
-        "truncate text-[13px] font-medium text-muted-foreground",
-        !first && "mt-2",
-      )}
-    >
-      {title}
-    </p>
+    <RailNode state="ready" edge="solid" className="items-start py-1">
+      <Link
+        to={issuePath(projectId, epicId)}
+        state={{ issueBackStack: [{ kind: "cockpit" }] }}
+        data-testid="epic-group-title"
+        title={title}
+        className="min-w-0 max-w-full truncate text-[13px] font-medium text-foreground hover:underline"
+      >
+        {title}
+      </Link>
+    </RailNode>
   );
+}
+
+function CockpitFlowRail({
+  items,
+  indexes,
+  previewLimit,
+  projectId,
+  compact,
+  queue,
+  spine,
+  leading,
+  railProps,
+  listClassName,
+  flowRow,
+}: {
+  items: FlowItem[];
+  indexes: TreeRowIndexes;
+  previewLimit?: number;
+  projectId: string;
+  compact?: boolean;
+  queue?: boolean;
+  spine?: RailSpine;
+  leading?: ReactNode;
+  railProps?: Omit<HTMLAttributes<HTMLDivElement>, "className" | "style">;
+  listClassName?: string;
+  flowRow: (
+    item: FlowItem,
+    projectId: string,
+    projectTitle?: string,
+    queueChrome?: QueueRowChrome,
+  ) => ReactNode;
+}) {
+  return (
+    <FlowPreviewedItems
+      items={items}
+      indexes={indexes}
+      previewLimit={previewLimit}
+      asRail
+      spine={spine}
+      leading={leading}
+      railProps={railProps}
+      liveItem={queue ? (item) => item.queueStage === "running" : undefined}
+      listClassName={listClassName ?? (compact ? "mt-1 gap-1" : "mt-1.5 gap-1")}
+      renderItem={(item) =>
+        queue ? (
+          <QueueBucketRow item={item} projectId={projectId} render={flowRow} />
+        ) : (
+          flowRow(item, projectId)
+        )
+      }
+    />
+  );
+}
+
+function sectionGroupKey(sectionGroup: SectionGroup): string {
+  if (sectionGroup.head.kind === "none") {
+    return `none:${sectionGroup.items[0].issue.id}`;
+  }
+  return `${sectionGroup.head.kind}:${sectionGroup.head.epicId}`;
+}
+
+function CockpitSectionGroupRail({
+  sectionGroup,
+  projectId,
+  byId,
+  indexes,
+  previewLimit,
+  flowRow,
+}: {
+  sectionGroup: SectionGroup;
+  projectId: string;
+  byId: Map<string, IssueRecord>;
+  indexes: TreeRowIndexes;
+  previewLimit?: number;
+  flowRow: (
+    item: FlowItem,
+    projectId: string,
+    projectTitle?: string,
+    queueChrome?: QueueRowChrome,
+  ) => ReactNode;
+}) {
+  const head = sectionGroup.head;
+  const epicId = head.kind === "none" ? undefined : head.epicId;
+  return (
+    <CockpitFlowRail
+      items={sectionGroup.items}
+      indexes={indexes}
+      previewLimit={previewLimit}
+      projectId={projectId}
+      flowRow={flowRow}
+      spine={head.kind === "none" ? "inset" : "ports"}
+      listClassName="gap-1"
+      leading={
+        head.kind === "title" ? (
+          <EpicGroupTitle
+            projectId={projectId}
+            epicId={head.epicId}
+            title={epicHeadingTitle(byId, head.epicId)}
+          />
+        ) : undefined
+      }
+      railProps={{
+        "data-epic-group": head.kind,
+        ...(epicId != null ? { "data-epic-id": epicId } : null),
+      }}
+    />
+  );
+}
+
+function epicHeadingTitle(
+  byId: Map<string, IssueRecord>,
+  epicId: string,
+): string {
+  const epic = byId.get(epicId);
+  if (epic?.kind !== "epic") {
+    throw new Error(`Cockpit epic heading ${epicId} is missing`);
+  }
+  return epic.title;
 }
 
 /** Display name for a cockpit project id. */
@@ -343,6 +450,8 @@ export function CockpitPage() {
       bucketKey?: FlowBucketKey,
     ) => {
       const queueBucket = bucketKey === "queue";
+      const sectionScoped =
+        bucketKey != null && SECTION_SCOPED_BUCKETS.has(bucketKey);
       const groups = groupFlowItemsByProject(items, byId, projectOrder);
       const list = (
         <div className={cn("flex flex-col", compact ? "gap-2" : "gap-3")}>
@@ -352,43 +461,37 @@ export function CockpitPage() {
                 projectId={group.projectId}
                 projectTitle={group.projectTitle}
               />
-              <FlowPreviewedItems
-                items={group.items}
-                indexes={indexes}
-                previewLimit={previewLimit}
-                asRail
-                liveItem={
-                  queueBucket
-                    ? (item) => item.queueStage === "running"
-                    : undefined
-                }
-                listClassName={compact ? "mt-1 gap-1" : "mt-1.5 gap-1"}
-                beforeItem={(item, index, visible) => {
-                  const caption = readyToLandEpicCaption(
-                    visible,
-                    index,
-                    indexes,
-                  );
-                  if (!caption) return null;
-                  return (
-                    <CockpitEpicCaption
-                      title={caption.title}
-                      first={index === 0}
-                    />
-                  );
-                }}
-                renderItem={(item) =>
-                  queueBucket ? (
-                    <QueueBucketRow
-                      item={item}
+              {sectionScoped ? (
+                <div
+                  data-testid="cockpit-epic-groups"
+                  className={cn(
+                    "flex flex-col",
+                    compact ? "mt-1 gap-3" : "mt-1.5 gap-4",
+                  )}
+                >
+                  {groupSectionRows(group.items, byId).map((sectionGroup) => (
+                    <CockpitSectionGroupRail
+                      key={sectionGroupKey(sectionGroup)}
+                      sectionGroup={sectionGroup}
                       projectId={group.projectId}
-                      render={flowRow}
+                      byId={byId}
+                      indexes={indexes}
+                      previewLimit={previewLimit}
+                      flowRow={flowRow}
                     />
-                  ) : (
-                    flowRow(item, group.projectId)
-                  )
-                }
-              />
+                  ))}
+                </div>
+              ) : (
+                <CockpitFlowRail
+                  items={group.items}
+                  indexes={indexes}
+                  previewLimit={previewLimit}
+                  projectId={group.projectId}
+                  compact={compact}
+                  queue={queueBucket}
+                  flowRow={flowRow}
+                />
+              )}
             </div>
           ))}
         </div>
