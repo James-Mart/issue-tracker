@@ -1,9 +1,16 @@
-import { cloneElement, isValidElement, useMemo, useState, type ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
-import { Rail } from "@/components/ui/rail";
+import { Rail, type RailSpine } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import { issueRailNodeState } from "../lib/rail-state";
 import { parentOf } from "../lib/build-tree";
@@ -274,9 +281,11 @@ export function FlowPreviewedItems({
   previewLimit,
   listClassName,
   renderItem,
-  beforeItem,
+  leading,
   asRail,
   liveItem,
+  spine,
+  railProps,
 }: {
   items: FlowItem[];
   /** Snapshot used to build row indexes when `indexes` is omitted. */
@@ -286,16 +295,16 @@ export function FlowPreviewedItems({
   previewLimit?: number;
   listClassName?: string;
   renderItem: (item: FlowItem) => ReactNode;
-  /** Optional caption or chrome immediately before this visible row. */
-  beforeItem?: (
-    item: FlowItem,
-    index: number,
-    visible: FlowItem[],
-  ) => ReactNode;
+  /** First node on a rail, ahead of the rows. */
+  leading?: ReactNode;
   /** Cockpit lists: one spine, state disc on each row. */
   asRail?: boolean;
   /** When set, decides which rows light the spine. Defaults to in-flight rail state. */
   liveItem?: (item: FlowItem) => boolean;
+  /** Headed groups clip the spine to the first and last ports. */
+  spine?: RailSpine;
+  /** Extra attributes on the rail element (data attributes, labels). */
+  railProps?: Omit<HTMLAttributes<HTMLDivElement>, "className" | "style">;
 }) {
   const [showAll, setShowAll] = useState(false);
   const rowIndexes = useMemo(
@@ -311,21 +320,18 @@ export function FlowPreviewedItems({
       issueRailNodeState(item.issue, item.state, rowIndexes) === "in-flight",
   );
 
-  const rows = visible.flatMap((item, index) => {
+  const leadingNode =
+    leading != null && isValidElement(leading)
+      ? cloneElement(leading, { key: "leading" })
+      : leading;
+
+  const rows = visible.flatMap((item) => {
     const row = renderItem(item);
     if (row == null) return [];
-    const keyedRow =
-      asRail && isValidElement(row)
-        ? cloneElement(row, { key: item.issue.id })
-        : (
-            <li key={item.issue.id}>{row}</li>
-          );
-    const before = beforeItem?.(item, index, visible);
-    if (before == null || before === false) return [keyedRow];
-    const keyedBefore = isValidElement(before)
-      ? cloneElement(before, { key: `before-${item.issue.id}` })
-      : before;
-    return [keyedBefore, keyedRow];
+    if (asRail && isValidElement(row)) {
+      return [cloneElement(row, { key: item.issue.id })];
+    }
+    return [<li key={item.issue.id}>{row}</li>];
   });
 
   return (
@@ -333,10 +339,13 @@ export function FlowPreviewedItems({
       {asRail ? (
         <Rail
           live={live}
+          spine={spine}
           data-testid="flow-bucket-rail"
           data-live={live ? "true" : "false"}
           className={cn("flex flex-col", listClassName)}
+          {...railProps}
         >
+          {leadingNode}
           {rows}
         </Rail>
       ) : (
