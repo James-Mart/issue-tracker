@@ -6,6 +6,7 @@
  * immediately before the next heading at the same level or higher.
  * Zero matches or more than one match is the excerpt: the card diffs
  * `before` and `after` with no file surroundings.
+ * `applyPureAddition` returns that same end as a 1-based line for apply.
  */
 export type StandardsProposalDiffResolution =
   | { kind: "excerpt" }
@@ -101,6 +102,59 @@ function insertOnOwnLines(fileText: string, index: number, addition: string): st
   return prefix + text + suffix;
 }
 
+/**
+ * 1-based line where text inserted at `index` begins.
+ * A mid-line index starts on the following line, matching `insertOnOwnLines`.
+ */
+function additionAnchorLine(fileText: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index; i++) {
+    if (fileText[i] === "\n") line++;
+  }
+  const atLineStart = index === 0 || fileText[index - 1] === "\n";
+  return atLineStart ? line : line + 1;
+}
+
+type SectionAnchor = {
+  start: number;
+  end: number;
+  additionLine: number;
+};
+
+/** The named section, plus the line where a pure addition at its end begins. */
+function sectionAnchor(fileText: string, section: string): SectionAnchor | undefined {
+  const body = sectionBody(fileText, section);
+  if (!body) return undefined;
+  return {
+    start: body.start,
+    end: body.end,
+    additionLine: additionAnchorLine(fileText, body.end),
+  };
+}
+
+/**
+ * Line of the addition anchor for an accepted pure addition, in `fileText`
+ * as it reads at apply time. The addition starts at `line`, immediately
+ * before the next heading at the same level or higher, or on the line
+ * after the file when the section runs to the end.
+ */
+export function applyPureAddition(input: {
+  section: string;
+  after: string;
+  fileText: string;
+}): { line: number } {
+  if (input.after.length === 0) {
+    throw new Error("a pure addition needs after text");
+  }
+  const anchor = sectionAnchor(input.fileText, input.section);
+  if (!anchor) {
+    throw new Error(
+      `section "${input.section.trim()}" is not a unique heading in the standards file`,
+    );
+  }
+  return { line: anchor.additionLine };
+}
+
 /** Index of `needle` when it occurs once, otherwise undefined. */
 function onlyOccurrence(haystack: string, needle: string): number | undefined {
   const first = haystack.indexOf(needle);
@@ -115,25 +169,25 @@ export function resolveStandardsProposalDiff(input: {
   after: string;
   fileText: string;
 }): StandardsProposalDiffResolution {
-  const body = sectionBody(input.fileText, input.section);
-  if (!body) return { kind: "excerpt" };
+  const anchor = sectionAnchor(input.fileText, input.section);
+  if (!anchor) return { kind: "excerpt" };
 
   if (input.before.length === 0) {
     return {
       kind: "anchored",
       oldText: input.fileText,
-      newText: insertOnOwnLines(input.fileText, body.end, input.after),
+      newText: insertOnOwnLines(input.fileText, anchor.end, input.after),
     };
   }
 
-  const slice = input.fileText.slice(body.start, body.end);
+  const slice = input.fileText.slice(anchor.start, anchor.end);
   if (onlyOccurrence(slice, input.before) === undefined) return { kind: "excerpt" };
   return {
     kind: "anchored",
     oldText: input.fileText,
     newText:
-      input.fileText.slice(0, body.start) +
+      input.fileText.slice(0, anchor.start) +
       slice.replace(input.before, input.after) +
-      input.fileText.slice(body.end),
+      input.fileText.slice(anchor.end),
   };
 }

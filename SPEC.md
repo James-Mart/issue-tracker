@@ -1589,9 +1589,10 @@ workspace-backed. When any proposal is accepted, the assessment moves to
 `applying` and the server resumes the assessor conversation with the accepted
 proposals (`editedAfter` in place of `after` when present); that is refused
 with `conflict` while the assessor conversation still has a run. The assessor
-merges them into the full doc, writes it with `issue project attach --replace`,
+merges them into the full doc and writes it with `issue project attach --replace`,
 and reports with `issue review standards applied <reviewId> <submissionId>`,
-which moves `applying` to `applied`. A run that ends while status is still
+which moves `applying` to `applied`. A pure addition is inserted at `line`,
+the end of its section in the doc as it reads at apply time. A run that ends while status is still
 `applying` moves it to `applyFailed` and records `error`. When every proposal
 is rejected, submit moves the assessment straight to `applied` without
 resuming the assessor.

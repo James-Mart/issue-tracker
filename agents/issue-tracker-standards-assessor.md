@@ -66,18 +66,21 @@ the proposals the human accepted:
 - `Review:` and `Submission:` — as in the first prompt
 - `Project: <projectId>` — the Project that owns the doc
 - `Coding standards: attachment <name>` and `Path: <absolute>` — the doc as it is now
-- `Accepted proposals:` followed by a JSON array. Each item has `id`, `section`, `before`, and `after`. `after` already carries the human's edit.
+- `Accepted proposals:` followed by a JSON array. Each item has `id`, `section`, `before`, and `after`. `after` already carries the human's edit. An item with an empty `before` also has `line`, the 1-based line in the file at `Path` where that addition starts.
 
 1. Read `Path`.
-2. Merge each accepted proposal into that doc. Under `section`, replace `before` with `after`. An empty `before` adds `after` under `section`. An empty `after` deletes `before`. Keep every other line as it is.
-3. Write the full merged doc to `<dir>/<name>`, where `<dir>` is a new directory outside `Workspace` and `<name>` is the attachment name.
-4. Replace the attachment:
+2. A pure addition is an empty `before` with a `line`. `after` starts on that line of the doc from step 1, on its own lines. When that line already has text, that text stays immediately after `after`.
+3. Insert those additions from the highest `line` to the lowest. When several additions share a `line`, insert the later accepted item first.
+4. Under `section`, replace each remaining proposal's `before` with `after`, deleting `before` when `after` is empty.
+5. Keep every other line as it is.
+6. Write the full merged doc to `<dir>/<name>`, where `<dir>` is a new directory outside `Workspace` and `<name>` is the attachment name.
+7. Replace the attachment:
 
 ```bash
 issue project attach <projectId> <dir>/<name> --replace
 ```
 
-5. Report the apply:
+8. Report the apply:
 
 ```bash
 issue review standards applied <reviewId> <submissionId>

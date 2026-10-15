@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { z } from "zod";
 import type { AgentRun, ConversationMeta, Issue } from "../schemas.js";
 import { formatZodError } from "../schemas.js";
@@ -18,6 +18,7 @@ import {
   proposalAfterText,
   WORKSPACE_STANDARDS_SUBMIT_REASON,
 } from "../review-standards-status.js";
+import { applyPureAddition } from "../standards-proposal-anchor.js";
 import type { AgentRunStatus } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import { prepareStoryChange } from "./change.js";
@@ -611,27 +612,46 @@ export function submitStandardsGroup(
   });
 }
 
+function acceptedProposalForApply(
+  proposal: StandardsAssessment["proposals"][number],
+  fileText: string,
+): {
+  id: string;
+  section: string;
+  before: string;
+  after: string;
+  line?: number;
+} {
+  const after = proposalAfterText(proposal);
+  return {
+    id: proposal.id,
+    section: proposal.section,
+    before: proposal.before,
+    after,
+    ...(proposal.before.length === 0
+      ? { line: applyPureAddition({ section: proposal.section, after, fileText }).line }
+      : {}),
+  };
+}
+
 function applyPrompt(
   projectId: string,
   reviewId: string,
   submissionId: string,
   standards: StandardsAssessment,
 ): string {
+  const path = standardsDocPath(projectId, standards.doc);
+  const fileText = readFileSync(path, "utf8");
   const accepted = standards.proposals
     .filter((proposal) => proposal.decision === "accepted")
-    .map((proposal) => ({
-      id: proposal.id,
-      section: proposal.section,
-      before: proposal.before,
-      after: proposalAfterText(proposal),
-    }));
+    .map((proposal) => acceptedProposalForApply(proposal, fileText));
   return [
     "Mode: apply",
     `Review: ${reviewId}`,
     `Submission: ${submissionId}`,
     `Project: ${projectId}`,
     docLine(standards.doc),
-    `Path: ${standardsDocPath(projectId, standards.doc)}`,
+    `Path: ${path}`,
     "Accepted proposals:",
     JSON.stringify(accepted, null, 2),
   ].join("\n");
