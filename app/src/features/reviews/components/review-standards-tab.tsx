@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, RotateCcw } from "lucide-react";
 import type { ReviewSubmission, StandardsAssessment } from "@server/schemas";
@@ -25,12 +25,18 @@ import {
   useReviewTranscriptLinks,
 } from "./review-transcript-link";
 
+const RUNNING_LABEL = {
+  assessing: "Assessing…",
+  iterating: "Revising…",
+  applying: "Applying…",
+} as const;
+
 function GroupStatus({ status }: { status: StandardsGroup["standards"]["status"] }) {
-  if (status === "assessing" || status === "applying") {
+  if (status === "assessing" || status === "iterating" || status === "applying") {
     return (
       <Badge variant="inProgress" className="shrink-0 gap-1.5" role="status" aria-live="polite">
         <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
-        {status === "assessing" ? "Assessing…" : "Applying…"}
+        {RUNNING_LABEL[status]}
       </Badge>
     );
   }
@@ -87,13 +93,15 @@ function StandardsSubmit({
   projectId,
   reviewId,
   group,
+  feedbackDrafts,
 }: {
   projectId: string;
   reviewId: string;
   group: StandardsGroup;
+  feedbackDrafts: ReadonlyMap<string, string>;
 }) {
-  const submit = useSubmitStandardsGroup(projectId);
-  const { disabled, reason } = standardsSubmitState(group.standards);
+  const submit = useSubmitStandardsGroup(projectId, group.submissionId);
+  const { disabled, reason } = standardsSubmitState(group.standards, feedbackDrafts);
   const reasonId = `standards-submit-reason-${group.submissionId}`;
   return (
     <div className="flex flex-col items-start gap-2 border-t border-border px-1 pt-3">
@@ -113,7 +121,7 @@ function StandardsSubmit({
         disabled={disabled || submit.isPending}
         aria-describedby={reason ? reasonId : undefined}
         data-testid="standards-submit"
-        onClick={() => submit.mutate({ reviewId, submissionId: group.submissionId })}
+        onClick={() => submit.mutate(reviewId)}
       >
         Submit
       </Button>
@@ -138,13 +146,20 @@ function useStandardsFileText(projectId: string, doc: StandardsAssessment["doc"]
   });
 }
 
+type FeedbackDrafts = {
+  feedbackDrafts?: ReadonlyMap<string, string>;
+  onFeedbackDraft?: (proposalId: string, draft: string) => void;
+};
+
 function StandardsProposalList({
   projectId,
   reviewId,
   group,
   threadsById,
   threadSearch,
-}: GroupProps) {
+  feedbackDrafts,
+  onFeedbackDraft,
+}: GroupProps & FeedbackDrafts) {
   const { standards } = group;
   const editable = standardsGroupEditable(standards);
   const docFileName = standardsDocFileName(standards.doc);
@@ -166,10 +181,51 @@ function StandardsProposalList({
       fileLoading={file.isLoading}
       fileError={fileError}
       editable={editable}
+      feedbackDraft={feedbackDrafts?.get(proposal.id)}
+      onFeedbackDraft={
+        onFeedbackDraft && ((draft: string) => onFeedbackDraft(proposal.id, draft))
+      }
       threadsById={threadsById}
       threadSearch={threadSearch}
     />
   ));
+}
+
+/**
+ * A round taking decisions. Iterate feedback is held here as typed, so Submit
+ * reads it before the field's blur has saved it. A failed iterate pass shows
+ * its error above the cards.
+ */
+function ReadyGroupBody(props: GroupProps) {
+  const { projectId, reviewId, group } = props;
+  const [feedbackDrafts, setFeedbackDrafts] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const onFeedbackDraft = useCallback((proposalId: string, draft: string) => {
+    setFeedbackDrafts((current) => new Map(current).set(proposalId, draft));
+  }, []);
+  return (
+    <>
+      {group.standards.error ? (
+        <ShellInlineFault
+          className="text-[hsl(var(--blocked))]"
+          message={group.standards.error}
+          hint="Edit decisions or feedback, then submit again."
+        />
+      ) : null}
+      <StandardsProposalList
+        {...props}
+        feedbackDrafts={feedbackDrafts}
+        onFeedbackDraft={onFeedbackDraft}
+      />
+      <StandardsSubmit
+        projectId={projectId}
+        reviewId={reviewId}
+        group={group}
+        feedbackDrafts={feedbackDrafts}
+      />
+    </>
+  );
 }
 
 function StandardsGroupBody(props: GroupProps) {
@@ -190,12 +246,8 @@ function StandardsGroupBody(props: GroupProps) {
     case "noGaps":
       return <ShellState title="No coding-standards gaps found." />;
     case "ready":
-      return (
-        <>
-          <StandardsProposalList {...props} />
-          <StandardsSubmit projectId={projectId} reviewId={reviewId} group={group} />
-        </>
-      );
+      return <ReadyGroupBody {...props} />;
+    case "iterating":
     case "applying":
     case "applied":
       return <StandardsProposalList {...props} />;

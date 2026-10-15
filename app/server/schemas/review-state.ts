@@ -45,7 +45,8 @@ export const reviewPrSourceSchema = z
 
 export type ReviewPrSource = z.infer<typeof reviewPrSourceSchema>;
 
-export const standardsProposalSchema = z
+/** A proposal as the assessor writes it. */
+export const standardsProposalTextSchema = z
   .object({
     id: nonEmpty,
     section: nonEmpty,
@@ -53,8 +54,21 @@ export const standardsProposalSchema = z
     after: z.string(),
     rationale: nonEmpty,
     threadIds: z.array(nonEmpty).min(1),
-    decision: z.enum(["accepted", "rejected"]).optional(),
+  })
+  .strict();
+
+export const standardsProposalSchema = standardsProposalTextSchema
+  .extend({
+    decision: z.enum(["accepted", "rejected", "iterate"]).optional(),
     editedAfter: z.string().optional(),
+    // Iterate draft. It stays while another decision is chosen.
+    feedback: nonEmpty.optional(),
+    // Feedback sent with this proposal's latest iterate pass.
+    sentFeedback: nonEmpty.optional(),
+    // The assessor's reply on this proposal's latest iterate pass.
+    reply: nonEmpty.optional(),
+    // Withdrawn by the assessor: shown, never decided or applied.
+    withdrawn: z.literal(true).optional(),
   })
   .strict();
 
@@ -65,6 +79,8 @@ export const standardsAssessmentSchema = z
       "assessFailed",
       "ready",
       "noGaps",
+      // Iterate marks sent back to the assessor; a failed pass returns to `ready` with `error`.
+      "iterating",
       "applying",
       "applyFailed",
       "applied",

@@ -3,12 +3,13 @@ import { coerceJson } from "./cli-coerce.js";
 import { readCliFileArg } from "./cli-io.js";
 import {
   markStandardsApplied,
+  recordStandardsIterate,
   setReviewStandards,
 } from "./server/services/review-standards.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
-/** `issue review standards set|applied <reviewId> <submissionId> …`. */
+/** `issue review standards set|iterated|applied <reviewId> <submissionId> …`. */
 export function registerReviewStandardsCommands(kindCmd: Command, run: Run): void {
   const standards = kindCmd
     .command("standards")
@@ -30,6 +31,25 @@ export function registerReviewStandardsCommands(kindCmd: Command, run: Run): voi
           coerceJson(readCliFileArg(file), "standards file"),
         );
         process.stdout.write(`${status}\n`);
+      }),
+    );
+
+  standards
+    .command("iterated")
+    .argument("<reviewId>", "review id")
+    .argument("<submissionId>", "submission id")
+    .argument("<file>", "JSON file { outcomes, added } (use - for stdin)")
+    .description(
+      "report an iterate pass (iterating to ready); a refused report fails the pass",
+    )
+    .action((reviewId: string, submissionId: string, file: string) =>
+      run(() => {
+        recordStandardsIterate(
+          reviewId,
+          submissionId,
+          coerceJson(readCliFileArg(file), "iterate file"),
+        );
+        process.stdout.write("ready\n");
       }),
     );
 

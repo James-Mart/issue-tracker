@@ -32,10 +32,12 @@ function messageOf(err: unknown): string {
 function useReviewMutation<TVariables>(
   projectId: string,
   mutationFn: (variables: TVariables) => Promise<ReviewView>,
+  scope?: { id: string },
 ) {
   const qc = useQueryClient();
   return useMutation<ReviewView, Error, TVariables>({
     mutationFn,
+    scope,
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (review) => {
       const { progress, ...record } = review;
@@ -111,30 +113,30 @@ export function useRetryOpenReviewSubmissions(projectId: string) {
   );
 }
 
+/** One group's proposal writes and Submit run in order, so Submit lands after a save sent before it. */
+function standardsGroupScope(submissionId: string) {
+  return { id: `standards-group:${submissionId}` };
+}
+
 export type StandardsProposalTarget = {
   reviewId: string;
-  submissionId: string;
   proposalId: string;
 };
 
-export function useSetStandardsProposal(projectId: string) {
+export function useSetStandardsProposal(projectId: string, submissionId: string) {
   return useReviewMutation(
     projectId,
-    ({
-      reviewId,
-      submissionId,
-      proposalId,
-      ...body
-    }: SetStandardsProposalBody & StandardsProposalTarget) =>
+    ({ reviewId, proposalId, ...body }: SetStandardsProposalBody & StandardsProposalTarget) =>
       patchStandardsProposal(projectId, reviewId, submissionId, proposalId, body),
+    standardsGroupScope(submissionId),
   );
 }
 
-export function useSubmitStandardsGroup(projectId: string) {
+export function useSubmitStandardsGroup(projectId: string, submissionId: string) {
   return useReviewMutation(
     projectId,
-    ({ reviewId, submissionId }: { reviewId: string; submissionId: string }) =>
-      postSubmitStandardsGroup(projectId, reviewId, submissionId),
+    (reviewId: string) => postSubmitStandardsGroup(projectId, reviewId, submissionId),
+    standardsGroupScope(submissionId),
   );
 }
 

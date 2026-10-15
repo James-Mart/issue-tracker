@@ -165,13 +165,18 @@ export function parseRetryReviewSubmissionBody(raw: unknown): EmptyBodyParseResu
 /** `null` clears the field; an absent key leaves it as stored. */
 export const setStandardsProposalBodySchema = z
   .object({
-    decision: z.enum(["accepted", "rejected"]).nullable().optional(),
+    decision: z.enum(["accepted", "rejected", "iterate"]).nullable().optional(),
     editedAfter: nonEmpty.nullable().optional(),
+    feedback: nonEmpty.nullable().optional(),
   })
   .strict()
-  .refine((body) => body.decision !== undefined || body.editedAfter !== undefined, {
-    message: "set decision or editedAfter",
-  });
+  .refine(
+    (body) =>
+      body.decision !== undefined ||
+      body.editedAfter !== undefined ||
+      body.feedback !== undefined,
+    { message: "set decision, editedAfter, or feedback" },
+  );
 
 export type SetStandardsProposalBody = z.infer<typeof setStandardsProposalBodySchema>;
 

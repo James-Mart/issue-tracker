@@ -1,6 +1,8 @@
 import type { ReviewSubmission, StandardsAssessment } from "@server/schemas";
 import {
   everyProposalDecided,
+  ITERATE_FEEDBACK_SUBMIT_REASON,
+  someIterateMarkIncomplete,
   WORKSPACE_STANDARDS_SUBMIT_REASON,
 } from "@server/review-standards-status";
 import { countLabel } from "./review-submission-ui";
@@ -50,16 +52,26 @@ export function standardsGroupEditable(standards: StandardsAssessment): boolean 
 }
 
 /**
- * Submit on a `ready` group is enabled once every proposal is decided. A
- * workspace-backed doc keeps it disabled with the reason.
+ * Submit on a `ready` group is enabled once every proposal is decided,
+ * reading Iterate feedback from `feedbackDrafts` where the field has one. A
+ * workspace-backed doc or an Iterate mark without feedback keeps it disabled
+ * with the reason.
  */
 export function standardsSubmitState(
   standards: Pick<StandardsAssessment, "doc" | "proposals">,
+  feedbackDrafts: ReadonlyMap<string, string>,
 ): { disabled: boolean; reason?: string } {
   if (standards.doc.type === "workspace") {
     return { disabled: true, reason: WORKSPACE_STANDARDS_SUBMIT_REASON };
   }
-  return { disabled: !everyProposalDecided(standards.proposals) };
+  const proposals = standards.proposals.map((proposal) => {
+    const draft = feedbackDrafts.get(proposal.id);
+    return draft === undefined ? proposal : { ...proposal, feedback: draft };
+  });
+  if (someIterateMarkIncomplete(proposals)) {
+    return { disabled: true, reason: ITERATE_FEEDBACK_SUBMIT_REASON };
+  }
+  return { disabled: !everyProposalDecided(proposals) };
 }
 
 export function showSubmittedGroupsLabel(count: number): string {
@@ -84,4 +96,14 @@ export function proposalEditBody(
   const next = draft === proposal.after ? null : draft;
   if (next === (proposal.editedAfter ?? null)) return null;
   return { editedAfter: next };
+}
+
+/** Body for saving an Iterate feedback draft, or `null` when it matches the stored one. */
+export function proposalFeedbackBody(
+  proposal: Pick<StandardsProposal, "feedback">,
+  draft: string,
+): { feedback: string | null } | null {
+  const next = draft.trim().length > 0 ? draft : null;
+  if (next === (proposal.feedback ?? null)) return null;
+  return { feedback: next };
 }
