@@ -85,7 +85,7 @@ export function ReviewFileTree({
 }) {
   return (
     <nav aria-label="Changed files" data-testid="review-file-tree" className="min-w-0">
-      <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto shell:max-h-none shell:overflow-visible">
+      <ul className="flex flex-col gap-1">
         {rows.map((row) => (
           <li key={row.file.path}>
             <ReviewFileTreeRow
