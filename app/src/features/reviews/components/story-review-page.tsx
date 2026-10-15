@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { useParams } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReviewCommits, ReviewView } from "@server/schemas";
@@ -13,7 +13,7 @@ import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { TabButton } from "@/components/ui/tab-button";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
-import { useReviewDiffQuery } from "../api/queries";
+import { useReviewAgentRunsQuery, useReviewDiffQuery } from "../api/queries";
 import type { ReviewMarkOverrides } from "../lib/review-scope";
 import { useReviewWorkbenchReads } from "../hooks/use-review-workbench-reads";
 import {
@@ -23,6 +23,7 @@ import {
 import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { reviewWorkbenchTabs } from "../lib/workbench-tabs";
+import { ReviewAgentsTab } from "./review-agents-tab";
 import { ReviewCommitsPanel } from "./review-commits-tab";
 import { ReviewConversationTab } from "./review-conversation-tab";
 import { ReviewDiffTab } from "./review-diff-tab";
@@ -128,11 +129,32 @@ function StoryReviewWorkbench({
     threadReveal,
     markThreadRevealed,
     openThreadInDiff,
+    openThreadInConversation,
     conversationThreadSearch,
     openThread,
     retargetThreadScope,
   } = useReviewWorkbenchLocation(knownShas, tabs);
   const [markOverrides, setMarkOverrides] = useState<ReviewMarkOverrides>({});
+  const [runFocus, setRunFocus] = useState<
+    { surface: "conversation" | "standards"; submissionId: string } | null
+  >(null);
+  const clearRunFocus = useCallback(() => setRunFocus(null), []);
+  const agentRuns = useReviewAgentRunsQuery(projectId, review.id);
+  const runCount = agentRuns.data?.runs.length ?? 0;
+  const openRunSubmission = useCallback(
+    (submissionId: string) => {
+      setRunFocus({ surface: "conversation", submissionId });
+      setTab("conversation");
+    },
+    [setTab],
+  );
+  const openStandardsRound = useCallback(
+    (submissionId: string) => {
+      setRunFocus({ surface: "standards", submissionId });
+      setTab("standards");
+    },
+    [setTab],
+  );
 
   return (
     <>
@@ -155,8 +177,17 @@ function StoryReviewWorkbench({
             key={tab.key}
             selected={active === tab.key}
             onClick={() => setTab(tab.key)}
+            data-review-tab={tab.key}
           >
             {tab.label}
+            {tab.key === "agents" && runCount > 0 ? (
+              <span
+                className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold tabular-nums leading-none text-muted-foreground"
+                data-tab-count={runCount}
+              >
+                {runCount}
+              </span>
+            ) : null}
           </TabButton>
         ))}
       </div>
@@ -167,6 +198,10 @@ function StoryReviewWorkbench({
             submissions={review.submissions}
             onOpenInDiff={openThreadInDiff}
             focusThreadId={threadId}
+            focusSubmissionId={
+              runFocus?.surface === "conversation" ? runFocus.submissionId : null
+            }
+            onSubmissionFocused={clearRunFocus}
           />
         ) : active === "standards" ? (
           <ReviewStandardsTab
@@ -174,6 +209,19 @@ function StoryReviewWorkbench({
             reviewId={review.id}
             submissions={review.submissions}
             threadSearch={conversationThreadSearch}
+            focusSubmissionId={
+              runFocus?.surface === "standards" ? runFocus.submissionId : null
+            }
+            onSubmissionFocused={clearRunFocus}
+          />
+        ) : active === "agents" ? (
+          <ReviewAgentsTab
+            projectId={projectId}
+            reviewId={review.id}
+            onOpenThread={openThread}
+            onOpenThreadId={openThreadInConversation}
+            onOpenSubmission={openRunSubmission}
+            onOpenStandardsRound={openStandardsRound}
           />
         ) : active === "commits" ? (
           <ReviewCommitsPanel

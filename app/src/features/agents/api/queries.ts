@@ -1,10 +1,12 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type {
+  ConversationDetail,
   ConversationListItem,
   ConversationTranscriptPage,
 } from "@server/schemas";
 import {
   fetchTranscriptionCapability,
+  getConversationDetail,
   getConversationTranscript,
   listAgentModels,
   listConversationAttachments,
@@ -25,6 +27,18 @@ export function useConversationsQuery(
     queryFn: () => listConversations(showArchived),
     refetchOnWindowFocus: true,
     refetchInterval: CONVERSATIONS_REFETCH_INTERVAL_MS,
+  });
+}
+
+/** Loads an issue-anchored conversation the roster omits, so a direct URL can open it. */
+export function useConversationDetailQuery(
+  conversationId: string | undefined,
+): UseQueryResult<ConversationDetail, Error> {
+  return useQuery({
+    queryKey: agentsKeys.detail(conversationId ?? ""),
+    queryFn: () => getConversationDetail(conversationId!),
+    enabled: Boolean(conversationId),
+    retry: false,
   });
 }
 

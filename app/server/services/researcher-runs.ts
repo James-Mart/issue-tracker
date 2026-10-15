@@ -195,7 +195,7 @@ export async function trackResearcherLaunch(
 }
 
 /** Latest transcript error, optionally only those at or after `since`. */
-function latestTranscriptError(
+export function latestTranscriptError(
   transcript: TranscriptEvent[],
   since?: string,
 ): string | undefined {
@@ -373,7 +373,7 @@ export function researcherRunForThread(
 }
 
 /** Researcher sessions recorded on the review, oldest first, one per conversation. */
-function researcherSessions(
+export function researcherSessionsForReview(
   issueId: string,
 ): { conversationId: string; threadId: string }[] {
   const seen = new Set<string>();
@@ -389,7 +389,7 @@ function researcherSessions(
 
 /** Every researcher conversation recorded on the review, oldest first. */
 export function researcherConversationIds(reviewId: string): string[] {
-  return researcherSessions(reviewId).map((session) => session.conversationId);
+  return researcherSessionsForReview(reviewId).map((session) => session.conversationId);
 }
 
 function researcherAgentRun(
@@ -417,7 +417,7 @@ function researcherAgentRun(
 
 /** One agent run per researcher conversation started on the review. */
 export function researcherRunsForIssue(issueId: string): AgentRun[] {
-  return researcherSessions(issueId).flatMap((session) => {
+  return researcherSessionsForReview(issueId).flatMap((session) => {
     if (!conversationExists(session.conversationId)) return [];
     return [
       researcherAgentRun(

@@ -2,6 +2,7 @@ import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type {
   ConversationActiveRun,
+  ConversationDetail,
   ConversationListItem,
   ConversationMeta,
   ConversationTranscriptPage,
@@ -67,6 +68,12 @@ export function forkConversation(
     method: "POST",
     body,
   });
+}
+
+export function getConversationDetail(id: string): Promise<ConversationDetail> {
+  return request<ConversationDetail>(
+    `/api/conversations/${encodeURIComponent(id)}`,
+  );
 }
 
 export function getConversationRun(id: string): Promise<ConversationActiveRun> {

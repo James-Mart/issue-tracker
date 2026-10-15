@@ -1,4 +1,4 @@
-import { formatRunDurationMs } from "@/features/issues/components/agent-runs-panel";
+import { formatRunDurationMs } from "@/features/issues/lib/run-time-format";
 import { cn } from "@/lib/utils/cn";
 import type { AbsorbedReplay, SequenceBeat } from "../run-sequence";
 

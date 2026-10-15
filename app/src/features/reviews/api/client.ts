@@ -1,6 +1,7 @@
 import { request, requestConditional } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type {
+  ReviewAgentRun,
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
@@ -56,6 +57,15 @@ export function fetchReviewProgress(
   reviewId: string,
 ): Promise<ReviewProgress> {
   return request<ReviewProgress>(reviewProgressUrl(projectId, reviewId));
+}
+
+export function fetchReviewAgentRuns(
+  projectId: string,
+  reviewId: string,
+): Promise<{ runs: ReviewAgentRun[] }> {
+  return request<{ runs: ReviewAgentRun[] }>(
+    `${reviewUrl(projectId, reviewId)}/agent-runs`,
+  );
 }
 
 export function fetchReview(

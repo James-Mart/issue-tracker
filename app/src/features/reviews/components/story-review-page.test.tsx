@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   setMark: vi.fn(),
   postComment: vi.fn(),
   commentThreads: [] as CommentThread[],
+  agentRuns: [] as { conversationId: string }[],
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -132,6 +133,11 @@ vi.mock("../api/queries", () => ({
     error: null,
     isPending: false,
     isLoading: false,
+  }),
+  useReviewAgentRunsQuery: () => ({
+    data: { runs: state.agentRuns },
+    isLoading: false,
+    error: null,
   }),
 }));
 
@@ -323,6 +329,7 @@ beforeEach(() => {
   state.byScope = {};
   state.commits = commitsFixture();
   state.commentThreads = [];
+  state.agentRuns = [];
 });
 
 afterEach(() => {

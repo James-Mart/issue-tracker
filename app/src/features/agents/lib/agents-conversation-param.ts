@@ -41,3 +41,24 @@ export function resolveAgentsConversationParam(
     replaceWithRoster: false,
   };
 }
+
+/**
+ * Review runs are real conversations and are omitted from the roster. Hold
+ * the URL open until a lookup says the id is missing.
+ */
+export function holdOffRosterConversation(
+  paramId: string | undefined,
+  resolution: AgentsConversationParamResolution,
+  lookup: "pending" | "found" | "missing" | "failed",
+): { selectedId: string | null; replaceWithRoster: boolean } {
+  if (!resolution.replaceWithRoster || paramId === undefined) {
+    return {
+      selectedId: resolution.selectedId,
+      replaceWithRoster: resolution.replaceWithRoster,
+    };
+  }
+  if (lookup === "missing") {
+    return { selectedId: null, replaceWithRoster: true };
+  }
+  return { selectedId: paramId, replaceWithRoster: false };
+}

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { ChevronRight, Loader2, RotateCcw } from "lucide-react";
 import type { ReviewSubmission } from "@server/schemas";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
@@ -226,11 +226,16 @@ export function ReviewStandardsTab({
   reviewId,
   submissions,
   threadSearch,
+  focusSubmissionId = null,
+  onSubmissionFocused,
 }: {
   projectId: string;
   reviewId: string;
   submissions: readonly ReviewSubmission[];
   threadSearch: (threadId: string) => string;
+  /** Round to open and scroll into view after an Agents card names it. */
+  focusSubmissionId?: string | null;
+  onSubmissionFocused?: () => void;
 }) {
   const { threads } = useReviewCommentThreads(reviewId);
   const threadsById = useMemo(
@@ -238,6 +243,17 @@ export function ReviewStandardsTab({
     [threads],
   );
   const { open, submitted } = standardsGroups(submissions);
+
+  useLayoutEffect(() => {
+    if (!focusSubmissionId) return;
+    const heading = document.getElementById(`standards-group-${focusSubmissionId}`);
+    const section = heading?.closest("section");
+    if (!section) return;
+    const details = section.closest("details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    section.scrollIntoView({ block: "nearest" });
+    onSubmissionFocused?.();
+  }, [focusSubmissionId, onSubmissionFocused, submissions]);
   const section = (group: StandardsGroup) => (
     <StandardsGroupSection
       key={group.submissionId}

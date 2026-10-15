@@ -38,6 +38,7 @@ import {
 import {
   deriveTurns,
   groupOrdinaryToolCalls,
+  isLiveThinking,
   transcriptInfoLine,
 } from "../lib/transcript-rows";
 import {
@@ -375,17 +376,6 @@ function ToolCallEvent({
       data-event="tool_call"
     />
   );
-}
-
-/** True when no later event has superseded this thinking block in the stream. */
-function isLiveThinking(events: TranscriptEvent[], index: number): boolean {
-  for (let i = index + 1; i < events.length; i++) {
-    const t = events[i]?.type;
-    if (t === "thinking" || t === "assistant" || t === "tool_call") {
-      return false;
-    }
-  }
-  return true;
 }
 
 function TranscriptEventRow({

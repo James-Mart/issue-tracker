@@ -34,6 +34,7 @@ import {
   reviewWorktreeHold,
   syncReviewWorktree,
 } from "../services/review-worktree-sync.js";
+import { listReviewAgentRuns } from "../services/review-agent-runs.js";
 import {
   archiveReview,
   listReviewViews,
@@ -192,6 +193,15 @@ export function createReviewsRouter(sessions: AgentSessions): Router {
         issues,
         { worktreeSync },
       );
+    }),
+  );
+
+  reviewsRouter.get(
+    "/:reviewId/agent-runs",
+    asyncRoute(async (req, res) => {
+      res.json({
+        runs: listReviewAgentRuns(req.params.projectId, req.params.reviewId),
+      });
     }),
   );
 

@@ -1,6 +1,7 @@
 import { skipToken, useQuery, type Query, type UseQueryResult } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/errors";
 import type {
+  ReviewAgentRun,
   ReviewCandidates,
   ReviewCommits,
   ReviewDiff,
@@ -11,6 +12,7 @@ import type {
 } from "@server/schemas";
 import {
   fetchReview,
+  fetchReviewAgentRuns,
   fetchReviewCandidates,
   fetchReviewCommits,
   fetchReviewDiff,
@@ -20,6 +22,7 @@ import {
   fetchReviewRuntime,
   fetchReviews,
 } from "./client";
+import { reviewAgentRunsRefetchInterval } from "../lib/review-agent-runs";
 import { reviewKeys } from "./keys";
 
 function retryReviewRead(count: number, error: Error): boolean {
@@ -154,6 +157,19 @@ export function useReviewDiffQuery(
 
 const RUNTIME_BOOT_POLL_MS = 400;
 const RUNTIME_POLL_MS = 2_000;
+
+export function useReviewAgentRunsQuery(
+  projectId: string,
+  reviewId: string,
+): UseQueryResult<{ runs: ReviewAgentRun[] }, Error> {
+  return useQuery({
+    queryKey: reviewKeys.agentRuns(projectId, reviewId),
+    queryFn: () => fetchReviewAgentRuns(projectId, reviewId),
+    enabled: Boolean(projectId) && Boolean(reviewId),
+    retry: retryReviewRead,
+    refetchInterval: (query) => reviewAgentRunsRefetchInterval(query.state.data?.runs),
+  });
+}
 
 export function useReviewRuntimeQuery(
   reviewId: string,

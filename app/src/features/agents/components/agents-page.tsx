@@ -5,11 +5,18 @@ import {
 } from "@/lib/tab-title/use-tab-title";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "@/components/page-shell";
-import { ShellState } from "@/app/shell-state";
+import { ShellInlineFault, ShellState } from "@/app/shell-state";
+import { ApiError } from "@/lib/api/errors";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
-import { useConversationsQuery } from "../api/queries";
-import { resolveAgentsConversationParam } from "../lib/agents-conversation-param";
+import {
+  useConversationDetailQuery,
+  useConversationsQuery,
+} from "../api/queries";
+import {
+  holdOffRosterConversation,
+  resolveAgentsConversationParam,
+} from "../lib/agents-conversation-param";
 import { AGENTS_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListSidebar } from "./conversation-list-sidebar";
@@ -73,23 +80,33 @@ export function AgentsPage() {
   // treated as missing.
   const { data: conversations } = useConversationsQuery(true);
   const resolved = resolveAgentsConversationParam(conversationId, conversations);
+  const offRoster = useConversationDetailQuery(
+    resolved.replaceWithRoster ? conversationId : undefined,
+  );
+  const lookup = !offRoster.isError
+    ? offRoster.data
+      ? "found"
+      : "pending"
+    : offRoster.error instanceof ApiError && offRoster.error.status === 404
+      ? "missing"
+      : "failed";
+  const held = holdOffRosterConversation(conversationId, resolved, lookup);
   const selectedConversationId =
-    conversations === undefined ? (conversationId ?? null) : resolved.selectedId;
+    conversations === undefined ? (conversationId ?? null) : held.selectedId;
+  const selectedTitle =
+    resolved.selectedConversation?.title ?? offRoster.data?.meta.title;
   useTabTitle(
     selectedConversationId
-      ? tabTitleEntityName(
-          resolved.selectedConversation?.title,
-          selectedConversationId,
-        )
+      ? tabTitleEntityName(selectedTitle, selectedConversationId)
       : "Agents",
     selectedConversationId ? "Agent" : undefined,
   );
 
   useEffect(() => {
-    if (resolved.replaceWithRoster) {
+    if (held.replaceWithRoster) {
       navigate(AGENTS_PATH, { replace: true });
     }
-  }, [navigate, resolved.replaceWithRoster]);
+  }, [held.replaceWithRoster, navigate]);
 
   useEffect(() => {
     if (resolved.revealArchived) {
@@ -114,11 +131,25 @@ export function AgentsPage() {
       className="flex-1"
       showHeader={!selectedConversationId}
     >
-      {selectedConversationId ? (
+      {lookup === "failed" ? (
+        <ShellInlineFault
+          message={offRoster.error?.message ?? "Could not open this conversation."}
+          hint="Reload the page or try again in a moment."
+        />
+      ) : selectedConversationId ? (
         <ConversationThread
           key={selectedConversationId}
           conversationId={selectedConversationId}
           onBack={isMobile ? () => navigate(AGENTS_PATH) : undefined}
+          meta={
+            offRoster.data
+              ? {
+                  title: offRoster.data.meta.title,
+                  model: offRoster.data.meta.model,
+                  pendingMessage: offRoster.data.meta.pendingMessage,
+                }
+              : undefined
+          }
         />
       ) : (
         <ShellState

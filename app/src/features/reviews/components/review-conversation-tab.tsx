@@ -187,12 +187,17 @@ export function ReviewConversationTab({
   submissions = [],
   onOpenInDiff,
   focusThreadId = null,
+  focusSubmissionId = null,
+  onSubmissionFocused,
 }: {
   reviewId: string;
   submissions?: ReviewSubmission[];
   onOpenInDiff: (threadId: string, commitSha: string) => void;
   /** Thread from `?thread=`: scrolled to, highlighted, and kept past the filter. */
   focusThreadId?: string | null;
+  /** Submitted round to scroll into view after an Agents card names it. */
+  focusSubmissionId?: string | null;
+  onSubmissionFocused?: () => void;
 }) {
   const comments = useReviewCommentsQuery(reviewId);
   const { threads, problems } = useReviewCommentThreads(reviewId);
@@ -213,6 +218,16 @@ export function ReviewConversationTab({
     if (!panel) return;
     return scrollThreadNodeInPanel(panel, focusThreadId, { block: "center" });
   }, [commentsReady, focusThreadId, threads]);
+
+  useLayoutEffect(() => {
+    if (!focusSubmissionId || !commentsReady) return;
+    const node = scrollerRef.current?.querySelector(
+      `[data-submission-id="${CSS.escape(focusSubmissionId)}"]`,
+    );
+    if (!node) return;
+    node.scrollIntoView({ block: "nearest" });
+    onSubmissionFocused?.();
+  }, [commentsReady, focusSubmissionId, onSubmissionFocused, submissions, threads]);
 
   return (
     <div

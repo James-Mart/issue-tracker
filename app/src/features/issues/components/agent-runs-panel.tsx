@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  formatRunDurationBetween,
+  formatRunStartTime,
+} from "../lib/run-time-format";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -47,31 +51,8 @@ function isQuestionResearcherRun(run: AgentRun): boolean {
 
 type SubagentUpdateEvent = Extract<TranscriptEvent, { type: "subagent_update" }>;
 
-function formatRunStartTime(startedAt: string): string {
-  const date = new Date(startedAt);
-  if (Number.isNaN(date.getTime())) return startedAt;
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-export function formatRunDurationMs(ms: number): string {
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  const rem = sec % 60;
-  return rem > 0 ? `${min}m ${rem}s` : `${min}m`;
-}
-
 function runDuration(run: AgentRun): string | null {
-  if (!run.endedAt) return null;
-  const start = new Date(run.startedAt).getTime();
-  const end = new Date(run.endedAt).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
-  return formatRunDurationMs(end - start);
+  return formatRunDurationBetween(run.startedAt, run.endedAt);
 }
 
 function nestedStepKey(step: NestedStep, index: number): string {

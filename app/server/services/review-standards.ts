@@ -751,7 +751,7 @@ export function conversationIdFromStandardsAssessorDelegation(
   return conversationId.length > 0 ? conversationId : undefined;
 }
 
-function agentRunStatus(
+export function standardsAgentRunStatus(
   live: boolean,
   status: StandardsAssessment["status"],
 ): AgentRun["status"] {
@@ -766,7 +766,7 @@ function assessorAgentRun(
   issueId: string,
   standards: StandardsAssessment,
 ): AgentRun {
-  const status = agentRunStatus(isRunLive(meta.id), standards.status);
+  const status = standardsAgentRunStatus(isRunLive(meta.id), standards.status);
   return {
     delegationId: standardsAssessorDelegationId(meta.id),
     agentId: meta.agentId ?? meta.id,
