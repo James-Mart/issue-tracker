@@ -68,10 +68,13 @@ function storyScalarRows(
 export function StoryGitMetaScalars({
   issue,
   mergeBase,
+  mergeSettings,
   beforeStackedOn,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   mergeBase?: string;
+  /** Merge-base and merge-policy rows. Sits after the other git scalars, before stacked on. */
+  mergeSettings?: ReactNode;
   /** Sits with Branch and Merge base. `stackedOn` is always the last scalar. */
   beforeStackedOn?: ReactNode;
 }) {
@@ -79,6 +82,7 @@ export function StoryGitMetaScalars({
   return (
     <>
       {storyScalarRows(scalars.slice(0, -1), issue, mergeBase)}
+      {mergeSettings}
       {beforeStackedOn}
       {storyScalarRows(scalars.slice(-1), issue, mergeBase)}
     </>

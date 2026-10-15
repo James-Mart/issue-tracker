@@ -41,8 +41,8 @@ import {
   readAll,
   readIssueOrThrow,
   remove,
-  update,
 } from "../services/issues.js";
+import { patchIssue } from "../services/root-merge-settings.js";
 import { appendThreadEvent } from "../services/thread-events.js";
 import {
   onQuestionComment,
@@ -582,7 +582,7 @@ export function createIssuesRouter(
   router.patch(
     "/:id",
     asyncRoute(async (req, res) => {
-      const record = await update(req.params.id, req.body as IssuePatch);
+      const record = await patchIssue(req.params.id, req.body as IssuePatch);
       res.json(record);
     }),
   );

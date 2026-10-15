@@ -145,3 +145,10 @@ export function projectContaining(
   }
   return undefined;
 }
+
+/** Project trunk for an issue, or `main` when the chain has no Project. */
+export function projectTrunk(issue: Issue, byId: Map<string, Issue>): string {
+  const projectId = projectContaining(issue, byId);
+  const project = projectId ? byId.get(projectId) : undefined;
+  return project?.kind === "project" ? project.trunk : "main";
+}

@@ -1,4 +1,4 @@
-import { MERGE_POLICY_OPTIONS } from "@server/fields";
+import { MERGE_POLICY_LABELS, MERGE_POLICY_OPTIONS } from "@server/fields";
 import type { MergePolicy } from "@server/schemas";
 import {
   Select,
@@ -8,27 +8,54 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function MergePolicySelect({
-  id,
-  value,
-  onChange,
-  disabled,
-}: {
+type MergePolicySelectProps = {
   id?: string;
-  value: MergePolicy;
-  onChange: (value: MergePolicy) => void;
   disabled?: boolean;
-}) {
+} & (
+  | {
+      inheritLabel?: undefined;
+      value: MergePolicy;
+      onChange: (value: MergePolicy) => void;
+    }
+  | {
+      /** Label for the clear-override option, e.g. "Inherit (Manual)". */
+      inheritLabel: string;
+      value: MergePolicy | "inherit";
+      onChange: (value: MergePolicy | "inherit") => void;
+    }
+);
+
+export function MergePolicySelect(props: MergePolicySelectProps) {
+  const selectedLabel =
+    props.inheritLabel !== undefined
+      ? props.value === "inherit"
+        ? props.inheritLabel
+        : MERGE_POLICY_LABELS[props.value]
+      : undefined;
+
   return (
     <Select
-      value={value}
-      disabled={disabled}
-      onValueChange={(v) => onChange(v as MergePolicy)}
+      value={props.value}
+      disabled={props.disabled}
+      onValueChange={(next) => {
+        if (props.inheritLabel !== undefined) {
+          props.onChange(next === "inherit" ? "inherit" : (next as MergePolicy));
+          return;
+        }
+        props.onChange(next as MergePolicy);
+      }}
     >
-      <SelectTrigger id={id}>
-        <SelectValue />
+      <SelectTrigger id={props.id}>
+        {selectedLabel ? (
+          <SelectValue>{selectedLabel}</SelectValue>
+        ) : (
+          <SelectValue />
+        )}
       </SelectTrigger>
       <SelectContent>
+        {props.inheritLabel !== undefined ? (
+          <SelectItem value="inherit">{props.inheritLabel}</SelectItem>
+        ) : null}
         {MERGE_POLICY_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}

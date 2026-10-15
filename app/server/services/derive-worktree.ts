@@ -18,18 +18,11 @@ import {
 } from "./git-read.js";
 import { readAll } from "./issues.js";
 import { requireProject } from "./require-project.js";
-import { projectContaining } from "./subtree.js";
+import { projectContaining, projectTrunk } from "./subtree.js";
 
 type Story = Extract<Issue, { kind: "story" }>;
 
 type LockCache = Map<string, Promise<GitListedWorktree[]>>;
-
-function trunkForStory(story: Story, byId: Map<string, Issue>): string {
-  const projectId = projectContaining(story, byId);
-  if (!projectId) return "main";
-  const project = byId.get(projectId);
-  return project?.kind === "project" ? project.trunk : "main";
-}
 
 function workspaceFor(
   projectId: string | undefined,
@@ -134,7 +127,7 @@ async function deriveStoryWorktreeCached(
     gitCheckout && path ? porcelainDirtyPaths(path) : Promise.resolve([]),
     pathIsLocked(path, gitCheckout, projectId, byId, lockCache),
     gitCheckout && path && story.branchName
-      ? branchDivergence(path, story.branchName, trunkForStory(story, byId))
+      ? branchDivergence(path, story.branchName, projectTrunk(story, byId))
       : Promise.resolve(QUIET_DIVERGENCE),
     setupRecord(story, projectId),
   ]);

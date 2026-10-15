@@ -65,6 +65,7 @@ import {
   validateExecutionGatePatch,
   validateNonClearablePatch,
   validateSourceIdeaPatch,
+  validateSystemWrittenPatch,
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
@@ -76,6 +77,10 @@ import {
   assertMergePolicyLattice,
   validateMergePolicyPatch,
 } from "./merge-policy.js";
+import {
+  guardRootMergeSettingsPatch,
+  type RootMergeSettingsMode,
+} from "./merge-settings-lock.js";
 import { validateWorkspacePatch, validateWorkspacePath } from "./workspace.js";
 import { validateSupportingDocsPatch } from "./supporting-docs.js";
 import { validateRuntimePatch } from "./runtime.js";
@@ -584,15 +589,23 @@ function sameCommitShas(left: readonly string[], right: readonly string[]): bool
 export function update(
   id: string,
   patch: IssuePatch,
-  options?: { refreshPrFacts?: boolean },
+  options?: { refreshPrFacts?: boolean; rootMergeSettings?: RootMergeSettingsMode },
 ): Promise<IssueDetail> {
   const refreshPrFacts = options?.refreshPrFacts !== false;
   return serialize(() => {
     ensureWorkQueuePositionsMigrated();
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
+    const byId = new Map(issues.map((issue) => [issue.id, issue]));
 
-    const { description, ...jsonPatch } = patch;
+    const { description, ...restPatch } = patch;
+    const jsonPatch = guardRootMergeSettingsPatch(
+      existing,
+      restPatch,
+      issues,
+      options?.rootMergeSettings ?? "human",
+      byId,
+    );
     validateWorkspacePatch(jsonPatch);
     validateSupportingDocsPatch(existing, jsonPatch);
     validateRuntimePatch(existing, jsonPatch);
@@ -615,26 +628,7 @@ export function update(
 
     const renameError = branchNameRenameError(existing, jsonPatch, issues);
     if (renameError) throw new IssueError("validation", renameError);
-    for (const field of [
-      "workQueuedAt",
-      "workQueuePosition",
-      "workParkedAt",
-      "workResumeNote",
-    ] as const) {
-      const value = jsonPatch[field];
-      if (value !== undefined && value !== null) {
-        throw new IssueError("validation", `${field} is system-written`);
-      }
-    }
-    if (
-      jsonPatch.planQueuedAt !== undefined &&
-      jsonPatch.planQueuedAt !== null
-    ) {
-      throw new IssueError(
-        "validation",
-        "planQueuedAt is system-written; clear it to dequeue",
-      );
-    }
+    validateSystemWrittenPatch(jsonPatch);
 
     const merged = mergeIssue(existing, jsonPatch);
 
@@ -662,7 +656,6 @@ export function update(
     // group change already makes the issue differ, so the unchanged path is safe.
     const next = parsed.issue;
     const orderPatched = "order" in jsonPatch;
-    const byId = new Map(issues.map((issue) => [issue.id, issue]));
     if (
       !orderPatched &&
       siblingGroupKey(next, byId) !== siblingGroupKey(existing, byId)

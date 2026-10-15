@@ -10,14 +10,15 @@ import {
 export const MERGE_BASE_SET_ERROR =
   "mergeBase can only be set on a root-level Story or an Epic";
 
-/** Reject story mergeBase sets on stacked or first-layer Epic Stories. */
-export function assertStoryCanSetMergeBase(
+export const MERGE_POLICY_SET_ERROR =
+  "mergePolicy can only be set on a root-level Story or an Epic";
+
+/** Project-level root Story: no stack, and `partOf` is the Project. */
+export function isProjectLevelRootStory(
   story: { stackedOn?: string },
-  parentKind: IssueKind,
-): void {
-  if (story.stackedOn || parentKind === "epic") {
-    throw new Error(MERGE_BASE_SET_ERROR);
-  }
+  parentKind: IssueKind | undefined,
+): boolean {
+  return !story.stackedOn && parentKind === "project";
 }
 
 export const SOURCE_IDEA_SET_ERROR =
@@ -28,7 +29,7 @@ export function assertStoryCanSetSourceIdea(
   story: { stackedOn?: string },
   parentKind: IssueKind,
 ): void {
-  if (story.stackedOn || parentKind === "epic") {
+  if (!isProjectLevelRootStory(story, parentKind)) {
     throw new Error(SOURCE_IDEA_SET_ERROR);
   }
 }
@@ -207,6 +208,7 @@ export const EPIC_GET_FIELDS = {
   description: DESCRIPTION,
   epicStatus: DERIVED,
   mergePolicy: DERIVED,
+  mergeSettingsLock: DERIVED,
   blocked: DERIVED,
   planNotFinal: DERIVED,
   workQueuedAt: STORED,
@@ -267,6 +269,7 @@ export const STORY_GET_FIELDS = {
   storyStatus: DERIVED,
   reviewCurrent: DERIVED,
   mergePolicy: DERIVED,
+  mergeSettingsLock: DERIVED,
   blocked: DERIVED,
   planNotFinal: DERIVED,
   worktree: DERIVED,

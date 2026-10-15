@@ -4,9 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const reconcileProjectPrs = vi.hoisted(() => vi.fn());
+const revertLandedRootMergeBases = vi.hoisted(() => vi.fn());
 
 vi.mock("./pr-reconcile.js", () => ({
   reconcileProjectPrs,
+}));
+
+vi.mock("./merge-base-auto-revert.js", () => ({
+  revertLandedRootMergeBases,
 }));
 
 vi.mock("./issue-events.js", async () => {
@@ -58,6 +63,8 @@ beforeEach(() => {
   vi.stubEnv("AGENT_STACK_PORT", "");
   reconcileProjectPrs.mockReset();
   reconcileProjectPrs.mockResolvedValue(okResult());
+  revertLandedRootMergeBases.mockReset();
+  revertLandedRootMergeBases.mockResolvedValue({ reverted: [] });
 });
 
 afterEach(async () => {
