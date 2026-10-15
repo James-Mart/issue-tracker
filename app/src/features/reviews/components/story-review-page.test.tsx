@@ -175,6 +175,14 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return {
+    ...actual,
+    requestText: vi.fn(async () => "# Coding Standards\n\n## Errors\n\nold\n"),
+  };
+});
+
 vi.mock("../api/mutations", () => ({
   useSetReviewMark: () => ({ mutate: state.setMark, isPending: false }),
   useArchiveReview: () => ({ mutate: vi.fn(), isPending: false }),

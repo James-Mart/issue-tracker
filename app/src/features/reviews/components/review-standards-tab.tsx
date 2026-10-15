@@ -1,11 +1,14 @@
 import { useLayoutEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, RotateCcw } from "lucide-react";
-import type { ReviewSubmission } from "@server/schemas";
+import type { ReviewSubmission, StandardsAssessment } from "@server/schemas";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { commentDayLabel } from "@/features/issues/components/comments/marker";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { supportingDocContentUrl } from "@/features/issues/lib/supporting-docs";
+import { requestText } from "@/lib/api/client";
 import { useRetryStandardsAssessment, useSubmitStandardsGroup } from "../api/mutations";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import {
@@ -126,6 +129,15 @@ type GroupProps = {
   threadSearch: (threadId: string) => string;
 };
 
+/** The standards file as it reads now, shared by every card in the round. */
+function useStandardsFileText(projectId: string, doc: StandardsAssessment["doc"]) {
+  const url = supportingDocContentUrl(projectId, doc);
+  return useQuery({
+    queryKey: ["standards-file-text", projectId, url],
+    queryFn: () => requestText(url),
+  });
+}
+
 function StandardsProposalList({
   projectId,
   reviewId,
@@ -136,6 +148,12 @@ function StandardsProposalList({
   const { standards } = group;
   const editable = standardsGroupEditable(standards);
   const docFileName = standardsDocFileName(standards.doc);
+  const file = useStandardsFileText(projectId, standards.doc);
+  const fileError = file.isError
+    ? file.error instanceof Error
+      ? file.error.message
+      : "Couldn't load the standards file."
+    : undefined;
   return standards.proposals.map((proposal) => (
     <StandardsProposalCard
       key={proposal.id}
@@ -144,6 +162,9 @@ function StandardsProposalList({
       submissionId={group.submissionId}
       docFileName={docFileName}
       proposal={proposal}
+      fileText={file.data}
+      fileLoading={file.isLoading}
+      fileError={fileError}
       editable={editable}
       threadsById={threadsById}
       threadSearch={threadSearch}

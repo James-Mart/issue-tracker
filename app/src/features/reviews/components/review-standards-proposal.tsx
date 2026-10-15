@@ -205,6 +205,9 @@ export function StandardsProposalCard({
   submissionId,
   docFileName,
   proposal,
+  fileText,
+  fileLoading,
+  fileError,
   editable,
   threadsById,
   threadSearch,
@@ -214,6 +217,11 @@ export function StandardsProposalCard({
   submissionId: string;
   docFileName: string;
   proposal: StandardsProposal;
+  /** Live standards file, once loaded. */
+  fileText?: string;
+  fileLoading: boolean;
+  /** Set when the standards file could not be read. */
+  fileError?: string;
   editable: boolean;
   threadsById: ReadonlyMap<string, CommentThread>;
   threadSearch: (threadId: string) => string;
@@ -260,7 +268,15 @@ export function StandardsProposalCard({
       {editing ? (
         <div className="space-y-2">
           {proposal.before ? (
-            <StandardsProposalDiff fileName={docFileName} before={proposal.before} after="" />
+            <StandardsProposalDiff
+              fileName={docFileName}
+              section={proposal.section}
+              before={proposal.before}
+              after=""
+              fileText={fileText}
+              fileLoading={fileLoading}
+              fileError={fileError}
+            />
           ) : null}
           <ProposedWordingEditor
             initial={editing.initial}
@@ -271,8 +287,12 @@ export function StandardsProposalCard({
       ) : (
         <StandardsProposalDiff
           fileName={docFileName}
+          section={proposal.section}
           before={proposal.before}
           after={after}
+          fileText={fileText}
+          fileLoading={fileLoading}
+          fileError={fileError}
           onEditAdded={canEdit ? openEditor : undefined}
         />
       )}
