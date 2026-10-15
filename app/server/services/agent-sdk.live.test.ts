@@ -4,6 +4,7 @@ import {
   agentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import { parseModelKey } from "./model-selection.js";
 
 // Live SDK suite: authored and preserved, but excluded from the default
 // `npm test` (which must never contact the SDK/network or spend tokens).
@@ -21,7 +22,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
     async () => {
       await using agent = await agentSdk.createAgent({
         cwd: process.cwd(),
-        model: { id: "composer-2.5" },
+        model: parseModelKey("composer-2.5"),
         storeDir: STORE_DIR,
       });
 

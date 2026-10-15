@@ -70,8 +70,8 @@ describe("pending message firing", () => {
       },
     });
     expect(fake.handles[0]?.sends).toEqual([
-      { message: "first turn", options: {} },
-      { message: "follow up", options: {} },
+      { message: "first turn", options: { model: "composer-2.5" } },
+      { message: "follow up", options: { model: "composer-2.5" } },
     ]);
   });
 });

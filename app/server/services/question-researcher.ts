@@ -268,12 +268,7 @@ async function openResearcherConversation(
   try {
     const prompt = await promptFor();
     await settleResearcherStart(conversation.id, () =>
-      startConversationPrompt(
-        conversation.id,
-        prompt,
-        conversation.model,
-        sessions,
-      ),
+      startConversationPrompt(conversation.id, prompt, sessions),
     );
   } catch (err) {
     await recordResearcherStartFailure(conversation.id, err);
@@ -385,12 +380,7 @@ async function followUpQuestionResearcher(
       return;
     }
     await settleResearcherStart(conversationId, () =>
-      startConversationPrompt(
-        conversationId,
-        prompt,
-        meta.model,
-        sessions,
-      ),
+      startConversationPrompt(conversationId, prompt, sessions),
     );
   } catch (err) {
     await recordResearcherStartFailure(conversationId, err);

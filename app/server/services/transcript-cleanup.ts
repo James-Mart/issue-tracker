@@ -8,8 +8,9 @@ import {
   type AgentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import { parseModelKey } from "./model-selection.js";
 
-export const TRANSCRIPT_CLEANUP_MODEL = "composer-2.5-fast";
+export const TRANSCRIPT_CLEANUP_MODEL = parseModelKey("composer-2.5-fast");
 export const TRANSCRIPT_CLEANUP_TIMEOUT_MS = 5_000;
 
 function cleanupStoreDir(): string {
@@ -57,7 +58,7 @@ export async function cleanTranscript(
     mkdirSync(storeDir, { recursive: true });
     handle = await sdk.createAgent({
       cwd: pluginDir,
-      model: { id: TRANSCRIPT_CLEANUP_MODEL },
+      model: TRANSCRIPT_CLEANUP_MODEL,
       storeDir,
       tools: [],
     });

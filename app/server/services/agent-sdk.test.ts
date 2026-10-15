@@ -2,7 +2,6 @@ import type {
   AgentOptions,
   InteractionUpdate,
   LocalAgentStore,
-  ModelSelection,
   Run,
   RunResult,
   SDKAgent,
@@ -16,6 +15,7 @@ import {
   PLAYWRIGHT_MCP_SERVERS,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import { parseModelKey } from "./model-selection.js";
 import { TASK_TOOL_CALL_ID } from "./agent-sdk.fake.js";
 import { isAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { isCachedCheckpointsStore } from "./cached-checkpoints-store.js";
@@ -37,7 +37,7 @@ function expectCachedComposedStore(
   expect(isAppendingRunEventsStore(store!.runEvents)).toBe(true);
 }
 
-const MODEL: ModelSelection = { id: "composer-2.5" };
+const MODEL = parseModelKey("claude-opus-5-5-thinking-high");
 const STORE_DIR = "/data/conversations/my-conv/agent-state";
 
 const SAMPLE_CUSTOM_TOOLS: Record<string, SDKCustomTool> = {
@@ -148,7 +148,13 @@ describe("createAgent", () => {
     ]);
     expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
-    expect(options.model).toEqual(MODEL);
+    expect(options.model).toEqual({
+      id: "claude-opus-5-5",
+      params: [
+        { id: "thinking", value: "true" },
+        { id: "effort", value: "high" },
+      ],
+    });
     expect(options.agentId).toBe("resume-me");
     expect(options.disallowedTools).toEqual(["task"]);
     expectPlaywrightMcpServers(options);

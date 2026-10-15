@@ -9,7 +9,7 @@ import {
   readConversation,
 } from "./conversations.js";
 import { createDelegateCustomTools } from "./delegate-tool.js";
-import { resolveModelSelection } from "./model-selection.js";
+import { toModelSelection } from "./model-selection.js";
 import { loadRoleModelPin } from "./role-bodies.js";
 
 // Live SDK suite, on the same lane as `agent-sdk.live.test.ts`: authored and
@@ -172,10 +172,10 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         expect(runModels).toHaveLength(2);
         const [intermediateModel, innermostModel] = runModels;
         expect(intermediateModel).toEqual(
-          resolveModelSelection(loadRoleModelPin(ROLE)),
+          toModelSelection(loadRoleModelPin(ROLE)),
         );
         expect(innermostModel).toEqual(
-          resolveModelSelection(loadRoleModelPin(NESTED_ROLE)),
+          toModelSelection(loadRoleModelPin(NESTED_ROLE)),
         );
         expect(innermostModel).not.toEqual(intermediateModel);
 

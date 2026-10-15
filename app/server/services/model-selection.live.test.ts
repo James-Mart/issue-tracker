@@ -2,7 +2,7 @@ import type { SDKModel } from "@cursor/sdk";
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadPluginAgentDefinitions } from "./agent-definitions.js";
 import { agentSdk } from "./agent-sdk.js";
-import { resolveModelSelection } from "./model-selection.js";
+import { parseModelKey, toModelSelection } from "./model-selection.js";
 
 // Live SDK suite: authored and preserved, but excluded from the default
 // `npm test` (which must never contact the SDK/network or spend tokens).
@@ -11,7 +11,7 @@ import { resolveModelSelection } from "./model-selection.js";
 // it spends no tokens.
 
 /**
- * `resolveModelSelection` is checked here against the catalog rather than only
+ * `toModelSelection` is checked here against the catalog rather than only
  * against its own literals, because the SDK validates nothing inside `params`:
  * an id or value the backend has dropped is accepted in silence and the role
  * runs at the model's defaults. `run.model` cannot expose that either — it
@@ -32,7 +32,7 @@ function pinsInUse(): string[] {
 const PINS = pinsInUse();
 
 describe.skipIf(!process.env.CURSOR_SDK_LIVE)(
-  "resolveModelSelection against the live catalog",
+  "toModelSelection against the live catalog",
   () => {
     let catalog: SDKModel[];
 
@@ -47,7 +47,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)(
 
     for (const pin of PINS) {
       it(`resolves ${pin} to a selection the catalog still advertises`, () => {
-        const selection = resolveModelSelection(pin);
+        const selection = toModelSelection(parseModelKey(pin));
 
         const model = catalog.find(
           (candidate) =>

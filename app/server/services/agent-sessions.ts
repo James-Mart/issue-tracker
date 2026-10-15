@@ -57,7 +57,7 @@ import {
 } from "./event-pipeline.js";
 import { stopAgentStack } from "./agent-stack.js";
 import { IssueError } from "./errors.js";
-import { resolveConversationModel } from "./model-selection.js";
+import { parseModelKey } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { requireLiveReviewWorktree } from "./review-worktree.js";
 import { reconcileOrphanedConversation } from "./orphan-run-scrub.js";
@@ -85,8 +85,6 @@ export type SendPromptResult =
 
 export interface SendPromptOptions {
   prompt: string;
-  /** Per-send model override (not written to conversation meta). */
-  model?: string;
   images?: AgentImage[];
 }
 
@@ -229,7 +227,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     const meta = readConversationMeta(conversationId);
     const cwd = conversationWorkingDirectory(meta);
-    const model = resolveConversationModel(meta.model);
+    const model = parseModelKey(meta.model);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
       mkdirSync(storeDir, { recursive: true });
@@ -479,10 +477,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     options: SendPromptOptions,
     isReplay: boolean,
   ): Promise<SendPromptResult> {
-    const { prompt, model, images } = options;
+    const { prompt, images } = options;
 
     // A missing conversation is not a scrub failure; surface that error as-is.
-    readConversationMeta(conversationId);
+    const model = parseModelKey(readConversationMeta(conversationId).model);
     try {
       await reconcileOrphanedConversation(conversationId);
     } catch (err) {
@@ -509,7 +507,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       throw err;
     }
 
-    const sendOptions = model ? { model: { id: model } } : {};
+    // An open session keeps the model it opened with, so every send names the
+    // stored one for a model switch to reach it.
+    const sendOptions = { model };
     const message =
       images && images.length > 0 ? { text: prompt, images } : prompt;
 

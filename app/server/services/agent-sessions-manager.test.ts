@@ -60,7 +60,7 @@ describe("agent sessions manager", () => {
         ),
         options: {
           cwd: workspaceDir,
-          model: { id: "composer-2.5" },
+          model: "composer-2.5",
           conversationId: meta.id,
           customTools: expect.objectContaining({
             delegate: expect.any(Object),
@@ -71,7 +71,7 @@ describe("agent sessions manager", () => {
     expect(fake.created).toHaveLength(1);
     expect(fake.created[0]).toMatchObject({
       cwd: workspaceDir,
-      model: { id: "composer-2.5" },
+      model: "composer-2.5",
       storeDir: join(
         dirname(issuesRoot),
         "conversations",
@@ -81,7 +81,9 @@ describe("agent sessions manager", () => {
     });
     expect(fake.created[0]?.customTools?.delegate).toBeDefined();
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
-    expect(fake.handles[0]?.sends).toEqual([{ message: "continue", options: {} }]);
+    expect(fake.handles[0]?.sends).toEqual([
+      { message: "continue", options: { model: "composer-2.5" } },
+    ]);
 
     const { transcript } = readConversation(meta.id);
     expect(transcript.slice(0, priorTranscript.length)).toEqual(priorTranscript);

@@ -148,12 +148,11 @@ function parseAttachmentNames(
 }
 
 type ParsedPromptBody =
-  | { ok: true; prompt: string; attachments: string[]; model?: string }
+  | { ok: true; prompt: string; attachments: string[] }
   | { ok: false; error: string };
 
 function parsePromptBody(body: {
   prompt?: unknown;
-  model?: unknown;
   attachments?: unknown;
 }): ParsedPromptBody {
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
@@ -165,11 +164,7 @@ function parsePromptBody(body: {
   if (!prompt && attachments.length === 0) {
     return { ok: false, error: "prompt is required" };
   }
-  const model =
-    typeof body.model === "string" && body.model.trim()
-      ? body.model.trim()
-      : undefined;
-  return { ok: true, prompt, attachments, model };
+  return { ok: true, prompt, attachments };
 }
 
 function attachmentValidationError(
@@ -270,7 +265,6 @@ export function createConversationsRouter(
         const started = await startConversationPrompt(
           meta.id,
           message,
-          model,
           sessions,
           { persistPrompt: false },
         );
@@ -482,7 +476,7 @@ export function createConversationsRouter(
         res.status(400).json({ error: parsed.error });
         return;
       }
-      const { prompt, attachments, model } = parsed;
+      const { prompt, attachments } = parsed;
 
       const conversationId = req.params.id;
       const attachmentError = attachmentValidationError(
@@ -497,7 +491,6 @@ export function createConversationsRouter(
       respondWithConversationMessage(
         res,
         await postConversationMessage(conversationId, prompt, sessions, {
-          model,
           attachments,
         }),
       );
@@ -522,7 +515,7 @@ export function createConversationsRouter(
   router.post(
     "/:id/interrupt",
     asyncRoute(async (req, res) => {
-      const body = req.body as { prompt?: unknown; model?: unknown };
+      const body = req.body as { prompt?: unknown };
       const prompt =
         typeof body.prompt === "string" ? body.prompt.trim() : "";
       if (!prompt) {
@@ -531,10 +524,6 @@ export function createConversationsRouter(
       }
 
       const conversationId = req.params.id;
-      const model =
-        typeof body.model === "string" && body.model.trim()
-          ? body.model.trim()
-          : undefined;
 
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_PROMPT);
 
@@ -546,9 +535,7 @@ export function createConversationsRouter(
 
       respondWithConversationMessage(
         res,
-        await postConversationMessage(conversationId, prompt, sessions, {
-          model,
-        }),
+        await postConversationMessage(conversationId, prompt, sessions),
       );
     }),
   );

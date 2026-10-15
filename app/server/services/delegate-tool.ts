@@ -31,10 +31,7 @@ import {
 } from "./guest-agent-launch.js";
 import { readIssueOrThrow } from "./issues.js";
 import { EventPipeline } from "./event-pipeline.js";
-import {
-  formatEffectiveModel,
-  resolveModelSelection,
-} from "./model-selection.js";
+import { formatEffectiveModel } from "./model-selection.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
@@ -573,8 +570,7 @@ export function createDelegateCustomTools(
 
         const agentsDir = options.agentsDir;
 
-        const pin = loadRoleModelPin(role, agentsDir);
-        const model = resolveModelSelection(pin);
+        const model = loadRoleModelPin(role, agentsDir);
         // Fresh spawn injects the role body; resume skips it — the agent already
         // carries those instructions from the first turn.
         const fullPrompt =
