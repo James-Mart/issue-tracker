@@ -38,9 +38,13 @@ const state = vi.hoisted(() => ({
   wide: true as boolean | undefined,
 }));
 
-vi.mock("../hooks/use-wide-review-workbench", () => ({
-  useWideReviewWorkbench: () => state.wide,
-}));
+vi.mock("../hooks/use-wide-review-workbench", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/use-wide-review-workbench")>();
+  return {
+    ...actual,
+    useWideReviewWorkbench: () => state.wide,
+  };
+});
 
 vi.mock("@/features/agents/hooks/use-conversation-events", () => ({
   useConversationEvents: () => ({
