@@ -17,7 +17,6 @@ function absolutePathSchema(field: string) {
 export const harnessConfigSchema = z
   .object({
     targetRoot: absolutePathSchema("targetRoot"),
-    reactRoot: absolutePathSchema("reactRoot"),
     cssEntries: z.array(absolutePathSchema("cssEntries")),
     aliases: z.record(z.string(), absolutePathSchema("aliases")),
     storiesGlobs: z.array(z.string().min(1)),
@@ -65,7 +64,6 @@ export function loadHarnessConfig(configPath: string): HarnessConfig {
 
   const config = result.data;
   assertExists("targetRoot", config.targetRoot);
-  assertExists("reactRoot", config.reactRoot);
   for (const entry of config.cssEntries) {
     assertExists("cssEntries", entry);
   }

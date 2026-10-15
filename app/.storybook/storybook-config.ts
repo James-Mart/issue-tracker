@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Plugin } from "vite";
 import type { HarnessConfig } from "./harness-config.js";
 import { sandboxNodeModulesDir } from "./harness-paths.js";
+import { buildReactAliases, resolveReactRoot } from "./harness-react.js";
 import type { HarnessResolveRoots } from "./harness-resolve.js";
 
 /** Committed harness smoke story — always included when a target config is loaded. */
@@ -123,15 +124,6 @@ export type HarnessStorybookOptions = {
   resolveRoots: HarnessResolveRoots;
 };
 
-/** One React resolution root so the preview and target components share an instance. */
-export function buildReactAliases(reactRoot: string): Record<string, string> {
-  return {
-    react: path.join(reactRoot, "react"),
-    "react-dom": path.join(reactRoot, "react-dom"),
-    "react/jsx-runtime": path.join(reactRoot, "react/jsx-runtime"),
-  };
-}
-
 /** Source for the virtual module preview.ts imports — one import per cssEntries path, in order. */
 export function harnessCssModuleSource(cssEntries: string[]): string {
   return cssEntries.map((entry) => `import ${JSON.stringify(entry)};`).join("\n");
@@ -143,12 +135,22 @@ export function buildHarnessStorybookOptions(
   config: HarnessConfig,
   scratchRoot: string,
 ): HarnessStorybookOptions {
+  const reactRoot = resolveReactRoot({
+    aliases: config.aliases,
+    targetRoot: config.targetRoot,
+    scratchRoot,
+  });
+  if (reactRoot === null) {
+    throw new Error(
+      `react: no installed copy in the authored alias directories, ${config.targetRoot}, or the mockup sandbox at ${scratchRoot}`,
+    );
+  }
   return {
     stories: [...config.storiesGlobs, SMOKE_STORY_GLOB],
     aliases: config.aliases,
-    reactAliases: buildReactAliases(config.reactRoot),
+    reactAliases: buildReactAliases(reactRoot),
     cssEntries: config.cssEntries,
-    fsAllow: collectFsAllowPaths(config, scratchRoot),
+    fsAllow: [...collectFsAllowPaths(config, scratchRoot), reactRoot],
     viteConfigPath: config.viteConfigPath,
     cacheDir: path.join(sandboxNodeModulesDir(scratchRoot), ".vite"),
     resolveRoots: { targetRoot: config.targetRoot, scratchRoot },

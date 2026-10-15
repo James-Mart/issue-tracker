@@ -125,10 +125,11 @@ Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
    target-derived fields from what step 1 found. `storiesGlobs` is one
    absolute glob per direction, matching `**/*.stories.tsx` under that
    direction's scratch directory. Each target-derived path field
-   (`targetRoot`, `reactRoot`, `cssEntries`, `aliases`, and
-   `viteConfigPath` when set) is absolute and exists on disk. If a field
-   cannot be resolved, stop and name the field and the value you would
-   have written.
+   (`targetRoot`, `cssEntries`, `aliases`, and `viteConfigPath` when
+   set) is absolute and exists on disk. The harness resolves React
+   from an installed copy under the authored alias directories, then
+   the target, then the sandbox. If a field cannot be resolved, stop
+   and name the field and the value you would have written.
 5. For each direction, write CSF files by joining the scratch root with
    `<directionId>/`. Compose **Surface** from the target's own components.
    One named export per state. Every file's default export `title` is

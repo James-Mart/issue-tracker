@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { isSharedReactImport } from "./harness-react.js";
 import {
   PLUGIN_APP_DIR,
   isInsideDir,
@@ -56,6 +57,7 @@ export function harnessResolvePlugin(roots: HarnessResolveRoots): Plugin {
     enforce: "pre",
     async resolveId(source, importer, options) {
       if (importer === undefined || !BARE_IMPORT_RE.test(source)) return null;
+      if (isSharedReactImport(source)) return null;
       const importerPath = importer.replace(/[?#].*$/, "");
       const kind = importerKind(importerPath);
       if (kind === null) return null;
