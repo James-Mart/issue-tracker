@@ -9,6 +9,7 @@ import {
   type ViewportName,
 } from "./mockup-story-capture.js";
 import { listStoryStates } from "./mockup-story-states.js";
+import { assertPluginAppManifestClean } from "./mockup-app-manifest.js";
 import { isMockupStackLive } from "./mockup-stack.js";
 
 export interface MockupCaptureOptions {
@@ -80,6 +81,7 @@ export function mockupCaptureOutDir(
 export async function captureMockupStoryStates(
   options: MockupCaptureOptions,
 ): Promise<CaptureResult[]> {
+  await assertPluginAppManifestClean();
   const viewports = options.viewports ?? (["phone"] as ViewportName[]);
   for (const viewport of viewports) {
     if (!VIEWPORT_NAMES.includes(viewport)) {

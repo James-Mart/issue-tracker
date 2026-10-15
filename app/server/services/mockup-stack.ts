@@ -10,13 +10,21 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { createServer, type AddressInfo, type Server } from "node:net";
+import { loadHarnessConfig } from "../../.storybook/harness-config.js";
+import { REACT_PACKAGES, resolveReactRoot } from "../../.storybook/harness-react.js";
 import { appDir } from "../config.js";
 import { killProcessGroup } from "./bounded-process.js";
 import { ensureChildReaper, reapExitedChildren } from "./child-reaper.js";
+import { assertPluginAppManifestClean } from "./mockup-app-manifest.js";
+import {
+  installSandboxPackages,
+  type RunSandboxNpm,
+} from "./mockup-sandbox.js";
 import {
   conversationMetaExists,
   harnessConfigPath,
   listRecordedMockupStackIds,
+  mockupScratchDir,
   mockupStackDir,
   mockupStackLogPath,
   mockupStackStatePath,
@@ -341,6 +349,36 @@ async function waitForReady(
   );
 }
 
+/**
+ * When the target has no installed React, install `react` and `react-dom`
+ * into the sandbox at the ranges the target declares, so the React aliases
+ * have a copy to bind.
+ */
+export function ensureTargetReact(
+  conversationId: string,
+  runNpm?: RunSandboxNpm,
+): void {
+  const config = loadHarnessConfig(harnessConfigPath(conversationId));
+  const scratch = mockupScratchDir(conversationId);
+  if (
+    resolveReactRoot({
+      aliases: config.aliases,
+      targetRoot: config.targetRoot,
+      scratchRoot: scratch,
+    })
+  ) {
+    return;
+  }
+  installSandboxPackages(
+    {
+      conversationId,
+      from: config.targetRoot,
+      packages: REACT_PACKAGES,
+    },
+    runNpm,
+  );
+}
+
 function assertHarnessConfig(conversationId: string): string {
   const path = harnessConfigPath(conversationId);
   if (!existsSync(path)) {
@@ -356,6 +394,7 @@ function assertHarnessConfig(conversationId: string): string {
 export async function startMockupStack(
   conversationId: string,
 ): Promise<MockupStackHandle> {
+  await assertPluginAppManifestClean();
   ensureChildReaper();
   const existing = readMockupStackState(conversationId);
   if (existing) {
@@ -367,6 +406,7 @@ export async function startMockupStack(
   }
 
   const harnessPath = assertHarnessConfig(conversationId);
+  ensureTargetReact(conversationId);
   writeSessionOutcome(conversationId, "open");
   mkdirSync(mockupStackDir(conversationId), { recursive: true });
 

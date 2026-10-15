@@ -1,6 +1,11 @@
 import path from "node:path";
 import type { Plugin } from "vite";
 import type { HarnessConfig } from "./harness-config.js";
+import { sandboxNodeModulesDir } from "./harness-paths.js";
+import { resolveTargetPostcssConfig } from "./harness-postcss.js";
+import { buildReactAliases, resolveReactRoot } from "./harness-react.js";
+import type { HarnessResolveRoots } from "./harness-importer.js";
+import { deriveTsconfigPaths, type TsconfigPath } from "./harness-tsconfig.js";
 
 /** Committed harness smoke story — always included when a target config is loaded. */
 export const SMOKE_STORY_GLOB = "./*.stories.@(ts|tsx)";
@@ -91,8 +96,11 @@ export function storiesGlobRoot(glob: string): string {
   return prefix || path.sep;
 }
 
-export function collectFsAllowPaths(config: HarnessConfig): string[] {
-  const paths = new Set<string>([config.targetRoot]);
+export function collectFsAllowPaths(
+  config: HarnessConfig,
+  scratchRoot: string,
+): string[] {
+  const paths = new Set<string>([config.targetRoot, scratchRoot]);
   for (const glob of config.storiesGlobs) {
     paths.add(storiesGlobRoot(glob));
   }
@@ -109,16 +117,18 @@ export type HarnessStorybookOptions = {
   cssEntries: string[];
   fsAllow: string[];
   viteConfigPath: string | undefined;
+  /** Derived from the target's tsconfig `paths`. Authored aliases win on the same prefix. */
+  tsconfigPaths: TsconfigPath[];
+  /** Nearest target PostCSS config for `cssEntries`, when one exists. */
+  postcssConfigFile: string | undefined;
+  /**
+   * Vite's pre-bundle cache, kept per conversation so concurrent stacks share
+   * nothing in the plugin app. Under the sandbox's `node_modules`, so Vite
+   * treats the optimized deps as installed packages.
+   */
+  cacheDir: string;
+  resolveRoots: HarnessResolveRoots;
 };
-
-/** One React resolution root so the preview and target components share an instance. */
-export function buildReactAliases(reactRoot: string): Record<string, string> {
-  return {
-    react: path.join(reactRoot, "react"),
-    "react-dom": path.join(reactRoot, "react-dom"),
-    "react/jsx-runtime": path.join(reactRoot, "react/jsx-runtime"),
-  };
-}
 
 /** Source for the virtual module preview.ts imports — one import per cssEntries path, in order. */
 export function harnessCssModuleSource(cssEntries: string[]): string {
@@ -129,13 +139,33 @@ export const HARNESS_CSS_VIRTUAL_ID = "virtual:harness-css";
 
 export function buildHarnessStorybookOptions(
   config: HarnessConfig,
+  scratchRoot: string,
 ): HarnessStorybookOptions {
+  const reactRoot = resolveReactRoot({
+    aliases: config.aliases,
+    targetRoot: config.targetRoot,
+    scratchRoot,
+  });
+  if (reactRoot === null) {
+    throw new Error(
+      `react: no installed copy in the authored alias directories, ${config.targetRoot}, or the mockup sandbox at ${scratchRoot}`,
+    );
+  }
+  const derived = deriveTsconfigPaths({
+    aliasDirs: Object.values(config.aliases),
+    targetRoot: config.targetRoot,
+    authoredAliases: config.aliases,
+  });
   return {
     stories: [...config.storiesGlobs, SMOKE_STORY_GLOB],
     aliases: config.aliases,
-    reactAliases: buildReactAliases(config.reactRoot),
+    reactAliases: buildReactAliases(reactRoot),
     cssEntries: config.cssEntries,
-    fsAllow: collectFsAllowPaths(config),
+    fsAllow: [...collectFsAllowPaths(config, scratchRoot), reactRoot, ...derived.fsAllow],
     viteConfigPath: config.viteConfigPath,
+    tsconfigPaths: derived.paths,
+    postcssConfigFile: resolveTargetPostcssConfig(config.cssEntries),
+    cacheDir: path.join(sandboxNodeModulesDir(scratchRoot), ".vite"),
+    resolveRoots: { targetRoot: config.targetRoot, scratchRoot },
   };
 }

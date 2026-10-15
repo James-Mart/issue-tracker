@@ -19,10 +19,10 @@ see before anyone implements them.
 
 ## Invariants
 
-- **Never write the target.** Story files, mock data, and harness
-  configuration live only under the conversation scratch in **## Procedure**.
-  The target project's tree is untouched — not a source file, not a
-  gitignore entry, not a manifest change.
+- **Write only under the scratch root.** Story files, mock data, and harness
+  configuration live there (**## Procedure**). Every other tree is read-only.
+- **Resolve target imports from the target's installed dependencies or the
+  sandbox.** Otherwise follow **Sandbox packages**.
 - **Author responsively.** Every direction must compose at phone width as
   well as desktop. A layout that is only legible at desktop width is a
   defect.
@@ -110,6 +110,17 @@ From `/root/.cursor/plugins/local/issue-tracker/app`, run
 Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
 `conversations/<resolvedConversationId>/mockups/`.
 
+**Sandbox packages.** When an import from a target file resolves from
+neither the target's installed dependencies nor the sandbox, install
+that package from `/root/.cursor/plugins/local/issue-tracker/app`:
+
+`npm run mockup-deps -- <conversationId> --from <importing file> <package...>`
+
+When start or capture reported the import, retry the command that
+reported it. When `mockup-deps` refuses the package, or the import is
+not a package at all, stop and name the importing file and the
+unresolved import.
+
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target
    workspace** as `working_directory` for grep. Resolve every harness path
@@ -125,17 +136,25 @@ Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
    target-derived fields from what step 1 found. `storiesGlobs` is one
    absolute glob per direction, matching `**/*.stories.tsx` under that
    direction's scratch directory. Each target-derived path field
-   (`targetRoot`, `reactRoot`, `cssEntries`, `aliases`, and
-   `viteConfigPath` when set) is absolute and exists on disk. If a field
-   cannot be resolved, stop and name the field and the value you would
-   have written.
+   (`targetRoot`, `cssEntries`, `aliases`, and `viteConfigPath` when
+   set) is absolute and exists on disk. The harness derives aliases
+   from `paths` in the target's tsconfig; write an `aliases` entry
+   only for a prefix those paths do not already cover, and that entry
+   wins for its prefix. PostCSS comes from the target's config, so
+   `harness.json` has no PostCSS field. `viteConfigPath`, when the
+   target needs a Vite plugin, is a config file written under the
+   scratch root whose plugin imports resolve from the sandbox. The
+   harness resolves React from an installed copy under the authored
+   alias directories, then the target, then the sandbox. If a field
+   cannot be resolved, stop and name the field and the value you
+   would have written.
 5. For each direction, write CSF files by joining the scratch root with
    `<directionId>/`. Compose **Surface** from the target's own components.
    One named export per state. Every file's default export `title` is
    `<directionId>/<component>`.
 6. From `/root/.cursor/plugins/local/issue-tracker/app`, start the
    harness and review each direction. Start is idempotent. Leave the
-   stack running.
+   stack running. An unresolved target import follows **Sandbox packages**.
    - `npm run mockup-stack -- start <conversationId>`
    - For each direction,
      `npm run mockup-capture -- --conversation <conversationId> --direction <directionId>`
