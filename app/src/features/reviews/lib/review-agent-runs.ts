@@ -81,6 +81,38 @@ export function seedReviewRunLatch(
   return seeded ?? latch;
 }
 
+/**
+ * Wide screen, before the latch effect: an opened run shows its transcript
+ * until the reader collapses it. A stored `false` is that collapse. `undefined`
+ * is the first paint, which still shows the transcript.
+ */
+export function wideOpenedRunShowsExpanded(
+  stored: boolean | undefined,
+  dismissed: boolean,
+): boolean {
+  return !dismissed && stored !== false;
+}
+
+/**
+ * Record the wide-screen default, then keep a URL-opened run expanded.
+ * Seeding a finished run writes `false`; that is the untouched default, not a
+ * collapse, so the opened run is set to expanded unless the reader dismissed it.
+ */
+export function latchWideOpenedRun(
+  latch: ReadonlyMap<string, boolean>,
+  runs: readonly { conversationId: string; status: string }[],
+  wide: boolean,
+  openedRunId: string | null,
+  dismissedRunId: string | null,
+): ReadonlyMap<string, boolean> {
+  const seeded = seedReviewRunLatch(latch, runs, wide);
+  if (!wide || !openedRunId || dismissedRunId === openedRunId) return seeded;
+  if (seeded.get(openedRunId) === true) return seeded;
+  const copy = new Map(seeded);
+  copy.set(openedRunId, true);
+  return copy;
+}
+
 /** Flip the wide-screen choice. A phone has no disclosure, so the latch stays. */
 export function toggleReviewRunExpansion(
   latched: boolean | undefined,

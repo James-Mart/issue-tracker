@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { ReviewAgentRun } from "@server/schemas";
 import { ShellInlineFault, ShellLoadingState, ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
-import { agentsConversationPath } from "@/features/agents/lib/links";
 import {
   formatRunDurationBetween,
   formatRunStartTime,
@@ -14,16 +12,19 @@ import { toolStatusVariant } from "@/features/agents/components/transcript-ui";
 import { cn } from "@/lib/utils/cn";
 import { useReviewAgentRunsQuery } from "../api/queries";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
+import { useReviewRunSearch } from "../hooks/use-review-run-search";
 import { useWideReviewWorkbench } from "../hooks/use-wide-review-workbench";
 import {
+  latchWideOpenedRun,
   reviewAgentRoleLabel,
   reviewAgentRunName,
   reviewRunExpansion,
-  seedReviewRunLatch,
   toggleReviewRunExpansion,
+  wideOpenedRunShowsExpanded,
   type ReviewAgentRunName,
 } from "../lib/review-agent-runs";
 import { ReviewAgentTranscript } from "./review-agent-transcript";
+import { ReviewRunOpenInAgents } from "./review-run-open-in-agents";
 
 function RunMeta({
   run,
@@ -101,13 +102,17 @@ function ReviewAgentRunCard({
   run,
   wide,
   expanded,
+  cardRef,
   onToggle,
+  onOpenRun,
   onOpenName,
 }: {
   run: ReviewAgentRun;
   wide: boolean;
   expanded: boolean;
+  cardRef?: (node: HTMLDivElement | null) => void;
   onToggle: () => void;
+  onOpenRun: () => void;
   onOpenName: (name: ReviewAgentRunName) => void;
 }) {
   const name = reviewAgentRunName(run);
@@ -117,6 +122,7 @@ function ReviewAgentRunCard({
 
   return (
     <div
+      ref={cardRef}
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
       data-testid="review-agent-run-card"
       data-conversation-id={run.conversationId}
@@ -125,38 +131,26 @@ function ReviewAgentRunCard({
     >
       <div className="flex min-w-0 flex-col border-l-2 border-l-[hsl(var(--current))] shell:flex-row shell:items-stretch">
         <div className="min-w-0 flex-1">
-          {wide ? (
-            <button
-              type="button"
-              className="flex min-h-11 w-full min-w-0 cursor-pointer flex-col gap-1 px-3 py-2.5 text-left font-mono text-[11px] text-muted-foreground"
-              aria-expanded={expanded}
-              aria-label={`${expanded ? "Collapse" : "Expand"} ${label} transcript`}
-              data-testid="agent-run-card-header"
-              onClick={onToggle}
-            >
-              {meta}
-              {plainName}
-            </button>
-          ) : (
-            <div
-              className="flex min-h-11 min-w-0 flex-col gap-1 px-3 py-2.5 font-mono text-[11px] text-muted-foreground"
-              data-testid="agent-run-card-header"
-            >
-              {meta}
-              {plainName}
-            </div>
-          )}
+          <button
+            type="button"
+            className="flex min-h-11 w-full min-w-0 cursor-pointer flex-col gap-1 px-3 py-2.5 text-left font-mono text-[11px] text-muted-foreground"
+            aria-expanded={wide ? expanded : undefined}
+            aria-label={
+              wide
+                ? `${expanded ? "Collapse" : "Expand"} ${label} transcript`
+                : `Open ${label} transcript`
+            }
+            data-testid="agent-run-card-header"
+            onClick={wide ? onToggle : onOpenRun}
+          >
+            {meta}
+            {plainName}
+          </button>
           {name?.target ? (
             <RunNameLink name={name} onOpen={() => onOpenName(name)} />
           ) : null}
         </div>
-        <Link
-          to={agentsConversationPath(run.conversationId)}
-          className="inline-flex min-h-11 shrink-0 items-center px-3 text-[11px] font-medium text-[hsl(var(--current))] no-underline hover:underline hover:underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          data-testid="agent-run-open-in-agents"
-        >
-          Open in Agents
-        </Link>
+        <ReviewRunOpenInAgents conversationId={run.conversationId} />
       </div>
       {expanded ? <ReviewAgentTranscript conversationId={run.conversationId} /> : null}
     </div>
@@ -182,20 +176,48 @@ export function ReviewAgentsTab({
   const { data, isLoading, error } = useReviewAgentRunsQuery(projectId, reviewId);
   const { threads } = useReviewCommentThreads(reviewId);
   const wide = useWideReviewWorkbench() === true;
+  const { runId: focusedRunId, openRun, closeRun } = useReviewRunSearch();
   const [latch, setLatch] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const dismissedRunId = useRef<string | null>(null);
+  const scrolledRunId = useRef<string | null>(null);
+  const focusedCard = useRef<HTMLDivElement | null>(null);
+  const setFocusedCard = useCallback((node: HTMLDivElement | null) => {
+    focusedCard.current = node;
+  }, []);
   const listed = data?.runs;
   const runs = listed ?? [];
 
   useEffect(() => {
-    setLatch((current) => seedReviewRunLatch(current, listed ?? [], wide));
-  }, [listed, wide]);
+    setLatch((current) =>
+      latchWideOpenedRun(
+        current,
+        listed ?? [],
+        wide,
+        focusedRunId,
+        dismissedRunId.current,
+      ),
+    );
+  }, [listed, wide, focusedRunId]);
+
+  useEffect(() => {
+    if (!wide || !focusedRunId) return;
+    if (scrolledRunId.current === focusedRunId) return;
+    const card = focusedCard.current;
+    if (!card) return;
+    scrolledRunId.current = focusedRunId;
+    card.scrollIntoView({ block: "nearest" });
+  }, [wide, focusedRunId, listed]);
 
   function expandedFor(run: ReviewAgentRun): boolean {
-    return reviewRunExpansion(
-      latch.get(run.conversationId),
-      run.status === "running",
-      wide,
-    ).expanded;
+    const stored = latch.get(run.conversationId);
+    if (
+      wide &&
+      focusedRunId === run.conversationId &&
+      wideOpenedRunShowsExpanded(stored, dismissedRunId.current === run.conversationId)
+    ) {
+      return true;
+    }
+    return reviewRunExpansion(stored, run.status === "running", wide).expanded;
   }
 
   function toggle(run: ReviewAgentRun) {
@@ -206,6 +228,10 @@ export function ReviewAgentsTab({
     );
     const latched = next.latched;
     if (latched === undefined) return;
+    if (!next.expanded && run.conversationId === focusedRunId) {
+      dismissedRunId.current = focusedRunId;
+      closeRun();
+    }
     setLatch((current) => {
       const copy = new Map(current);
       copy.set(run.conversationId, latched);
@@ -261,7 +287,9 @@ export function ReviewAgentsTab({
           run={run}
           wide={wide}
           expanded={expandedFor(run)}
+          cardRef={run.conversationId === focusedRunId ? setFocusedCard : undefined}
           onToggle={() => toggle(run)}
+          onOpenRun={() => openRun(run.conversationId)}
           onOpenName={(name) => openName(run, name)}
         />
       ))}

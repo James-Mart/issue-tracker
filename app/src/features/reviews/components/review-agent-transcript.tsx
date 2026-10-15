@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import type { TranscriptEvent } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
+import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageScroller } from "@/components/ui/message-scroller";
@@ -121,22 +122,43 @@ function TranscriptRows({ events }: { events: readonly TranscriptEvent[] }) {
   });
 }
 
+const TRANSCRIPT_LAYOUT = {
+  card: {
+    frame: "border-t border-border",
+    scroller: "max-h-96 px-3 py-3",
+    hint: "Expand again later or reload the page.",
+  },
+  fill: {
+    frame: "flex min-h-0 flex-1 flex-col",
+    scroller: "min-h-0 flex-1 px-3 py-3",
+    hint: "Reload the page or try again in a moment.",
+  },
+} as const;
+
 /** Conversation transcript for one review run, following the latest message while pinned. */
-export function ReviewAgentTranscript({ conversationId }: { conversationId: string }) {
+export function ReviewAgentTranscript({
+  conversationId,
+  fill = false,
+}: {
+  conversationId: string;
+  /** Fill the parent instead of capping the card body. */
+  fill?: boolean;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const history = useConversationEvents(conversationId, hostRef);
   const waiting = !history.ready && history.events.length === 0;
+  const layout = TRANSCRIPT_LAYOUT[fill ? "fill" : "card"];
 
   if (history.historyFailed && history.events.length === 0) {
     return (
       <div
-        className="border-t border-border px-3 py-3"
+        className={cn(layout.frame, "px-3 py-3")}
         data-slot="agent-run-body"
         data-state="error"
       >
         <ShellInlineFault
           message={history.historyError?.message ?? "Could not load the transcript."}
-          hint="Expand again later or reload the page."
+          hint={layout.hint}
           action={
             <Button
               type="button"
@@ -155,7 +177,7 @@ export function ReviewAgentTranscript({ conversationId }: { conversationId: stri
   if (waiting) {
     return (
       <div
-        className="space-y-2 border-t border-border px-3 py-3"
+        className={cn(layout.frame, "space-y-2 px-3 py-3")}
         data-slot="agent-run-body"
         data-state="loading"
         aria-busy="true"
@@ -168,10 +190,15 @@ export function ReviewAgentTranscript({ conversationId }: { conversationId: stri
   }
 
   return (
-    <div ref={hostRef} className="border-t border-border" data-slot="agent-run-body" data-state="ready">
+    <div
+      ref={hostRef}
+      className={cn(layout.frame, "min-h-0")}
+      data-slot="agent-run-body"
+      data-state="ready"
+    >
       <MessageScroller
         bottomKey={transcriptScrollerBottomKey(history.events)}
-        className="max-h-96 px-3 py-3"
+        className={layout.scroller}
         role="log"
         aria-label="Run transcript"
       >

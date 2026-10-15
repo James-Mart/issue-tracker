@@ -10,6 +10,7 @@ import type {
   SelectedLineRange,
 } from "@pierre/diffs/react";
 import type {
+  ReviewAgentRun,
   ReviewCommits,
   ReviewDiff,
   ReviewDiffFile,
@@ -32,7 +33,28 @@ const state = vi.hoisted(() => ({
   setMark: vi.fn(),
   postComment: vi.fn(),
   commentThreads: [] as CommentThread[],
-  agentRuns: [] as { conversationId: string }[],
+  agentRuns: [] as ReviewAgentRun[],
+  wide: true as boolean | undefined,
+}));
+
+vi.mock("../hooks/use-wide-review-workbench", () => ({
+  useWideReviewWorkbench: () => state.wide,
+}));
+
+vi.mock("@/features/agents/hooks/use-conversation-events", () => ({
+  useConversationEvents: () => ({
+    events: [
+      { type: "assistant", text: "Tokens should 401.", at: "t1", seq: 1 },
+    ],
+    ready: true,
+    historyFailed: false,
+    historyError: null,
+    refetchHistory: vi.fn(),
+    isRefetchingHistory: false,
+    pendingText: null,
+    streamRunActive: null,
+    loadOlder: vi.fn(),
+  }),
 }));
 
 vi.mock("@/features/agents/api/queries", () => ({
@@ -330,6 +352,7 @@ beforeEach(() => {
   state.commits = commitsFixture();
   state.commentThreads = [];
   state.agentRuns = [];
+  state.wide = true;
 });
 
 afterEach(() => {
@@ -392,4 +415,52 @@ describe("StoryReviewPage", () => {
       container.querySelector('[data-testid="review-progress"]')?.textContent,
     ).toBe("2 / 3 files reviewed");
   });
+
+  it("opens a phone transcript over the workbench and returns to the Agents tab", () => {
+    state.wide = false;
+    state.agentRuns = [researcherRun()];
+    const container = mountPage("tab=agents");
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(container.querySelector("[data-testid='story-review-header']")).not.toBeNull();
+    expect(
+      container.querySelector('[data-conversation-id="conv-q"]')?.hasAttribute("data-expanded"),
+    ).toBe(false);
+
+    click(container.querySelector("[data-testid='agent-run-card-header']")!);
+
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector("[data-testid='story-review-header']")).toBeNull();
+    const screen = container.querySelector("[data-testid='review-phone-transcript']");
+    expect(screen?.textContent).toContain("Agents");
+    expect(screen?.textContent).toContain("Question researcher");
+    expect(screen?.textContent).toContain("Tokens should 401.");
+    expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
+      "Back to Agents",
+    );
+    const open = screen?.querySelector("[data-testid='agent-run-open-in-agents']");
+    expect(open?.getAttribute("href")).toBe("/agents/conv-q");
+    expect(open?.querySelector("svg")).toBeNull();
+
+    click(screen!.querySelector("[data-testid='review-transcript-back']")!);
+
+    expect(container.querySelector("[data-testid='review-phone-transcript']")).toBeNull();
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-review-tab="agents"]')?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(container.querySelector("[data-testid='review-agents-tab']")).not.toBeNull();
+  });
 });
+
+function researcherRun(): ReviewAgentRun {
+  return {
+    conversationId: "conv-q",
+    role: "issue-tracker-review-question",
+    model: "composer-2.5",
+    status: "completed",
+    startedAt: "2026-10-14T16:40:00.000Z",
+    endedAt: "2026-10-14T16:42:00.000Z",
+    questionExcerpt: "Should expired tokens 401?",
+    threadId: "thread-1",
+  };
+}
