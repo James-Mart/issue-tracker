@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { RailNode } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import { AxisChips } from "./axis-chips";
@@ -11,6 +12,7 @@ import type { FlowItem } from "../lib/flow";
 import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   flowItemNeedsAttention,
+  flowRowIsLive,
   isCapturedIdeaFlowItem,
 } from "../lib/flow";
 import { issueChannelPath } from "../lib/links";
@@ -83,6 +85,8 @@ function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
 export interface FlowRowProps {
   item: FlowItem;
   indexes: TreeRowIndexes;
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
   avatar?: ReactNode;
   actions?: ReactNode;
   /** Row-attached launch fault; retry is the restored queue control. */
@@ -105,6 +109,8 @@ export interface FlowRowProps {
 export function FlowRow({
   item,
   indexes,
+  issues,
+  derived,
   avatar,
   actions,
   launchFault,
@@ -121,9 +127,13 @@ export function FlowRow({
       : queueStage === "waiting" || queueStage === "parked"
         ? "ready"
         : baseRailState;
-  const live =
-    queueStage === "running" ||
-    (queueStage == null && baseRailState === "in-flight");
+  const live = flowRowIsLive(
+    item,
+    queueStage,
+    baseRailState,
+    issues,
+    derived,
+  );
   const count = leafTaskProgressCount(item.issue, indexes);
   const waitingSince = queueStage === "waiting" ? queueWait(item) : undefined;
   const drillInTo = flowRowDrillInTo(item, indexes, to);

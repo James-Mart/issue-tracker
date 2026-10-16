@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { partitionCockpitBuckets } from "../components/flow-buckets-sections";
-import { flowBuckets } from "./flow";
+import { flowBuckets, isReadyWorkFlowItem } from "./flow";
 
 type EpicRecord = Extract<IssueRecord, { kind: "epic" }>;
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
@@ -92,9 +92,11 @@ describe("flowBuckets", () => {
     expect(ids(buckets.blocked).sort()).toEqual(
       ["blocked-epic", "blocked-story"].sort(),
     );
-    expect(ids(buckets.queue).sort()).toEqual(["flight-epic"].sort());
+    expect(ids(buckets.queue)).toEqual([]);
     expect(ids(buckets.recentlyMerged).sort()).toEqual(["done-epic"].sort());
-    expect(ids(buckets.ready).sort()).toEqual(["ready-epic"].sort());
+    expect(ids(buckets.ready).sort()).toEqual(
+      ["flight-epic", "ready-epic"].sort(),
+    );
     expect(ids(buckets.readyToLand)).toEqual(["pr-story"]);
   });
 
@@ -201,5 +203,18 @@ describe("flowBuckets", () => {
     expect(
       partitionCockpitBuckets(buckets).needsAttention.map((item) => item.issue.id),
     ).not.toContain("running");
+  });
+
+  it("accepts a slotless in-progress Story in Ready", () => {
+    const issues = [project("p"), story("open-story", "p")];
+    const derived: Record<string, DerivedState> = {
+      "open-story": { blocked: false, storyStatus: "in-progress" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.ready)).toEqual(["open-story"]);
+    expect(ids(buckets.queue)).toEqual([]);
+    expect(isReadyWorkFlowItem(buckets.ready[0]!, issues, derived)).toBe(true);
   });
 });
