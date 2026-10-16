@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-retro
-model: cursor-grok-4.7-high-fast
+model: cursor-grok-4.7
 description: >-
   Mines the invoking session's transcripts for tracker meta-confusion,
   attaches evidence to each matching open Idea, and lands at most one new

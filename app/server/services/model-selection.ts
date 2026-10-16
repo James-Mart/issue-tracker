@@ -26,17 +26,17 @@ export type ModelKey = string & { readonly [modelKeyBrand]: true };
 const MODEL_PINS: Record<string, ModelSelection> = {
   "composer-2.5": { id: "composer-2.5" },
   "composer-2.5-fast": { id: "composer-2.5-fast" },
-  "cursor-grok-4.7-high-fast": {
+  "cursor-grok-4.7": {
     id: "grok-4.7",
     params: [
       { id: "reasoning_effort", value: "high" },
-      { id: "fast", value: "true" },
+      { id: "fast", value: "false" },
       // The catalog also advertises 500k and marks it default, but the
       // registry rejects that value. 256k is the context that runs.
       { id: "context", value: "256k" },
     ],
   },
-  "cursor-grok-4.5-high-fast": {
+  "cursor-grok-4.5": {
     id: "grok-4.5",
     params: [
       { id: "effort", value: "high" },

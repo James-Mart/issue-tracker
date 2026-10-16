@@ -8,8 +8,8 @@ describe("toModelSelection", () => {
   it("carries parameters in params rather than as top-level keys", () => {
     for (const pin of [
       "composer-2.5",
-      "cursor-grok-4.7-high-fast",
-      "cursor-grok-4.5-high-fast",
+      "cursor-grok-4.7",
+      "cursor-grok-4.5",
       "claude-opus-5-5-thinking-high",
     ]) {
       const selection = toModelSelection(parseModelKey(pin));

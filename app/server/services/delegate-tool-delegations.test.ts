@@ -90,7 +90,7 @@ describe("delegate delegations listing and lifecycle", () => {
     );
 
     const expectedModel = formatEffectiveModel(
-      parseModelKey("cursor-grok-4.5-high-fast"),
+      parseModelKey("cursor-grok-4.5"),
     );
     const listedA = delegationsListingOf(
       await toolsA.delegations!.execute({}, {}),

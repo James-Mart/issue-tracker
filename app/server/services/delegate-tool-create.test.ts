@@ -47,7 +47,7 @@ describe("createDelegateCustomTools", () => {
     );
 
     expect(fake.created).toHaveLength(1);
-    expect(fake.created[0]!.model).toBe("cursor-grok-4.5-high-fast");
+    expect(fake.created[0]!.model).toBe("cursor-grok-4.5");
     expect(fake.handles[0]!.sends).toHaveLength(1);
     expect(sentText(fake.handles[0]!.sends[0]!).startsWith(roleBody)).toBe(true);
     expect(sentText(fake.handles[0]!.sends[0]!).endsWith("do the thing")).toBe(

@@ -1,6 +1,6 @@
 ---
 name: issue-tracker-design-conformance
-model: cursor-grok-4.7-high-fast
+model: cursor-grok-4.7
 description: >-
   Owns a mockup round: spawns the author, reviews captures for
   conformance, and iterates. Used by issue-tracker-mockup.

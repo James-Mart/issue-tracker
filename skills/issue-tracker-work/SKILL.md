@@ -159,7 +159,7 @@ Given a Task id: run `issue task get <taskId> assignee`. Trim stdout.
 - `composer`, `grok`, or `opus` → that value is the family.
 - Legacy model slug → map to family:
   - `composer-2.5` → `composer`
-  - `cursor-grok-4.5-high-fast` → `grok`
+  - `cursor-grok-4.5` → `grok`
   - `claude-opus-5-thinking-high` → `opus`
   - `claude-opus-4-8-thinking-high` → `opus`
 - Anything else → raise
@@ -195,7 +195,7 @@ not from a spawn-time argument.
 | Coordinator (you) | — | Drive the whole run: thin CLI + spawn subagents | Composer 2.5 (`composer-2.5`) | spawn/CLI only |
 | Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
-| Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7-high-fast`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
+| Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
 | Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story append`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 

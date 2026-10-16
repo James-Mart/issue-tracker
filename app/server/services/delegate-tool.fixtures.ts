@@ -90,7 +90,7 @@ export function setupDelegateToolTest(): void {
     "pinned-role.md",
     `---
 name: pinned-role
-model: cursor-grok-4.5-high-fast
+model: cursor-grok-4.5
 description: A pinned role for delegate tests.
 ---
 
