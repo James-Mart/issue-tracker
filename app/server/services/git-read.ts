@@ -143,11 +143,23 @@ export async function branchExists(
   workspace: string,
   branchName: string,
 ): Promise<boolean> {
+  return refExists(workspace, `refs/heads/${branchName}`);
+}
+
+/** True when `ref` resolves in the repository rooted at `workspace`. */
+export async function refExists(workspace: string, ref: string): Promise<boolean> {
   try {
-    await runGit(["rev-parse", "--verify", `refs/heads/${branchName}`], workspace);
+    await runGit(["rev-parse", "--verify", ref], workspace);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (
+      err instanceof IssueError &&
+      err.code === "git-failed" &&
+      err.message.includes("Needed a single revision")
+    ) {
+      return false;
+    }
+    throw err;
   }
 }
 

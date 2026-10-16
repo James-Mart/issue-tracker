@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import { getOriginRemoteUrl } from "./git-read.js";
+import { getOriginRemoteUrl, refExists } from "./git-read.js";
 import { runGitWrite } from "./git-write.js";
 import { IssueError } from "./errors.js";
 import { list } from "./issues.js";
@@ -13,13 +13,33 @@ import { projectContaining } from "./subtree.js";
 
 const REMOTE_REF_NOT_FOUND = "couldn't find remote ref";
 
+export type ResolveMergeBaseRefOptions = { fetch?: boolean };
+
+/** Local `refs/remotes/origin/<mergeBase>`, or null when that ref is absent. */
+async function localOriginRef(
+  cwd: string,
+  mergeBase: string,
+): Promise<string | null> {
+  const ref = `refs/remotes/origin/${mergeBase}`;
+  return (await refExists(cwd, ref)) ? `origin/${mergeBase}` : null;
+}
+
+/**
+ * Remote-tracking ref when `origin` exists, otherwise the merge-base name.
+ * `fetch: false` reads only the local remote-tracking ref.
+ */
 export async function resolveMergeBaseRef(
   cwd: string,
   mergeBase: string,
+  opts?: ResolveMergeBaseRefOptions,
 ): Promise<string> {
   const originUrl = await getOriginRemoteUrl(cwd);
   if (originUrl === null) {
     return mergeBase;
+  }
+  if (opts?.fetch === false) {
+    // Offline view: missing remote-tracking ref falls back to the merge-base branch name.
+    return (await localOriginRef(cwd, mergeBase)) ?? mergeBase;
   }
 
   try {

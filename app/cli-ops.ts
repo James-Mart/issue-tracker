@@ -34,6 +34,7 @@ import {
   update,
 } from "./server/services/issues.js";
 import { refreshRecordedPrFacts } from "./server/services/pr-facts-read.js";
+import { formatReviewDiffRange } from "./server/services/review-diff.js";
 import { reviewStatus } from "./server/services/review-lifecycle.js";
 import {
   attachmentPath,
@@ -254,8 +255,17 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.planQueuedAt) lines.push(`planQueuedAt: ${detail.planQueuedAt}`);
   }
   if (detail.kind === "review") {
-    lines.push(`story: ${detail.story}`);
+    if (detail.story) lines.push(`story: ${detail.story}`);
     lines.push(`status: ${reviewStatus(detail)}`);
+    if (detail.pr) {
+      lines.push(`prNumber: ${detail.pr.number}`);
+      lines.push(`prUrl: ${detail.pr.url}`);
+      lines.push(`prBaseRef: ${detail.pr.baseRef}`);
+      lines.push(`prHeadRef: ${detail.pr.headRef}`);
+      lines.push(`prHeadSha: ${detail.pr.headSha}`);
+      lines.push(`prFork: ${detail.pr.fork}`);
+    }
+    lines.push(await formatReviewDiffRange(detail));
   }
   if (detail.kind === "task") {
     lines.push(`status: ${detail.status}`);

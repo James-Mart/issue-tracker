@@ -74,6 +74,7 @@ describe("resolveMergeBaseRef", () => {
     await expect(resolveMergeBaseRef(repo, "main")).resolves.toBe("origin/main");
 
     rmSync(bare, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
   });
 
   it("throws git-failed when fetch fails for other reasons", async () => {
