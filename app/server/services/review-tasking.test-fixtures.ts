@@ -87,6 +87,8 @@ export function useReviewTaskingStore(tempPrefix: string): void {
 export function stubReviewTaskingSessions(prompts: string[]): AgentSessions {
   return {
     getActiveRun: () => undefined,
+    isBusy: () => false,
+    claimStart: () => ({ release() {} }),
     sendPrompt: async (_id: string, options: { prompt: string }) => {
       prompts.push(options.prompt);
       return { ok: true as const, run: { id: "run-1" } as never };

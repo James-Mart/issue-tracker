@@ -53,7 +53,7 @@ import { enrichCommentsForRead } from "../services/researcher-runs.js";
 import {
   clearWorkQueueFields,
   createIssueChannelSession,
-  startConversationPrompt,
+  startFirstPrompt,
 } from "../services/conversations.js";
 import {
   appendUpdateFromMergeBase,
@@ -284,7 +284,7 @@ export function createIssuesRouter(
       const projectId = projectIdForIssue(issueId);
       requireProjectWorkspace(projectId);
 
-      const { meta: created, initialPrompt } = await createIssueChannelSession(
+      const { meta: created, firstPrompt } = await createIssueChannelSession(
         {
           projectId,
           title,
@@ -295,23 +295,18 @@ export function createIssuesRouter(
         },
         sessions,
       );
-      if (channel === "implementing") {
-        await clearWorkQueueFields(issueId);
-      }
 
       // Run start is outside serialize: sendPrompt → updateMeta(agentId) would
       // deadlock if nested inside the conversations write chain.
-      if (initialPrompt) {
-        const started = await startConversationPrompt(
-          created.id,
-          initialPrompt,
-          sessions,
-          { persistPrompt: false },
-        );
-        if (!started.ok) {
-          res.status(502).json({ error: started.message });
-          return;
-        }
+      const started = firstPrompt
+        ? await startFirstPrompt(created.id, firstPrompt, sessions)
+        : undefined;
+      if (channel === "implementing") {
+        await clearWorkQueueFields(issueId);
+      }
+      if (started && !started.ok) {
+        res.status(502).json({ error: started.message });
+        return;
       }
 
       res.status(201).json({ id: created.id });

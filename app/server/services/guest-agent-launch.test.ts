@@ -66,6 +66,8 @@ function stubSessions(): AgentSessions {
         wait: async () => ({ id: "run-live", status: "finished" as const }),
       };
     },
+    isBusy: (conversationId: string) => conversationId === "live",
+    claimStart: () => ({ release() {} }),
     listActiveRuns: () => [],
     cancel,
     dispose: vi.fn(),

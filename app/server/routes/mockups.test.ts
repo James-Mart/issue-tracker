@@ -18,6 +18,8 @@ function stubSessions(): AgentSessions {
   return {
     sendPrompt: vi.fn(),
     getActiveRun: vi.fn(),
+    isBusy: () => false,
+    claimStart: () => ({ release() {} }),
     listActiveRuns: () => [],
     cancel: vi.fn(),
     dispose: vi.fn(),

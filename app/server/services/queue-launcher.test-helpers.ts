@@ -132,6 +132,12 @@ export function fakeLauncherSessions(): {
     getActiveRun(conversationId: string) {
       return active.get(conversationId);
     },
+    isBusy(conversationId: string) {
+      return active.has(conversationId);
+    },
+    claimStart() {
+      return { release() {} };
+    },
     listActiveRuns() {
       return [...active.keys()].map((conversationId) => ({ conversationId }));
     },

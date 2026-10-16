@@ -970,18 +970,22 @@ spawning anything if it is absent.
 
 ### One active implementing run per work root
 
-Creating an anchored `implementing` channel session is refused with HTTP `409`
-when another non-archived `implementing` session on the same work root (the
-anchored issue) already has an active run. The response extends the usual
-`{ error }` body with `holderIssueId` and `holderIssueTitle` so a client can
-name the holder and link to its channel without a second request. The check
+Creating an anchored channel session archives the non-archived sessions already
+on that issue and channel. A busy predecessor refuses the creation with HTTP
+`409` before anything is written. A session is busy while it has a live run or
+a starting one: from when a start is claimed until that run settles. On the
+`implementing` channel this is the work-root lock. The response extends the
+usual `{ error }` body with `holderIssueId` and `holderIssueTitle` so a client
+can name the holder and link to its channel without a second request. The check
 lives in `createIssueChannelSession`
-(`app/server/services/conversations.ts`) so every caller obeys it.
+(`app/server/services/conversations.ts`) so every caller obeys it. A session
+created with a first prompt is claimed in that same step, so two overlapping
+starts on one work root leave one session and the second gets the `409`.
 
 Each branch has its own git worktree, so implementing loops on different work
 roots in the same Project no longer collide on checkouts, branches, or commits.
 What must not be shared is a single work root — the branch and checkout bound to
-it. Idle (no active run) or archived sessions do not hold the lock.
+it. Idle or archived sessions do not hold the lock.
 
 ### Auto-plan queue
 
@@ -1905,7 +1909,8 @@ Session lists are `POST /api/channel-sessions` with
 `{ sessions: { "<issueId>:<channel>": ChannelSessionListItem[] } }`.
 Create stays `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
 `{ model, title?, message? }` and still archives prior non-archived sessions
-on the same issue and channel before creating the new one. `export` is
+on the same issue and channel before creating the new one, refusing with `409`
+while one of them is busy. `export` is
 offered on an unarchived Epic or project-level Story, in addition to that
 issue's `implementing` channel. The session message tells the coordinator to
 read [issue-tracker-github-export](skills/issue-tracker-github-export/SKILL.md)

@@ -37,7 +37,7 @@ import {
   offersExportChannel,
   offersReviewChannel,
 } from "../kind.js";
-import type { AgentSessions } from "./agent-sessions.js";
+import type { AgentSessions, StartClaim } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { readDelegationLines, type ParsedDelegationLine } from "./delegation-log.js";
 import {
@@ -317,53 +317,72 @@ export type CreateIssueChannelSessionInput = {
   message?: string;
 };
 
+/**
+ * A persisted first prompt the caller still has to start, with the claim that
+ * keeps its new session busy until {@link startFirstPrompt} releases it.
+ */
+export type FirstPrompt = { text: string; claim: StartClaim };
+
 export type CreateIssueChannelSessionResult = {
   meta: ConversationMeta;
-  /** Trimmed first prompt when `message` was provided; caller starts the run. */
-  initialPrompt?: string;
+  /** Set when `message` was provided; the caller starts it. */
+  firstPrompt?: FirstPrompt;
 };
 
-/**
- * Active-run lookup used by the work-root implementing lock. Narrower than
- * `AgentSessions` so unit tests can stub just this probe.
- */
-export type ActiveRunLookup = {
-  getActiveRun(conversationId: string): unknown;
-};
+export type BusyLookup = Pick<AgentSessions, "isBusy">;
 
 /**
- * Refuse creating an `implementing` session when another non-archived
- * implementing session on the same work root already has an active run.
- *
- * Each branch has its own git worktree, so loops on different work roots no
- * longer collide; what must not be shared is one work root's checkout.
+ * Archive a conversation with no live or starting run; a busy one is refused.
+ * Caller must already hold the `serialize()` turn.
  */
-function refuseIfImplementingWorkRootLocked(
-  issueId: string,
-  channel: ConversationChannel,
-  sessions: ActiveRunLookup,
+export function archiveIdleConversation(
+  meta: ConversationMeta,
+  sessions: BusyLookup,
 ): void {
-  if (channel !== "implementing") return;
-
-  for (const existing of listIndexedConversationMetas()) {
-    if (
-      existing.channel !== "implementing" ||
-      existing.archived ||
-      existing.issueId !== issueId ||
-      sessions.getActiveRun(existing.id) === undefined
-    ) {
-      continue;
-    }
-    const holder = readIssueOrThrow(existing.issueId);
+  if (sessions.isBusy(meta.id)) {
     throw new IssueError(
       "conflict",
-      `work root "${issueId}" already has an active implementing session`,
-      {
-        holderIssueId: existing.issueId,
-        holderIssueTitle: holder.title,
-      },
+      `conversation "${meta.id}" has a live or starting run`,
     );
   }
+  writeMeta({ ...meta, archived: true, updatedAt: new Date().toISOString() });
+}
+
+/** Non-archived sessions a new session on `issueId` + `channel` replaces. */
+function channelPredecessors(
+  issueId: string,
+  channel: ConversationChannel,
+): ConversationMeta[] {
+  return listIndexedConversationMetas().filter(
+    (existing) =>
+      existing.issueId === issueId &&
+      existing.channel === channel &&
+      !existing.archived,
+  );
+}
+
+/**
+ * Refuse creating a session while a predecessor on the same issue and channel
+ * is busy, so its run is never stranded in an archived conversation. On the
+ * `implementing` channel this is the work-root lock: each branch has its own
+ * git worktree, so what must not be shared is one work root's checkout.
+ */
+function refuseIfPredecessorBusy(
+  issueId: string,
+  channel: ConversationChannel,
+  predecessors: ConversationMeta[],
+  sessions: BusyLookup,
+): void {
+  if (!predecessors.some((existing) => sessions.isBusy(existing.id))) return;
+  const holder = readIssueOrThrow(issueId);
+  throw new IssueError(
+    "conflict",
+    `issue "${issueId}" already has an active ${channel} session`,
+    {
+      holderIssueId: issueId,
+      holderIssueTitle: holder.title,
+    },
+  );
 }
 
 /** Drop a work root's queue fields once an implementing start has taken its slot. */
@@ -381,18 +400,19 @@ export async function clearWorkQueueFields(issueId: string): Promise<void> {
 }
 
 /**
- * Atomically validate eligibility, archive any active predecessor on the same
+ * Atomically validate eligibility, archive any idle predecessor on the same
  * issue+channel, create the anchored session, and optionally persist the first
- * prompt event — one `serialize()` turn so concurrent POSTs cannot leave two
- * active sessions, and refused requests write nothing. An implementing session
- * needs a free slot in its Project unless the root already holds one. Queue
- * fields stay until the caller clears them: the launcher does that only after
- * the prompt has started, and the channel route does it when the session is
- * created.
+ * prompt event and claim its start — one `serialize()` turn so concurrent
+ * POSTs cannot leave two active sessions, and refused requests write nothing.
+ * A busy predecessor refuses the creation. An implementing session needs a
+ * free slot in its Project unless the root already holds one. Queue fields
+ * stay until the caller clears them: the launcher does that only after the
+ * prompt has started, and the channel route does it once the start has been
+ * attempted.
  */
 export async function createIssueChannelSession(
   input: CreateIssueChannelSessionInput,
-  sessions: ActiveRunLookup,
+  sessions: Pick<AgentSessions, "isBusy" | "claimStart">,
 ): Promise<CreateIssueChannelSessionResult> {
   assertGuestAllowsAgentLaunch(GUEST_REFUSED_CHANNEL_SESSION);
   const created = await serialize(() => {
@@ -407,29 +427,45 @@ export async function createIssueChannelSession(
 
     // Refuse before any mutation.
     validateAnchor(issueId, input.channel);
-    refuseIfImplementingWorkRootLocked(issueId, input.channel, sessions);
+    const predecessors = channelPredecessors(issueId, input.channel);
+    refuseIfPredecessorBusy(issueId, input.channel, predecessors, sessions);
     if (input.channel === "implementing") {
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
 
-    const now = new Date().toISOString();
-    for (const existing of listIndexedConversationMetas()) {
-      if (
-        existing.issueId === issueId &&
-        existing.channel === input.channel &&
-        !existing.archived
-      ) {
-        writeMeta({ ...existing, archived: true, updatedAt: now });
-      }
+    for (const existing of predecessors) {
+      archiveIdleConversation(existing, sessions);
     }
 
     const meta = persistNewConversation(
       { title, projectId, model, issueId, channel: input.channel },
       initialPrompt ? { initialPrompt } : undefined,
     );
-    return { meta, ...(initialPrompt ? { initialPrompt } : {}) };
+    if (!initialPrompt) return { meta };
+    return {
+      meta,
+      firstPrompt: { text: initialPrompt, claim: sessions.claimStart(meta.id) },
+    };
   });
   return created;
+}
+
+/** Start a new channel session's persisted first prompt; its claim is released however the start ends. */
+export async function startFirstPrompt(
+  conversationId: string,
+  firstPrompt: FirstPrompt,
+  sessions: Pick<AgentSessions, "sendPrompt">,
+): ReturnType<typeof startConversationPrompt> {
+  try {
+    return await startConversationPrompt(
+      conversationId,
+      firstPrompt.text,
+      sessions,
+      { persistPrompt: false },
+    );
+  } finally {
+    firstPrompt.claim.release();
+  }
 }
 
 /** True when the conversation transcript has at least one persisted line. */

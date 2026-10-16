@@ -88,12 +88,26 @@ export interface SendPromptOptions {
   images?: AgentImage[];
 }
 
+export interface StartClaim {
+  release(): void;
+}
+
 export interface AgentSessions {
   sendPrompt(
     conversationId: string,
     options: SendPromptOptions,
   ): Promise<SendPromptResult>;
   getActiveRun(conversationId: string): ActiveRun | undefined;
+  /**
+   * True from when a start is claimed until that run settles, including the
+   * window before {@link getActiveRun} sees the run.
+   */
+  isBusy(conversationId: string): boolean;
+  /**
+   * Hold the conversation busy until `release()`. Release once the run start
+   * settles; a started run keeps it busy from there.
+   */
+  claimStart(conversationId: string): StartClaim;
   listActiveRuns(): { conversationId: string }[];
   cancel(conversationId: string): Promise<boolean>;
   dispose(conversationId: string): Promise<void>;
@@ -152,6 +166,11 @@ function isAuthFailureResult(result: AgentRunResult): boolean {
   return classifyAgentFailure(result.status, result.error) === "auth";
 }
 
+/** A turn, or the streaming tail of one, has not settled yet. */
+function hasRunInFlight(entry: SessionEntry): boolean {
+  return entry.turn !== undefined || entry.pumps.size > 0;
+}
+
 function conversationDir(conversationId: string): string {
   return join(conversationsDir, conversationId);
 }
@@ -202,6 +221,32 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
    * tail can reopen the session, which must not wait on that same teardown.
    */
   const teardowns = new Map<string, Promise<void>>();
+  /** Outstanding start claims per conversation. */
+  const startClaims = new Map<string, number>();
+
+  function claimStart(conversationId: string): StartClaim {
+    startClaims.set(conversationId, (startClaims.get(conversationId) ?? 0) + 1);
+    let released = false;
+    return {
+      release() {
+        if (released) {
+          throw new Error(
+            `start claim on conversation "${conversationId}" was already released`,
+          );
+        }
+        released = true;
+        const remaining = startClaims.get(conversationId)! - 1;
+        if (remaining > 0) startClaims.set(conversationId, remaining);
+        else startClaims.delete(conversationId);
+      },
+    };
+  }
+
+  function isBusy(conversationId: string): boolean {
+    if (startClaims.has(conversationId)) return true;
+    const entry = sessions.get(conversationId);
+    return entry !== undefined && hasRunInFlight(entry);
+  }
 
   async function ensureHandle(
     conversationId: string,
@@ -377,7 +422,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
    */
   function startIdleClock(conversationId: string): void {
     const entry = sessions.get(conversationId);
-    if (!entry || entry.turn || entry.pumps.size > 0) return;
+    if (!entry || hasRunInFlight(entry)) return;
     stopIdleClock(entry);
     entry.idleTimer = setTimeout(() => {
       entry.idleTimer = undefined;
@@ -462,11 +507,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     options: SendPromptOptions,
     isReplay: boolean,
   ): Promise<SendPromptResult> {
+    const claim = claimStart(conversationId);
     const live = sessions.get(conversationId);
     if (live) stopIdleClock(live);
     try {
       return await startTurn(conversationId, options, isReplay);
     } finally {
+      claim.release();
       // A send that never started a run leaves the session idle again.
       startIdleClock(conversationId);
     }
@@ -667,6 +714,8 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           classified = await classifyReviewTaskingRun(conversationId, outcome, {
             getActiveRun: (id) => sessions.get(id)?.turn?.run,
             sendPrompt: (id, options) => sendPromptInternal(id, options, false),
+            isBusy,
+            claimStart,
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -762,6 +811,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     getActiveRun(conversationId) {
       return sessions.get(conversationId)?.turn?.run;
     },
+
+    isBusy,
+    claimStart,
 
     listActiveRuns() {
       return listConversationIds()
