@@ -51,11 +51,11 @@ describe("parkWorkRoot", () => {
     });
     const sessionId = await openIdleSession("paused");
     const { parkWorkRoot } = await import("./park-work-root.js");
-    const { runLauncherPass } = await import("./work-queue-launcher.js");
+    const { drainWorkQueue } = await import("./work-queue-launcher.js");
     const { listConversations } = await import("./conversations.js");
     const { sessions, started } = fakeLauncherSessions();
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
     expect(started).toHaveLength(0);
 
     const parked = await parkWorkRoot("paused", idle);
@@ -67,7 +67,7 @@ describe("parkWorkRoot", () => {
       false,
     );
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     expect(started).toHaveLength(1);
     expect(readRaw("waiting").workQueuedAt).toBeUndefined();

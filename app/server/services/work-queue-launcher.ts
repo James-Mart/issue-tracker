@@ -213,7 +213,7 @@ async function drainProject(
  * read when nothing is queued and no implementing session is open, and
  * otherwise derives at most once.
  */
-export async function runLauncherPass(
+async function runLauncherPass(
   sessions: ConversationMessageSessions,
 ): Promise<void> {
   // No HTTP caller. Throwing is caught and written as auto-start failure,
@@ -240,8 +240,10 @@ export async function runLauncherPass(
 
 const DRAIN_DEBOUNCE_MS = 500;
 
-let draining: Promise<void> | null = null;
-let again = false;
+type PendingPass = { finished: Promise<void>; resolve: () => void };
+
+let draining = false;
+let pendingPass: PendingPass | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function isQueueRelevantFrame(frame: ConversationFrame): boolean {
@@ -253,27 +255,49 @@ function scheduleDebouncedDrain(sessions: AgentSessions): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
-    scheduleDrain(sessions);
+    void drainWorkQueue(sessions);
   }, DRAIN_DEBOUNCE_MS);
 }
 
-function scheduleDrain(sessions: AgentSessions): void {
-  if (draining) {
-    again = true;
-    return;
+function requestPass(): PendingPass {
+  if (!pendingPass) {
+    let resolve!: () => void;
+    const finished = new Promise<void>((done) => {
+      resolve = done;
+    });
+    pendingPass = { finished, resolve };
   }
-  draining = (async () => {
-    do {
-      again = false;
-      try {
-        await runLauncherPass(sessions);
-      } catch (err) {
-        console.error("work queue launcher failed:", err);
-      }
-    } while (again);
-  })().finally(() => {
-    draining = null;
-  });
+  return pendingPass;
+}
+
+async function runDrain(sessions: ConversationMessageSessions): Promise<void> {
+  draining = true;
+  while (pendingPass) {
+    const pass = pendingPass;
+    pendingPass = null;
+    try {
+      await runLauncherPass(sessions);
+    } catch (err) {
+      console.error("work queue launcher failed:", err);
+    }
+    pass.resolve();
+  }
+  // Cleared in the same tick as the loop's last check, so no request can land
+  // between them and go unrun.
+  draining = false;
+}
+
+/**
+ * Run launcher passes one at a time. A call made while a pass is in flight
+ * asks for one more pass after it. Resolves once a pass that began after the
+ * call has finished; a failed pass is logged and still resolves.
+ */
+export function drainWorkQueue(
+  sessions: ConversationMessageSessions,
+): Promise<void> {
+  const { finished } = requestPass();
+  if (!draining) void runDrain(sessions);
+  return finished;
 }
 
 /** Drain once at boot, then on each issues watcher frame. */
@@ -282,5 +306,5 @@ export function startWorkQueueLauncher(sessions: AgentSessions): void {
     if (isQueueRelevantFrame(frame)) scheduleDebouncedDrain(sessions);
   });
   startIssueEventsWatcher();
-  scheduleDrain(sessions);
+  void drainWorkQueue(sessions);
 }

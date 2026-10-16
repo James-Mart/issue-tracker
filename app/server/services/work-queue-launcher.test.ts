@@ -60,10 +60,10 @@ describe("implementing work-queue launcher", () => {
     seedEpic("older", 1, { workQueuedAt: "2026-07-01T00:00:00.000Z" });
     seedEpic("newer", 2, { workQueuedAt: "2026-07-02T00:00:00.000Z" });
     const { sessions, started } = fakeLauncherSessions();
-    const { runLauncherPass } = await loadLauncher();
+    const { drainWorkQueue } = await loadLauncher();
     const { listConversations } = await loadConversations();
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     expect(started).toHaveLength(1);
     const metas = listConversations();
@@ -76,7 +76,7 @@ describe("implementing work-queue launcher", () => {
     expect(readRaw("newer").workQueuedAt).toBe("2026-07-02T00:00:00.000Z");
     expect(readRaw("newer").workQueuePosition).toBe(2);
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
     expect(started).toHaveLength(1);
   });
 
@@ -97,9 +97,9 @@ describe("implementing work-queue launcher", () => {
     ];
     const open = await openIdleSession("open-epic");
     const { sessions } = fakeLauncherSessions();
-    const { runLauncherPass } = await loadLauncher();
+    const { drainWorkQueue } = await loadLauncher();
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     const archived = await archivedById();
     expect(finished.map((id) => archived.get(id))).toEqual([true, true, true]);
@@ -130,11 +130,11 @@ describe("implementing work-queue launcher", () => {
       }
       return send(conversationId, options);
     };
-    const { runLauncherPass } = await loadLauncher();
+    const { drainWorkQueue } = await loadLauncher();
     const { update } = await import("./issues.js");
     const { listConversations } = await loadConversations();
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     expect(sends).toBe(1);
     expect(started).toHaveLength(0);
@@ -151,11 +151,11 @@ describe("implementing work-queue launcher", () => {
     expect(readRaw("newer").needsAttention).not.toBe(true);
     expect(listConversations().map((meta) => meta.issueId)).toEqual(["older"]);
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
     expect(sends).toBe(1);
 
     await update("older", { needsAttention: false, attentionReason: null });
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     expect(sends).toBe(2);
     expect(started).toHaveLength(1);

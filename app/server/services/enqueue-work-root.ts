@@ -18,7 +18,7 @@ import {
   refuseWorkQueueConflict,
   withQueueStamp,
 } from "./work-queue.js";
-import { runLauncherPass } from "./work-queue-launcher.js";
+import { drainWorkQueue } from "./work-queue-launcher.js";
 import {
   implementingWorkRootFromIssue,
   slotHoldingRootIds,
@@ -105,6 +105,6 @@ export async function enqueueWorkRoot(
     }
     commitIssueBatch([{ issue: stamped }], []);
   });
-  await runLauncherPass(sessions);
+  await drainWorkQueue(sessions);
   return read(id);
 }
