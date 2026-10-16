@@ -7,7 +7,7 @@ import {
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   createIssueChannelSession,
-  startConversationPrompt,
+  startFirstPrompt,
 } from "./conversations.js";
 import { appendComment, readAll, update } from "./issues.js";
 
@@ -47,7 +47,7 @@ async function startQueuedIdea(
   const title = planningSessionTitle(idea.title);
   const model = planningSessionModel(stakeholder, stakeholder);
   const message = planningSessionMessage(idea.id, stakeholder);
-  const { meta, initialPrompt } = await createIssueChannelSession(
+  const { meta, firstPrompt } = await createIssueChannelSession(
     {
       projectId: idea.partOf,
       title,
@@ -58,13 +58,8 @@ async function startQueuedIdea(
     },
     sessions,
   );
-  if (!initialPrompt) return;
-  const started = await startConversationPrompt(
-    meta.id,
-    initialPrompt,
-    sessions,
-    { persistPrompt: false },
-  );
+  if (!firstPrompt) return;
+  const started = await startFirstPrompt(meta.id, firstPrompt, sessions);
   if (!started.ok) {
     throw new Error(started.message);
   }

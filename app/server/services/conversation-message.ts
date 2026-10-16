@@ -16,7 +16,7 @@ const MESSAGE_ROOT_PARKED = "parked";
 
 export type ConversationMessageSessions = Pick<
   AgentSessions,
-  "getActiveRun" | "sendPrompt"
+  "getActiveRun" | "sendPrompt" | "isBusy" | "claimStart"
 >;
 
 export type ConversationMessageDelivery =

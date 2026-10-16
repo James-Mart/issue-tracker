@@ -131,7 +131,7 @@ describe("conversations store", () => {
 
   it("createIssueChannelSession archives predecessors atomically under concurrent create", async () => {
     const { createIssueChannelSession, listConversations } = await loadService();
-    const idle = { getActiveRun: () => undefined };
+    const idle = { isBusy: () => false, claimStart: () => ({ release() {} }) };
 
     const [a, b] = await Promise.all([
       createIssueChannelSession(

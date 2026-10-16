@@ -970,18 +970,30 @@ spawning anything if it is absent.
 
 ### One active implementing run per work root
 
-Creating an anchored `implementing` channel session is refused with HTTP `409`
-when another non-archived `implementing` session on the same work root (the
-anchored issue) already has an active run. The response extends the usual
-`{ error }` body with `holderIssueId` and `holderIssueTitle` so a client can
-name the holder and link to its channel without a second request. The check
+Creating an anchored channel session archives the non-archived sessions already
+on that issue and channel. A busy predecessor refuses the creation with HTTP
+`409` before anything is written. A session is busy while it has a live run or
+a starting one: from when a start is claimed until that run settles. On the
+`implementing` channel this is the work-root lock. The response extends the
+usual `{ error }` body with `holderIssueId` and `holderIssueTitle` so a client
+can name the holder and link to its channel without a second request. The check
 lives in `createIssueChannelSession`
-(`app/server/services/conversations.ts`) so every caller obeys it.
+(`app/server/services/conversations.ts`) so every caller obeys it. A session
+created with a first prompt is claimed in that same step, so two overlapping
+starts on one work root leave one session and the second gets the `409`.
+
+A busy conversation cannot be archived. Every conversation archive goes through
+`archiveIdleConversation` (`app/server/services/conversations.ts`), which
+refuses a busy one; each caller decides what the refusal means.
+`PATCH /api/conversations/:id` with `archived: true` on a busy conversation is
+`409`, naming the live or starting run. `POST /api/conversations/:id/cancel`
+responds once the cancelled run has settled, so an archive sent after it
+succeeds.
 
 Each branch has its own git worktree, so implementing loops on different work
 roots in the same Project no longer collide on checkouts, branches, or commits.
 What must not be shared is a single work root — the branch and checkout bound to
-it. Idle (no active run) or archived sessions do not hold the lock.
+it. Idle or archived sessions do not hold the lock.
 
 ### Auto-plan queue
 
@@ -1001,13 +1013,13 @@ it. Idle (no active run) or archived sessions do not hold the lock.
 
 **Slots.** A work root holds one of its Project's slots while it has a non-archived `implementing` session, is not archived, is not finished, and is not parked. A Story is finished when merged or Ready to land; an Epic when done or when every unmerged child Story is Ready to land. A paused root keeps its slot. A parked root (`workParkedAt`) keeps its implementing session and holds no slot. A queued root carrying `needsAttention` holds a slot even when it has no implementing session, which keeps a failed start among the active slots. `createIssueChannelSession` refuses a new `implementing` session with `409` code `no-free-slot` while the Project's slot-holding roots number `maxImplementingRuns`, unless the work root already holds a slot. Lowering `maxImplementingRuns` below the held count stops nothing; no new start succeeds until the count is under the cap.
 
-**Release.** Each launcher pass first archives every non-archived `implementing` session on a finished work root, so the root holds no slot. Work appended later puts the root back in Ready, and its next start opens a fresh coordinator session.
+**Release.** Each launcher pass first archives every idle non-archived `implementing` session on a finished work root, so the root holds no slot. Release skips a busy session and retries after the run settles: each settled run schedules a debounced launcher pass, as an issues watcher frame does. Work appended later puts the root back in Ready, and its next start opens a fresh coordinator session.
 
 **Enqueue.** In the same batch as the archive flip and any code-gate merge-policy lowering: when an Idea with a `stakeholder` and without `executionGate: true` flips `archived` from false to true, stamp `workQueuedAt` with the current time and append `workQueuePosition` (one past the highest position already in that Project) on the work root of each derived `planRoots` id. The work root is the Epic that contains the plan root, or the project-level Story itself. Roots that already carry `workQueuedAt` or `workParkedAt` are left unchanged. Roots from the same archive are ordered so each sits after the Epics in its `blockedBy`. A root is queued when every blocker is already queued (waiting, holding a slot, parked, or joining in this same enqueue) or finished (done, merged, or ready to land). A root whose blocker is neither is left unchanged — not queued, and not marked `needsAttention` — and so is every root that depends on it.
 
 A successful launcher start clears that root's `workQueuedAt`, `workQueuePosition`, and `workParkedAt` after the implementing prompt has started. Creating an implementing session through the channel route clears them when the session is created.
 
-**Manual enqueue.** `POST /api/issues/:id/queue` queues an unarchived, unfinished Epic or project-level Story that is not already queued and does not hold a slot, and returns that root. Every `blockedBy` root must already be queued (waiting, holding a slot, or parked) or finished (done, merged, or ready to land). Otherwise the route refuses with `409` and `Blocked by <title>, so it must be queued after it`, naming the first offending blocker. Cockpit Ready, the implementing channel, and issue-detail overview enqueue through this route and do not create `implementing` sessions. When the root is eligible to start (`blocked` and `planNotFinal` both false) and a slot is free, this request runs a launcher pass so the start happens before the response. A root that holds a slot is resumed or messaged on its existing coordinator; that message is not appended to a new start.
+**Manual enqueue.** `POST /api/issues/:id/queue` queues an unarchived, unfinished Epic or project-level Story that is not already queued and does not hold a slot, and returns that root. Every `blockedBy` root must already be queued (waiting, holding a slot, or parked) or finished (done, merged, or ready to land). Otherwise the route refuses with `409` and `Blocked by <title>, so it must be queued after it`, naming the first offending blocker. Cockpit Ready, the implementing channel, and issue-detail overview enqueue through this route and do not create `implementing` sessions. When the root is eligible to start (`blocked` and `planNotFinal` both false) and a slot is free, this request joins the launcher drain and waits for a pass that began after its queue write, so the start happens before the response. A root that holds a slot is resumed or messaged on its existing coordinator; that message is not appended to a new start.
 
 **Manual dequeue.** `DELETE /api/issues/:id/queue` removes a waiting or parked work root from its Project queue (clears `workQueuedAt`, `workQueuePosition`, and `workParkedAt`) and returns that root. Roots that hold a slot — running, paused, or queued with `needsAttention` after a failed start — are refused with `409`. The cockpit Queue view dequeues waiting rows and parked rows through this route with no confirmation.
 
@@ -1019,9 +1031,9 @@ A successful launcher start clears that root's `workQueuedAt`, `workQueuePositio
 
 **Park.** `POST /api/issues/:id/queue/park` sets `workParkedAt` on a paused work root — a slot holder with no live implementing turn — and returns that root. The implementing session stays, and the root leaves the slot count. A running root, a root that does not hold a slot, and a root that is already parked are `409`. The cockpit Queue view shows a `SquareParking` icon on each paused row. Parked rows sit above running rows. The row and its title are dimmed.
 
-**Unpark.** `POST /api/issues/:id/queue/resume` clears `workParkedAt` and `needsAttention`, archives that root's non-archived implementing sessions, and places the root first among the Project's waiting roots. `workQueuedAt` stays when already set and is otherwise stamped with the current time. The route returns that root. A root that is not parked is `409`. A result that would put the root ahead of a waiting root it is `blockedBy` is `409` with `Blocked by <title>, so it must be queued after it`. `Play` on a parked row and on that root's issue detail overview both call this route. The paused-root resume message is not sent; the root waits for a new implementing start.
+**Unpark.** `POST /api/issues/:id/queue/resume` clears `workParkedAt` and `needsAttention`, archives that root's non-archived implementing sessions, and places the root first among the Project's waiting roots. `workQueuedAt` stays when already set and is otherwise stamped with the current time. The route returns that root. A root that is not parked is `409`. A parked root has no live turn, so a busy implementing session there refuses the unpark with `409`. A result that would put the root ahead of a waiting root it is `blockedBy` is `409` with `Blocked by <title>, so it must be queued after it`. `Play` on a parked row and on that root's issue detail overview both call this route. The paused-root resume message is not sent; the root waits for a new implementing start.
 
-**Launcher.** The server process drains the queue on boot and on each issues watcher frame. For each Project, while its slot-holding roots number fewer than `maxImplementingRuns`, it starts the queued work root with the lowest `workQueuePosition` whose derived `blocked` and `planNotFinal` are both false. Blocked roots keep their position and are skipped. The start goes through `createIssueChannelSession` with channel `implementing`, title `Implement <title>`, and only the work-loop start message. A `no-free-slot` refusal (another start took the last slot) leaves the root queued. Any other `409` (that work root already has an active implementing run) only clears `workQueuedAt`, `workQueuePosition`, and `workParkedAt`. Any other failure leaves `workQueuedAt`, `workQueuePosition`, and `workParkedAt` in place and sets `needsAttention` with reason `Auto-start failed: <message>`. The root holds its slot. The launcher does not retry that start until `needsAttention` is cleared; the next pass then starts it again.
+**Launcher.** The server process drains the queue on boot, on each issues watcher frame, and on each manual enqueue. Launcher passes are single-flight: a drain requested while a pass runs adds one more pass after it, and passes never overlap. For each Project, while its slot-holding roots number fewer than `maxImplementingRuns`, it starts the queued work root with the lowest `workQueuePosition` whose derived `blocked` and `planNotFinal` are both false. Blocked roots keep their position and are skipped. The start goes through `createIssueChannelSession` with channel `implementing`, title `Implement <title>`, and only the work-loop start message. A `no-free-slot` refusal (another start took the last slot) leaves the root queued. Any other `409` (that work root already has an active implementing run) only clears `workQueuedAt`, `workQueuePosition`, and `workParkedAt`. Any other failure leaves `workQueuedAt`, `workQueuePosition`, and `workParkedAt` in place and sets `needsAttention` with reason `Auto-start failed: <message>`. The root holds its slot. The launcher does not retry that start until `needsAttention` is cleared; the next pass then starts it again.
 
 ### Project trunk
 
@@ -1905,7 +1917,8 @@ Session lists are `POST /api/channel-sessions` with
 `{ sessions: { "<issueId>:<channel>": ChannelSessionListItem[] } }`.
 Create stays `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
 `{ model, title?, message? }` and still archives prior non-archived sessions
-on the same issue and channel before creating the new one. `export` is
+on the same issue and channel before creating the new one, refusing with `409`
+while one of them is busy. `export` is
 offered on an unarchived Epic or project-level Story, in addition to that
 issue's `implementing` channel. The session message tells the coordinator to
 read [issue-tracker-github-export](skills/issue-tracker-github-export/SKILL.md)

@@ -6,7 +6,7 @@ import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
-import { updateMeta } from "./conversations.js";
+import { archiveConversation, type BusyLookup } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import {
@@ -45,9 +45,18 @@ function hasQueuedWork(issues: Issue[]): boolean {
   );
 }
 
-async function releaseFinishedSlots(snapshot: SlotSnapshot): Promise<void> {
+/** A busy session is skipped; the pass after its run settles archives it. */
+async function releaseFinishedSlots(
+  snapshot: SlotSnapshot,
+  sessions: BusyLookup,
+): Promise<void> {
   for (const conversationId of finishedRootSessionIds(snapshot)) {
-    await updateMeta(conversationId, { archived: true });
+    try {
+      await archiveConversation(conversationId, sessions);
+    } catch (err) {
+      if (err instanceof IssueError && err.code === "conflict") continue;
+      throw err;
+    }
   }
 }
 
@@ -213,7 +222,7 @@ async function drainProject(
  * read when nothing is queued and no implementing session is open, and
  * otherwise derives at most once.
  */
-export async function runLauncherPass(
+async function runLauncherPass(
   sessions: ConversationMessageSessions,
 ): Promise<void> {
   // No HTTP caller. Throwing is caught and written as auto-start failure,
@@ -228,7 +237,7 @@ export async function runLauncherPass(
     byId: new Map(issues.map((issue) => [issue.id, issue])),
     attempted: new Set(),
   };
-  await releaseFinishedSlots(snapshot);
+  await releaseFinishedSlots(snapshot, sessions);
   const projects = issues.filter(
     (issue): issue is Extract<Issue, { kind: "project" }> =>
       issue.kind === "project",
@@ -240,8 +249,10 @@ export async function runLauncherPass(
 
 const DRAIN_DEBOUNCE_MS = 500;
 
-let draining: Promise<void> | null = null;
-let again = false;
+type PendingPass = { finished: Promise<void>; resolve: () => void };
+
+let draining = false;
+let pendingPass: PendingPass | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function isQueueRelevantFrame(frame: ConversationFrame): boolean {
@@ -253,34 +264,57 @@ function scheduleDebouncedDrain(sessions: AgentSessions): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
-    scheduleDrain(sessions);
+    void drainWorkQueue(sessions);
   }, DRAIN_DEBOUNCE_MS);
 }
 
-function scheduleDrain(sessions: AgentSessions): void {
-  if (draining) {
-    again = true;
-    return;
+function requestPass(): PendingPass {
+  if (!pendingPass) {
+    let resolve!: () => void;
+    const finished = new Promise<void>((done) => {
+      resolve = done;
+    });
+    pendingPass = { finished, resolve };
   }
-  draining = (async () => {
-    do {
-      again = false;
-      try {
-        await runLauncherPass(sessions);
-      } catch (err) {
-        console.error("work queue launcher failed:", err);
-      }
-    } while (again);
-  })().finally(() => {
-    draining = null;
-  });
+  return pendingPass;
 }
 
-/** Drain once at boot, then on each issues watcher frame. */
+async function runDrain(sessions: ConversationMessageSessions): Promise<void> {
+  draining = true;
+  while (pendingPass) {
+    const pass = pendingPass;
+    pendingPass = null;
+    try {
+      await runLauncherPass(sessions);
+    } catch (err) {
+      console.error("work queue launcher failed:", err);
+    }
+    pass.resolve();
+  }
+  // Cleared in the same tick as the loop's last check, so no request can land
+  // between them and go unrun.
+  draining = false;
+}
+
+/**
+ * Run launcher passes one at a time. A call made while a pass is in flight
+ * asks for one more pass after it. Resolves once a pass that began after the
+ * call has finished; a failed pass is logged and still resolves.
+ */
+export function drainWorkQueue(
+  sessions: ConversationMessageSessions,
+): Promise<void> {
+  const { finished } = requestPass();
+  if (!draining) void runDrain(sessions);
+  return finished;
+}
+
+/** Drain once at boot, then on each issues watcher frame and each run settle. */
 export function startWorkQueueLauncher(sessions: AgentSessions): void {
   subscribeFrames(ISSUES_TOPIC, (frame) => {
     if (isQueueRelevantFrame(frame)) scheduleDebouncedDrain(sessions);
   });
+  sessions.onRunSettled(() => scheduleDebouncedDrain(sessions));
   startIssueEventsWatcher();
-  scheduleDrain(sessions);
+  void drainWorkQueue(sessions);
 }

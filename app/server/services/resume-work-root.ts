@@ -1,8 +1,9 @@
 import type { Issue, IssueDetail } from "../schemas.js";
+import type { AgentSessions } from "./agent-sessions.js";
 import {
-  listIndexedConversationMetas,
-  persistConversationMeta,
-} from "./conversation-meta-index.js";
+  archiveIdleConversation,
+  channelPredecessors,
+} from "./conversations.js";
 import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
@@ -41,7 +42,7 @@ export const RESUME_RUNNING = "running";
  */
 export async function resumeParkedWorkRoot(
   id: string,
-  sessions: { getActiveRun(conversationId: string): unknown },
+  sessions: Pick<AgentSessions, "getActiveRun" | "isBusy">,
   note?: string,
 ): Promise<IssueDetail> {
   await serialize(() => {
@@ -120,7 +121,9 @@ export async function resumeParkedWorkRoot(
         problems.map((problem) => problem.message).join("; "),
       );
     }
-    archiveOpenImplementingSessions(root.id, now);
+    for (const meta of channelPredecessors(root.id, "implementing")) {
+      archiveIdleConversation(meta, sessions);
+    }
     commitIssueBatch(writes, []);
   });
   return read(id);
@@ -162,17 +165,4 @@ function waitingPositions(
   });
   positions.push(nextQueuePosition(projectId, issues, byId));
   return positions;
-}
-
-function archiveOpenImplementingSessions(rootId: string, now: string): void {
-  for (const meta of listIndexedConversationMetas()) {
-    if (
-      meta.archived ||
-      meta.channel !== "implementing" ||
-      meta.issueId !== rootId
-    ) {
-      continue;
-    }
-    persistConversationMeta({ ...meta, archived: true, updatedAt: now });
-  }
 }

@@ -82,10 +82,10 @@ describe("plan queue launcher", () => {
       planQueuedAt: "2026-07-02T00:00:00.000Z",
     });
     const { sessions, started } = fakeLauncherSessions();
-    const { runLauncherPass } = await loadLauncher();
+    const { drainWorkQueue } = await loadLauncher();
     const { listConversations } = await loadConversations();
 
-    await runLauncherPass(sessions);
+    await drainWorkQueue(sessions);
 
     expect(started).toHaveLength(2);
     const metas = listConversations();

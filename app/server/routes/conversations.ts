@@ -3,6 +3,7 @@ import { basename } from "path";
 import { uploadConversationAttachment } from "../middleware/upload-conversation-attachment.js";
 import {
   agentSessions,
+  type ActiveRun,
   type AgentSessions,
 } from "../services/agent-sessions.js";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../services/guest-agent-launch.js";
 import { forkConversation } from "../services/conversation-fork.js";
 import {
+  archiveConversation,
   createConversation,
   deleteConversation,
   listConversations,
@@ -125,6 +127,15 @@ function activeRunState(
     return { active: false, runId: null, startedAt: null };
   }
   return { active: true, runId: run.id, startedAt: run.startedAt };
+}
+
+async function cancelUntilSettled(
+  sessions: AgentSessions,
+  conversationId: string,
+  run: ActiveRun,
+): Promise<void> {
+  await sessions.cancel(conversationId);
+  await run.wait();
 }
 
 function parseAttachmentNames(
@@ -287,6 +298,7 @@ export function createConversationsRouter(
         archived?: unknown;
       };
       const patch: ConversationMetaPatch = {};
+      let archive = false;
       if (body.title !== undefined) {
         if (typeof body.title !== "string") {
           res.status(400).json({ error: "title must be a string" });
@@ -306,18 +318,21 @@ export function createConversationsRouter(
           res.status(400).json({ error: "archived must be a boolean" });
           return;
         }
-        patch.archived = body.archived;
+        if (body.archived) archive = true;
+        else patch.archived = false;
       }
       if (
         patch.title === undefined &&
         patch.model === undefined &&
-        patch.archived === undefined
+        body.archived === undefined
       ) {
         res.status(400).json({ error: "title, model, or archived is required" });
         return;
       }
 
-      const meta = await updateMeta(req.params.id, patch);
+      const meta = archive
+        ? await archiveConversation(req.params.id, sessions, patch)
+        : await updateMeta(req.params.id, patch);
       res.json(meta);
     }),
   );
@@ -372,11 +387,13 @@ export function createConversationsRouter(
   router.post(
     "/:id/cancel",
     asyncRoute(async (req, res) => {
-      const cancelled = await sessions.cancel(req.params.id);
-      if (!cancelled) {
+      const activeRun = sessions.getActiveRun(req.params.id);
+      if (!activeRun) {
         res.status(409).json({ error: "No active run to cancel" });
         return;
       }
+      // Responding after the run settles lets a follow-up archive succeed.
+      await cancelUntilSettled(sessions, req.params.id, activeRun);
       res.sendStatus(200);
     }),
   );
@@ -529,8 +546,7 @@ export function createConversationsRouter(
 
       const activeRun = sessions.getActiveRun(conversationId);
       if (activeRun) {
-        await sessions.cancel(conversationId);
-        await activeRun.wait();
+        await cancelUntilSettled(sessions, conversationId, activeRun);
       }
 
       respondWithConversationMessage(
