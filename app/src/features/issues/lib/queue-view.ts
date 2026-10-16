@@ -1,10 +1,6 @@
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { issuesById } from "./build-tree";
-import {
-  epicHasActivelyImplementingChild,
-  isWorkRootFinished,
-  storyIsActivelyImplementing,
-} from "./derived";
+import { isWorkRootFinished } from "./derived";
 import { formatElapsedCompact } from "./format-relative-updated-at";
 
 export type QueueStage = "parked" | "running" | "paused" | "waiting";
@@ -35,7 +31,7 @@ function isRunning(state: DerivedState | undefined): boolean {
   return state?.liveRun === true && state.implementingOpen !== true;
 }
 
-function holdsImplementingSlot(
+export function holdsImplementingSlot(
   issue: IssueRecord & { kind: "epic" | "story" },
   state: DerivedState | undefined,
 ): boolean {
@@ -43,18 +39,6 @@ function holdsImplementingSlot(
     return true;
   }
   return Boolean(issue.workQueuedAt) && issue.needsAttention;
-}
-
-function activelyImplementing(
-  issue: IssueRecord & { kind: "epic" | "story" },
-  state: DerivedState | undefined,
-  issues: IssueRecord[],
-  derived: Record<string, DerivedState>,
-): boolean {
-  if (issue.kind === "story") {
-    return storyIsActivelyImplementing(issue, state, issues);
-  }
-  return epicHasActivelyImplementingChild(issue.id, issues, derived);
 }
 
 /**
@@ -80,12 +64,7 @@ export function queueStage(
     !holdsImplementingSlot(issue, state);
   if (running) return "running";
   if (waiting) return "waiting";
-  if (
-    holdsImplementingSlot(issue, state) ||
-    activelyImplementing(issue, state, issues, derived)
-  ) {
-    return "paused";
-  }
+  if (holdsImplementingSlot(issue, state)) return "paused";
   return null;
 }
 

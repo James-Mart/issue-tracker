@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type HTMLAttributes, type ReactNode } f
 import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { outlineIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { COCKPIT_COLUMN_CLASS, PageShell } from "@/components/page-shell";
@@ -37,7 +37,13 @@ import {
   buildTreeRowIndexes,
   type TreeRowIndexes,
 } from "../lib/tree-row-indexes";
-import { flowBuckets, type FlowBuckets, type FlowItem } from "../lib/flow";
+import {
+  flowBuckets,
+  flowRowIsLive,
+  type FlowBuckets,
+  type FlowItem,
+} from "../lib/flow";
+import { issueRailNodeState } from "../lib/rail-state";
 import {
   groupSectionRows,
   type SectionGroup,
@@ -185,6 +191,8 @@ function EpicGroupTitle({
 function CockpitFlowRail({
   items,
   indexes,
+  issues,
+  derived,
   previewLimit,
   projectId,
   compact,
@@ -197,6 +205,8 @@ function CockpitFlowRail({
 }: {
   items: FlowItem[];
   indexes: TreeRowIndexes;
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
   previewLimit?: number;
   projectId: string;
   compact?: boolean;
@@ -221,7 +231,15 @@ function CockpitFlowRail({
       spine={spine}
       leading={leading}
       railProps={railProps}
-      liveItem={queue ? (item) => item.queueStage === "running" : undefined}
+      liveItem={(item) =>
+        flowRowIsLive(
+          item,
+          item.queueStage,
+          issueRailNodeState(item.issue, item.state, indexes),
+          issues,
+          derived,
+        )
+      }
       listClassName={listClassName ?? (compact ? "mt-1 gap-1" : "mt-1.5 gap-1")}
       renderItem={(item) =>
         queue ? (
@@ -246,6 +264,8 @@ function CockpitSectionGroupRail({
   projectId,
   byId,
   indexes,
+  issues,
+  derived,
   previewLimit,
   flowRow,
 }: {
@@ -253,6 +273,8 @@ function CockpitSectionGroupRail({
   projectId: string;
   byId: Map<string, IssueRecord>;
   indexes: TreeRowIndexes;
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
   previewLimit?: number;
   flowRow: (
     item: FlowItem,
@@ -267,6 +289,8 @@ function CockpitSectionGroupRail({
     <CockpitFlowRail
       items={sectionGroup.items}
       indexes={indexes}
+      issues={issues}
+      derived={derived}
       previewLimit={previewLimit}
       projectId={projectId}
       flowRow={flowRow}
@@ -418,6 +442,8 @@ export function CockpitPage() {
       <FlowRow
         item={item}
         indexes={indexes}
+        issues={issues}
+        derived={derivedForBuckets}
         projectTitle={projectTitle}
         queueStage={item.queueStage}
         queueChrome={queueChrome}
@@ -476,6 +502,8 @@ export function CockpitPage() {
                       projectId={group.projectId}
                       byId={byId}
                       indexes={indexes}
+                      issues={issues}
+                      derived={derivedForBuckets}
                       previewLimit={previewLimit}
                       flowRow={flowRow}
                     />
@@ -485,6 +513,8 @@ export function CockpitPage() {
                 <CockpitFlowRail
                   items={group.items}
                   indexes={indexes}
+                  issues={issues}
+                  derived={derivedForBuckets}
                   previewLimit={previewLimit}
                   projectId={group.projectId}
                   compact={compact}
@@ -499,7 +529,7 @@ export function CockpitPage() {
       if (!queueBucket) return list;
       return <QueueReorderProvider items={items}>{list}</QueueReorderProvider>;
     },
-    [byId, flowRow, indexes, projectOrder],
+    [byId, derivedForBuckets, flowRow, indexes, issues, projectOrder],
   );
 
   const renderRecentlyMergedItems = useCallback(

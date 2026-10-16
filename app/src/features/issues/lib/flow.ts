@@ -10,8 +10,14 @@ import {
   isInFlight,
   isIssueComplete,
   isReadyToLandStory,
+  storyIsActivelyImplementing,
 } from "./derived";
-import { compareQueueItems, queueStage, type QueueStage } from "./queue-view";
+import {
+  compareQueueItems,
+  holdsImplementingSlot,
+  queueStage,
+  type QueueStage,
+} from "./queue-view";
 import { issueRailNodeState, type RailNodeState } from "./rail-state";
 import { buildTreeRowIndexes } from "./tree-row-indexes";
 
@@ -84,7 +90,26 @@ export function isWaitingQueueWorkFlowItem(
   return item.queueStage === "waiting" && isQueueWorkRoot(item);
 }
 
-/** Ready-bucket Epic or project-level Story eligible for cockpit start-work. */
+/** Actively implementing project root that holds no implementing slot. */
+export function isSlotlessActivelyImplementingRoot(
+  issue: IssueRecord,
+  state: DerivedState | undefined,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  if (issue.kind !== "epic" && issue.kind !== "story") return false;
+  if (holdsImplementingSlot(issue, state)) return false;
+  if (issue.kind === "story") {
+    return storyIsActivelyImplementing(issue, state, issues);
+  }
+  return epicHasActivelyImplementingChild(issue.id, issues, derived);
+}
+
+/**
+ * Ready Epic or project-level Story the cockpit can queue.
+ * A not-started Story, a todo Epic, an Epic with not-started work, or a
+ * slotless actively implementing root.
+ */
 export function isReadyWorkFlowItem(
   item: FlowItem,
   issues: IssueRecord[] = [],
@@ -100,6 +125,11 @@ export function isReadyWorkFlowItem(
   ) {
     return false;
   }
+  if (
+    isSlotlessActivelyImplementingRoot(item.issue, item.state, issues, derived)
+  ) {
+    return true;
+  }
   if (item.issue.kind === "epic") {
     return (
       item.state?.epicStatus === "todo" ||
@@ -110,6 +140,25 @@ export function isReadyWorkFlowItem(
     return item.state?.storyStatus === "not-started";
   }
   return false;
+}
+
+/** Whether a cockpit row pulses and can light its bucket spine. */
+export function flowRowIsLive(
+  item: FlowItem,
+  queueStage: QueueStage | undefined,
+  baseRailState: RailNodeState,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): boolean {
+  if (queueStage === "running") return true;
+  if (queueStage != null) return false;
+  if (baseRailState !== "in-flight") return false;
+  return !isSlotlessActivelyImplementingRoot(
+    item.issue,
+    item.state,
+    issues,
+    derived,
+  );
 }
 
 export type DepGraphNode = {
