@@ -8,7 +8,6 @@ import {
 } from "../schemas.js";
 import type { ReviewIssue } from "../schemas/review.js";
 import type { AgentSessions } from "./agent-sessions.js";
-import { prepareStoryChange, requireMergeBase } from "./change.js";
 import {
   appendErrorEvent,
   conversationExists,
@@ -18,7 +17,6 @@ import {
   startConversationPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { requireReviewStory } from "./reviews.js";
 import { readAll, readComments, readIssueOrThrow, readReviewOrThrow } from "./issues.js";
 import { liveReviewWorktreePath, reviewedTipSha } from "./review-worktree.js";
 import { syncReviewWorktree } from "./review-worktree-sync.js";
@@ -43,6 +41,16 @@ const RETRY_NOT_FAILED =
 async function syncOpenReviewTip(issueId: string): Promise<void> {
   if (readIssueOrThrow(issueId).kind !== "review") return;
   await syncReviewWorktree(issueId, "auto");
+}
+
+function researcherSessionContext(reviewId: string): {
+  review: ReviewIssue;
+  issues: readonly Issue[];
+  workspace: string;
+} {
+  const review = readReviewOrThrow(reviewId);
+  const { issues } = readAll();
+  return { review, issues, workspace: liveReviewWorktreePath(review) };
 }
 
 /** Sync before the launch, then again once that launch has settled. */
@@ -80,27 +88,6 @@ function anchorLine(anchor: NonNullable<Comment["anchor"]>): string {
   return `Anchor: ${anchor.path}, ${anchor.side} side, ${lines}, commit ${anchor.commitSha}`;
 }
 
-async function scopeLine(
-  storyId: string,
-  root: Comment,
-  workspace: string,
-): Promise<string> {
-  if (root.anchor) return anchorLine(root.anchor);
-  const change = requireMergeBase(
-    storyId,
-    await prepareStoryChange(storyId, workspace),
-  );
-  return change.state === "ready" ? `Diff: ${change.range}` : "Diff: none";
-}
-
-/** A review and the Story it reviews. */
-type ReviewSource = { review: ReviewIssue; story: Issue };
-
-function readReviewSource(reviewId: string): ReviewSource {
-  const review = readReviewOrThrow(reviewId);
-  return { review, story: readIssueOrThrow(requireReviewStory(review)) };
-}
-
 /** Prompt line when a question is anchored at a commit other than the reviewed tip. */
 function anchoredCommitOffTipLine(commitSha: string, tip: string): string {
   return `Anchored commit ${commitSha} is not the current tip ${tip}. Read the anchored code with git show. Explore the working tree for what has changed.`;
@@ -117,35 +104,32 @@ function offTipLine(
   return anchoredCommitOffTipLine(root.anchor.commitSha, tip);
 }
 
-async function contextLines(
-  { review, story }: ReviewSource,
+function contextLines(
+  review: ReviewIssue,
   root: Comment,
   workspace: string,
   issues: readonly Issue[],
-): Promise<string[]> {
+): string[] {
   const offTip = offTipLine(root, review, issues);
   return [
     `Review: ${review.id}`,
-    `Story: ${story.id} — ${story.title}`,
     `Thread: ${root.id}`,
     `Workspace: ${workspace}`,
-    await scopeLine(story.id, root, workspace),
+    ...(root.anchor ? [anchorLine(root.anchor)] : []),
     ...(offTip ? [offTip] : []),
   ];
 }
 
-async function researcherPrompt(
-  source: ReviewSource,
+function researcherPrompt(
+  review: ReviewIssue,
   root: Comment,
   workspace: string,
   issues: readonly Issue[],
-): Promise<string> {
+): string {
   return [
     loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
     "",
-    "A reviewer asked a question about this Story's changes.",
-    "",
-    ...(await contextLines(source, root, workspace, issues)),
+    ...contextLines(review, root, workspace, issues),
     "Question:",
     root.body,
   ].join("\n");
@@ -177,20 +161,20 @@ function formatThreadHistory(root: Comment, replies: Comment[]): string {
 }
 
 /** Prompt for a session that replaces an archived or unreadable conversation. */
-async function recoveredResearcherPrompt(
-  source: ReviewSource,
+function recoveredResearcherPrompt(
+  review: ReviewIssue,
   root: Comment,
   replies: Comment[],
   workspace: string,
   issues: readonly Issue[],
-): Promise<string> {
+): string {
   return [
     loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
     "",
     "The previous researcher conversation for this thread is gone. This is a new session.",
     "Answer the latest reply.",
     "",
-    ...(await contextLines(source, root, workspace, issues)),
+    ...contextLines(review, root, workspace, issues),
     "",
     formatThreadHistory(root, replies),
   ].join("\n");
@@ -254,7 +238,7 @@ async function openResearcherConversation(
   projectId: string,
   sessions: AgentSessions,
   workspace: string,
-  promptFor: () => Promise<string>,
+  promptFor: () => string,
   recovered?: true,
 ): Promise<void> {
   const conversation = await createConversation({
@@ -266,7 +250,7 @@ async function openResearcherConversation(
     role: REVIEW_QUESTION_ROLE,
   });
   try {
-    const prompt = await promptFor();
+    const prompt = promptFor();
     await settleResearcherStart(conversation.id, () =>
       startConversationPrompt(conversation.id, prompt, sessions),
     );
@@ -291,16 +275,14 @@ async function startQuestionResearcher(
   projectId: string,
   sessions: AgentSessions,
 ): Promise<void> {
-  const source = readReviewSource(reviewId);
-  const { issues } = readAll();
-  const workspace = liveReviewWorktreePath(source.review);
+  const { review, issues, workspace } = researcherSessionContext(reviewId);
   await openResearcherConversation(
     reviewId,
     root,
     projectId,
     sessions,
     workspace,
-    () => researcherPrompt(source, root, workspace, issues),
+    () => researcherPrompt(review, root, workspace, issues),
   );
 }
 
@@ -314,16 +296,14 @@ async function replaceResearcherWithRecoveredHistory(
   conversationId?: string,
 ): Promise<void> {
   if (conversationId) await sessions.dispose(conversationId);
-  const source = readReviewSource(reviewId);
-  const { issues } = readAll();
-  const workspace = liveReviewWorktreePath(source.review);
+  const { review, issues, workspace } = researcherSessionContext(reviewId);
   await openResearcherConversation(
     reviewId,
     root,
     projectId,
     sessions,
     workspace,
-    () => recoveredResearcherPrompt(source, root, replies, workspace, issues),
+    () => recoveredResearcherPrompt(review, root, replies, workspace, issues),
     true,
   );
 }

@@ -6,6 +6,7 @@ import type {
   ReviewDiff,
   ReviewDiffFile,
   ReviewDiffStatus,
+  ReviewIssue,
 } from "../schemas/review.js";
 import {
   maxPatchBytes,
@@ -23,7 +24,10 @@ import {
 import { IssueError } from "./errors.js";
 import { readAll, readSnapshot } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
-import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
+import {
+  resolveMergeBaseRef,
+  type ResolveMergeBaseRefOptions,
+} from "./resolve-merge-base-ref.js";
 import { readReviewView, requireStoryInProject } from "./reviews.js";
 
 const COMMIT_LOG_FORMAT = "%H%x00%an%x00%aI%x00%s";
@@ -44,10 +48,11 @@ async function loadPrepared(
   projectId: string,
   storyId: string,
   issues: Issue[],
+  opts?: ResolveMergeBaseRefOptions,
 ): Promise<{ storyId: string; workspace: string; prepared: StoryChangePreparation }> {
   requireStoryInProject(projectId, storyId, issues);
   const workspace = requireProjectWorkspace(projectId);
-  const prepared = await prepareStoryChange(storyId, workspace, issues);
+  const prepared = await prepareStoryChange(storyId, workspace, issues, opts);
   return { storyId, workspace, prepared };
 }
 
@@ -71,10 +76,11 @@ async function loadSpan(
   projectId: string,
   reviewId: string,
   issues: Issue[],
+  opts?: ResolveMergeBaseRefOptions,
 ): Promise<LoadedChange> {
   const review = readReviewView(projectId, reviewId, issues);
   if (review.story) {
-    return { kind: "story", ...(await loadPrepared(projectId, review.story, issues)) };
+    return { kind: "story", ...(await loadPrepared(projectId, review.story, issues, opts)) };
   }
   if (!review.pr) {
     throw new IssueError("validation", `review "${reviewId}" has no source`);
@@ -550,6 +556,22 @@ async function readySpan(
   return { state: "ready", workspace, allRange, commits };
 }
 
+function reviewSpanFromLoaded(
+  loaded: LoadedChange,
+): { workspace: string; shas: string[]; allRange: string } | null {
+  if (loaded.kind === "pr") {
+    if (loaded.shas.length === 0) return null;
+    return {
+      workspace: loaded.workspace,
+      shas: loaded.shas,
+      allRange: pullRequestRange(loaded),
+    };
+  }
+  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
+  if (prepared.state === "empty") return null;
+  return { workspace: loaded.workspace, shas: prepared.shas, allRange: prepared.range };
+}
+
 /** Whole-review range and each commit's parent range. */
 export async function loadReviewChangeSpan(
   projectId: string,
@@ -557,11 +579,21 @@ export async function loadReviewChangeSpan(
   issues?: Issue[],
 ): Promise<ReviewChangeSpan> {
   const loaded = await loadSpan(projectId, reviewId, issues ?? readAll().issues);
-  if (loaded.kind === "pr") {
-    if (loaded.shas.length === 0) return { state: "empty" };
-    return readySpan(loaded.workspace, loaded.shas, pullRequestRange(loaded));
+  const span = reviewSpanFromLoaded(loaded);
+  if (!span) return { state: "empty" };
+  return readySpan(span.workspace, span.shas, span.allRange);
+}
+
+/** Unresolvable spans stay on this line so `view` still exits 0. Uses local refs only (`fetch: false`). */
+export async function formatReviewDiffRange(review: ReviewIssue): Promise<string> {
+  try {
+    const loaded = await loadSpan(review.partOf, review.id, readAll().issues, {
+      fetch: false,
+    });
+    const span = reviewSpanFromLoaded(loaded);
+    return span === null ? "diffRange: none" : `diffRange: ${span.allRange}`;
+  } catch (err) {
+    if (!(err instanceof IssueError)) throw err;
+    return `diffRange: unresolved — ${err.message}`;
   }
-  const prepared = requireMergeBase(loaded.storyId, loaded.prepared);
-  if (prepared.state === "empty") return { state: "empty" };
-  return readySpan(loaded.workspace, prepared.shas, prepared.range);
 }

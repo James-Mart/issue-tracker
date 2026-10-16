@@ -11,6 +11,7 @@ import { KIND_LABEL, kindHas } from "../kind.js";
 import { attachmentPath, listAttachments } from "./attachments.js";
 import { IssueError } from "./errors.js";
 import { readAll } from "./issues.js";
+import { liveReviewWorktreePath } from "./review-worktree.js";
 import { ancestorChain } from "./subtree.js";
 import { formatInspirationAppsLine } from "./inspiration-apps.js";
 import { formatPersonasLine } from "./personas.js";
@@ -44,13 +45,14 @@ function workspaceFromStory(
   return projectWorkspace;
 }
 
-/** Worktree when recorded and on disk; otherwise the Project workspace. */
+/** Review targets require a live review worktree; others use Story worktree or project workspace. */
 export function resolveSummaryWorkspace(
   chain: Issue[],
   projectWorkspace: string | undefined,
   issuesById?: Map<string, Issue>,
 ): string | undefined {
   const target = chain[chain.length - 1];
+  if (target.kind === "review") return liveReviewWorktreePath(target);
   if (target.kind === "idea") {
     if (!target.appendTo) return projectWorkspace;
     const appendStory = issuesById?.get(target.appendTo);

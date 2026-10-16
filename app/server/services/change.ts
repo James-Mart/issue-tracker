@@ -4,7 +4,10 @@ import type { ChangeCommit, ChangeStats, Issue, IssueChange } from "../schemas.j
 import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { runGit } from "./git-read.js";
-import { resolveMergeBaseRef } from "./resolve-merge-base-ref.js";
+import {
+  resolveMergeBaseRef,
+  type ResolveMergeBaseRefOptions,
+} from "./resolve-merge-base-ref.js";
 import { readAll, readIssueOrThrow, readSnapshot } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { ancestorChain } from "./subtree.js";
@@ -261,6 +264,7 @@ async function computeStoryChange(
   workspace: string,
   graph: readonly Issue[],
   shas: string[],
+  opts?: ResolveMergeBaseRefOptions,
 ): Promise<StoryChangePreparation> {
   const mergeBase = derive(graph as Issue[]).byId[storyId]?.mergeBase;
   if (!mergeBase) {
@@ -272,7 +276,9 @@ async function computeStoryChange(
 
   await assertCommitsContiguous(shas, workspace);
   const tip = shas.at(-1)!;
-  const mergeBaseRef = await resolveMergeBaseRef(workspace, mergeBase);
+  const mergeBaseRef = await resolveMergeBaseRef(workspace, mergeBase, {
+    fetch: opts?.fetch ?? true,
+  });
   return {
     state: "ready",
     mergeBase,
@@ -285,13 +291,15 @@ async function computeStoryChange(
 
 /**
  * Merge base through the tip of the Story's Task commits, same span as `readIssueChange`.
- * Memoized on story, that tip, and the store snapshot version. A repeat call resolves
- * the tip from the story's commits and reuses the preparation.
+ * Memoized on story, that tip, whether the merge-base ref is fetched, and the store
+ * snapshot version. A repeat call resolves the tip from the story's commits and reuses
+ * the preparation. `fetch: false` reads the local remote-tracking ref.
  */
 export async function prepareStoryChange(
   storyId: string,
   workspace: string,
   issues?: Issue[],
+  opts?: ResolveMergeBaseRefOptions,
 ): Promise<StoryChangePreparation> {
   const snapshot = readSnapshot();
   // A list from an earlier snapshot must not be stored under the current version.
@@ -301,14 +309,16 @@ export async function prepareStoryChange(
       workspace,
       issues,
       storyCommitShas(storyId, issues),
+      opts,
     );
   }
 
   const graph = issues ?? snapshot.issues;
   const shas = storyCommitShas(storyId, graph);
+  const fetchKey = opts?.fetch === false ? "local" : "fetch";
   const cache = storyChangeCacheFor(snapshot.version);
-  return cachedPromise(cache, `${storyId}\0${shas.at(-1) ?? ""}`, () =>
-    computeStoryChange(storyId, workspace, graph, shas),
+  return cachedPromise(cache, `${storyId}\0${shas.at(-1) ?? ""}\0${fetchKey}`, () =>
+    computeStoryChange(storyId, workspace, graph, shas, opts),
   );
 }
 
