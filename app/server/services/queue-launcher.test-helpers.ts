@@ -138,6 +138,7 @@ export function fakeLauncherSessions(): {
     claimStart() {
       return { release() {} };
     },
+    onRunSettled() {},
     listActiveRuns() {
       return [...active.keys()].map((conversationId) => ({ conversationId }));
     },

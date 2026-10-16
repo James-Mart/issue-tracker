@@ -68,6 +68,7 @@ function stubSessions(): AgentSessions {
     },
     isBusy: (conversationId: string) => conversationId === "live",
     claimStart: () => ({ release() {} }),
+    onRunSettled: () => {},
     listActiveRuns: () => [],
     cancel,
     dispose: vi.fn(),

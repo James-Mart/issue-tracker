@@ -108,6 +108,8 @@ export interface AgentSessions {
    * settles; a started run keeps it busy from there.
    */
   claimStart(conversationId: string): StartClaim;
+  /** Call `listener` each time a run on any conversation settles. */
+  onRunSettled(listener: (conversationId: string) => void): void;
   listActiveRuns(): { conversationId: string }[];
   cancel(conversationId: string): Promise<boolean>;
   dispose(conversationId: string): Promise<void>;
@@ -223,6 +225,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
   const teardowns = new Map<string, Promise<void>>();
   /** Outstanding start claims per conversation. */
   const startClaims = new Map<string, number>();
+  const runSettledListeners: ((conversationId: string) => void)[] = [];
 
   function claimStart(conversationId: string): StartClaim {
     startClaims.set(conversationId, (startClaims.get(conversationId) ?? 0) + 1);
@@ -797,6 +800,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const pump = drain().finally(() => {
       entry.pumps.delete(pump);
       startIdleClock(conversationId);
+      for (const listener of runSettledListeners) listener(conversationId);
     });
     entry.pumps.add(pump);
 
@@ -814,6 +818,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
 
     isBusy,
     claimStart,
+
+    onRunSettled(listener) {
+      runSettledListeners.push(listener);
+    },
 
     listActiveRuns() {
       return listConversationIds()

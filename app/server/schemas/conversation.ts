@@ -473,9 +473,11 @@ export type CreateConversationInput = {
   message?: string;
 };
 
+/** Archiving goes through `archiveConversation`, which refuses a busy conversation. */
 export type ConversationMetaPatch = Partial<
-  Pick<ConversationMeta, "title" | "agentId" | "model" | "archived">
+  Pick<ConversationMeta, "title" | "agentId" | "model">
 > & {
+  archived?: false;
   pendingMessage?: NonNullable<ConversationMeta["pendingMessage"]> | null;
 };
 

@@ -6,7 +6,7 @@ import {
   subscribeFrames,
   type ConversationFrame,
 } from "./conversation-stream.js";
-import { updateMeta } from "./conversations.js";
+import { archiveConversation, type BusyLookup } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import {
@@ -45,9 +45,18 @@ function hasQueuedWork(issues: Issue[]): boolean {
   );
 }
 
-async function releaseFinishedSlots(snapshot: SlotSnapshot): Promise<void> {
+/** A busy session is skipped; the pass after its run settles archives it. */
+async function releaseFinishedSlots(
+  snapshot: SlotSnapshot,
+  sessions: BusyLookup,
+): Promise<void> {
   for (const conversationId of finishedRootSessionIds(snapshot)) {
-    await updateMeta(conversationId, { archived: true });
+    try {
+      await archiveConversation(conversationId, sessions);
+    } catch (err) {
+      if (err instanceof IssueError && err.code === "conflict") continue;
+      throw err;
+    }
   }
 }
 
@@ -228,7 +237,7 @@ async function runLauncherPass(
     byId: new Map(issues.map((issue) => [issue.id, issue])),
     attempted: new Set(),
   };
-  await releaseFinishedSlots(snapshot);
+  await releaseFinishedSlots(snapshot, sessions);
   const projects = issues.filter(
     (issue): issue is Extract<Issue, { kind: "project" }> =>
       issue.kind === "project",
@@ -300,11 +309,12 @@ export function drainWorkQueue(
   return finished;
 }
 
-/** Drain once at boot, then on each issues watcher frame. */
+/** Drain once at boot, then on each issues watcher frame and each run settle. */
 export function startWorkQueueLauncher(sessions: AgentSessions): void {
   subscribeFrames(ISSUES_TOPIC, (frame) => {
     if (isQueueRelevantFrame(frame)) scheduleDebouncedDrain(sessions);
   });
+  sessions.onRunSettled(() => scheduleDebouncedDrain(sessions));
   startIssueEventsWatcher();
   void drainWorkQueue(sessions);
 }

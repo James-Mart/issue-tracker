@@ -332,24 +332,42 @@ export type CreateIssueChannelSessionResult = {
 export type BusyLookup = Pick<AgentSessions, "isBusy">;
 
 /**
- * Archive a conversation with no live or starting run; a busy one is refused.
- * Caller must already hold the `serialize()` turn.
+ * Archive a conversation with no live or starting run; a busy one is refused
+ * with a `conflict` {@link IssueError}. `meta` must be read in the same
+ * synchronous write step, such as a `serialize()` turn.
  */
 export function archiveIdleConversation(
   meta: ConversationMeta,
   sessions: BusyLookup,
-): void {
+): ConversationMeta {
   if (sessions.isBusy(meta.id)) {
     throw new IssueError(
       "conflict",
       `conversation "${meta.id}" has a live or starting run`,
     );
   }
-  writeMeta({ ...meta, archived: true, updatedAt: new Date().toISOString() });
+  const archived = {
+    ...meta,
+    archived: true,
+    updatedAt: new Date().toISOString(),
+  };
+  writeMeta(archived);
+  return archived;
+}
+
+/** Apply `patch` and archive conversation `id` in one write; see {@link archiveIdleConversation}. */
+export function archiveConversation(
+  id: string,
+  sessions: BusyLookup,
+  patch: ConversationMetaPatch = {},
+): Promise<ConversationMeta> {
+  return serialize(() =>
+    archiveIdleConversation(patchedMeta(readMetaRaw(id), patch), sessions),
+  );
 }
 
 /** Non-archived sessions a new session on `issueId` + `channel` replaces. */
-function channelPredecessors(
+export function channelPredecessors(
   issueId: string,
   channel: ConversationChannel,
 ): ConversationMeta[] {
@@ -832,38 +850,44 @@ export async function startConversationPrompt(
   return { ok: true, runId: result.run.id };
 }
 
+function patchedMeta(
+  meta: ConversationMeta,
+  patch: ConversationMetaPatch,
+): ConversationMeta {
+  const next: ConversationMeta = { ...meta };
+
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (!title) throw new IssueError("validation", "title is required");
+    next.title = title;
+  }
+  if (patch.model !== undefined) {
+    next.model = requireModel(patch.model);
+  }
+  if (patch.agentId !== undefined) {
+    const agentId = patch.agentId.trim();
+    if (!agentId) throw new IssueError("validation", "agentId is required");
+    next.agentId = agentId;
+  }
+  if (patch.pendingMessage !== undefined) {
+    if (patch.pendingMessage === null) {
+      delete next.pendingMessage;
+    } else {
+      next.pendingMessage = patch.pendingMessage;
+    }
+  }
+  if (patch.archived !== undefined) {
+    next.archived = patch.archived;
+  }
+  return next;
+}
+
 export function updateMeta(
   id: string,
   patch: ConversationMetaPatch,
 ): Promise<ConversationMeta> {
   return serialize(() => {
-    const meta = readMetaRaw(id);
-    const next: ConversationMeta = { ...meta };
-
-    if (patch.title !== undefined) {
-      const title = patch.title.trim();
-      if (!title) throw new IssueError("validation", "title is required");
-      next.title = title;
-    }
-    if (patch.model !== undefined) {
-      next.model = requireModel(patch.model);
-    }
-    if (patch.agentId !== undefined) {
-      const agentId = patch.agentId.trim();
-      if (!agentId) throw new IssueError("validation", "agentId is required");
-      next.agentId = agentId;
-    }
-    if (patch.pendingMessage !== undefined) {
-      if (patch.pendingMessage === null) {
-        delete next.pendingMessage;
-      } else {
-        next.pendingMessage = patch.pendingMessage;
-      }
-    }
-    if (patch.archived !== undefined) {
-      next.archived = patch.archived;
-    }
-
+    const next = patchedMeta(readMetaRaw(id), patch);
     next.updatedAt = new Date().toISOString();
     writeMeta(next);
     return next;
