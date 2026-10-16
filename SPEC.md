@@ -1515,13 +1515,18 @@ converted. An event whose `threadId` is not a root is skipped into `problems`.
 route responds: a fresh conversation on the review's `review` channel (offered
 on every review) with role
 [`issue-tracker-review-question`](agents/issue-tracker-review-question.md) at
-its model pin. Its prompt is the role body, notice that a reviewer asked about
-the Story's changes, the review, the Story, thread id, and review worktree, the question,
-and either a line anchor (path, side, lines, commit), a file anchor (path,
-commit), or, for a general question, the Story's diff range. When the anchor
-commit is not the reviewed tip, the prompt says so. The researcher's working
-directory is that worktree: it reads the anchored code with `git show` and
-explores the working tree for what has changed. Once the run has started, or has failed to start, the
+its model pin. Its prompt is the role body, then the review id, thread id, and review
+worktree, an anchor line when the question has one, the off-tip line when that
+anchor is not the reviewed tip, and the question. It has no Story or Diff line
+and no lead-in about the Story's changes. Initial and recovery prompts share
+this tail. The role reads `issue view <reviewId>` for sources and
+`diffRange`, runs `issue summary <storyId>` only when the view names a Story,
+and uses the prompt worktree for git. A ready `diffRange` is what the change
+touches; `diffRange: none` or unresolved ranges are handled in the role body.
+When the anchor commit is not the reviewed tip, the prompt says so. The
+researcher's working directory is that worktree: it reads the anchored code
+with `git show` and explores the working tree for what has changed. Once the
+run has started, or has failed to start, the
 server appends `researcher-session` with `by: { role: "agent", name: "Researcher" }`.
 The researcher reads code read-only and replies in the thread with
 `issue comment <reviewId> --reply-to <threadId> --role agent --name Researcher`.
@@ -1533,7 +1538,7 @@ conversation, using the reply as the prompt. A live run receives the reply
 directly; a run that does not accept it holds the reply and sends it when
 the run finishes. An archived conversation, or one that cannot be read, is
 replaced: a new review-channel conversation is seeded with the role body,
-review and Story context, the anchor or diff range, and the thread's messages in order,
+the shared prompt tail, and the thread's messages in order,
 and a `researcher-session` event with `recovered: true` becomes the current
 conversation. The first non-human reply after that event, and before the next
 `researcher-session`, has read-time `newSession: true`. `issue view --comments`

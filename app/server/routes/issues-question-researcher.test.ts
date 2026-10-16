@@ -100,8 +100,11 @@ async function post(path: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function askQuestion(body: Record<string, unknown>): Promise<string> {
-  const res = await post("/api/issues/r/comments", {
+async function askQuestionOn(
+  reviewId: string,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const res = await post(`/api/issues/${reviewId}/comments`, {
     role: "human",
     name: "Jared",
     kind: "question",
@@ -111,8 +114,15 @@ async function askQuestion(body: Record<string, unknown>): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
-async function thread(rootId: string): Promise<CommentThreadView> {
-  const res = await fetch(`${baseUrl}/api/issues/r/comments`);
+async function askQuestion(body: Record<string, unknown>): Promise<string> {
+  return askQuestionOn("r", body);
+}
+
+async function thread(
+  rootId: string,
+  reviewId = "r",
+): Promise<CommentThreadView> {
+  const res = await fetch(`${baseUrl}/api/issues/${reviewId}/comments`);
   const { threads } = (await res.json()) as { threads: CommentThreadView[] };
   const view = threads.find((t) => t.rootId === rootId);
   if (!view) throw new Error(`no thread ${rootId}`);
@@ -136,9 +146,12 @@ function conversationIsLive(conversationId: string): boolean {
  * A follow-up still shows `running` from the launch overlay while the previous
  * conversation id is on the thread, so a live marker is what shows the run started.
  */
-async function launchedThread(rootId: string): Promise<CommentThreadView> {
+async function launchedThread(
+  rootId: string,
+  reviewId = "r",
+): Promise<CommentThreadView> {
   return vi.waitFor(async () => {
-    const view = await thread(rootId);
+    const view = await thread(rootId, reviewId);
     const status = view.researcherRun?.status;
     if (status === "failed") return view;
     const id = view.researcherConversationId;
@@ -148,9 +161,12 @@ async function launchedThread(rootId: string): Promise<CommentThreadView> {
 }
 
 /** The thread once a live or posting run has settled. */
-async function settledThread(rootId: string): Promise<CommentThreadView> {
+async function settledThread(
+  rootId: string,
+  reviewId = "r",
+): Promise<CommentThreadView> {
   return vi.waitFor(async () => {
-    const view = await thread(rootId);
+    const view = await thread(rootId, reviewId);
     const status = view.researcherRun?.status;
     if (status === "running" || status === "finishing") {
       throw new Error(`researcher still ${status}`);
@@ -229,7 +245,44 @@ afterEach(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+function expectResearcherPromptTail(prompt: string, reviewId: string, threadId: string): void {
+  expect(prompt).toContain(`Review: ${reviewId}`);
+  expect(prompt).toContain(`Thread: ${threadId}`);
+  expect(prompt).toContain(`Workspace: ${reviewWorktree}`);
+  expect(prompt).toContain("Question:");
+  expect(prompt).not.toMatch(/^Story: /m);
+  expect(prompt).not.toMatch(/^Diff: /m);
+  expect(prompt).not.toContain("Story's changes");
+}
+
 describe("question researcher", () => {
+  it("starts a researcher on a pull-request-only review", async () => {
+    writeIssue("r-pr", {
+      kind: "review",
+      title: "PR review",
+      partOf: "p",
+      archived: false,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      order: 2,
+      worktreePath: reviewWorktree,
+      pr: {
+        url: "https://github.com/example/repo/pull/1",
+        number: 1,
+        baseRef: "main",
+        headRef: "s",
+        headSha: tip,
+        fork: false,
+      },
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    await startApp();
+    const rootId = await askQuestionOn("r-pr", { body: "What changed?" });
+    await launchedThread(rootId, "r-pr");
+    expectResearcherPromptTail(sentPrompt(0), "r-pr", rootId);
+  });
+
   it("stays posting until the run-end marker, then fails when no reply landed", async () => {
     let release!: () => void;
     await startApp({ hold: new Promise<void>((r) => (release = r)) });
