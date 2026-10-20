@@ -89,29 +89,39 @@ describe("requestHuman", () => {
   });
 });
 
-describe("reportRuntimeFailure", () => {
-  const OBSERVATION = [
-    "- Exercised: `issue story view s` on the booted stack",
-    "- Required: the view prints the review chip",
-    "- Happened: no chip; evidence `view.txt`",
-  ].join("\n");
-
-  it("posts the observation, raises attention, and unsets review", async () => {
+describe.each([
+  {
+    stop: "reportRuntimeFailure",
+    type: "runtime-failure",
+    reason: "RUNTIME_CHECK_FAILED",
+    body: [
+      "- Exercised: `issue story view s` on the booted stack",
+      "- Required: the view prints the review chip",
+      "- Happened: no chip; evidence `view.txt`",
+    ].join("\n"),
+  },
+  {
+    stop: "reportReversal",
+    type: "reversal",
+    reason: "WOULD_REVERSE_YOUR_CHANGE",
+    body: [
+      "- Finding: the review chip is missing from `issue story view`",
+      "- Would undo: the human's review comment c1 that removed the chip",
+    ].join("\n"),
+  },
+] as const)("$stop", ({ stop, type, reason, body }) => {
+  it("posts the body, raises attention, and unsets a failed review", async () => {
     story({ review: "failed", reviewedTasks: ["t1"] });
-    const { reportRuntimeFailure, RUNTIME_CHECK_FAILED } = await load();
-    const message = await reportRuntimeFailure("s", `${OBSERVATION}\n`);
+    const handoff = await load();
+    const message = await handoff[stop]("s", `${body}\n`);
 
-    expect(message).toMatchObject({
-      role: "story-review",
-      type: "runtime-failure",
-      body: OBSERVATION,
-    });
+    expect(message).toMatchObject({ role: "story-review", type, body });
     expect(readCommentLines("s")).toEqual([
-      expect.objectContaining({ id: message.id, type: "runtime-failure" }),
+      expect.objectContaining({ id: message.id, type }),
     ]);
     const stored = readStored("s");
     expect(stored.needsAttention).toBe(true);
-    expect(stored.attentionReason).toBe(RUNTIME_CHECK_FAILED);
+    expect(stored.attentionReason).toBe(handoff[reason]);
     expect(stored.review).toBeUndefined();
     expect(stored.reviewedTasks).toEqual(["t1"]);
   });

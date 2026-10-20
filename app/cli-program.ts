@@ -43,6 +43,7 @@ import { bindCliStdin, readCliFileArg } from "./cli-io.js";
 import {
   askReviewQuestion,
   humanDone,
+  reportReversal,
   reportRuntimeFailure,
   requestHuman,
 } from "./server/services/human-handoff.js";
@@ -334,6 +335,29 @@ function renderApplyRoot(doc: ApplyDoc, issues: IssueRecord[], ctx: TreeContext)
   return renderProjectBoard(project, boardOf.get(projectId) ?? [], ctx, 0);
 }
 
+type StoryReviewHandoff = {
+  name: string;
+  fileHelp: string;
+  description: string;
+  post: (storyId: string, body: string) => Promise<unknown>;
+};
+
+/** Register a story subcommand that posts the story-review comment body read from `--file`. */
+function registerStoryReviewHandoff(
+  kindCmd: Command,
+  run: Run,
+  handoff: StoryReviewHandoff,
+): void {
+  kindCmd
+    .command(handoff.name)
+    .argument("<storyId>", "story id")
+    .requiredOption("--file <path>", handoff.fileHelp)
+    .description(handoff.description)
+    .action((storyId: string, opts: { file: string }) =>
+      run(async () => handoff.post(storyId, readCliFileArg(opts.file))),
+    );
+}
+
 function createIssueProgram(run: Run): Command {
   const program = new Command();
   program
@@ -396,54 +420,38 @@ function createIssueProgram(run: Run): Command {
             }
           }),
         );
-      kindCmd
-        .command("request-human")
-        .argument("<storyId>", "story id")
-        .requiredOption(
-          "--file <path>",
+      registerStoryReviewHandoff(kindCmd, run, {
+        name: "request-human",
+        fileHelp:
           "request body (path, or - for stdin); a Markdown bullet list of Secret, Input, and Observation items",
-        )
-        .description(
+        description:
           "post a story-review human-request comment and set review to awaiting-human",
-        )
-        .action((storyId: string, opts: { file: string }) =>
-          run(async () => {
-            const body = readCliFileArg(opts.file);
-            return requestHuman(storyId, body);
-          }),
-        );
-      kindCmd
-        .command("report-runtime-failure")
-        .argument("<storyId>", "story id")
-        .requiredOption(
-          "--file <path>",
+        post: requestHuman,
+      });
+      registerStoryReviewHandoff(kindCmd, run, {
+        name: "report-runtime-failure",
+        fileHelp:
           "observation body (path, or - for stdin): what the runtime check exercised, what the Story required, and what happened",
-        )
-        .description(
+        description:
           "post a story-review runtime-failure comment, raise needsAttention (Runtime check failed), and unset review",
-        )
-        .action((storyId: string, opts: { file: string }) =>
-          run(async () => {
-            const observation = readCliFileArg(opts.file);
-            return reportRuntimeFailure(storyId, observation);
-          }),
-        );
-      kindCmd
-        .command("ask-review-question")
-        .argument("<storyId>", "story id")
-        .requiredOption(
-          "--file <path>",
-          "question body (path, or - for stdin): what story review cannot tell about the human's guidance",
-        )
-        .description(
+        post: reportRuntimeFailure,
+      });
+      registerStoryReviewHandoff(kindCmd, run, {
+        name: "report-reversal",
+        fileHelp:
+          "reversal body (path, or - for stdin): each diff finding and the human-directed change it would undo or rework",
+        description:
+          "post a story-review reversal comment, raise needsAttention (Would reverse your change), and unset review",
+        post: reportReversal,
+      });
+      registerStoryReviewHandoff(kindCmd, run, {
+        name: "ask-review-question",
+        fileHelp:
+          "question body (path, or - for stdin): what story review cannot tell about the human's guidance or whether a finding would reverse their change",
+        description:
           "post a story-review review-question comment and raise needsAttention (Story review has a question); review is unchanged",
-        )
-        .action((storyId: string, opts: { file: string }) =>
-          run(async () => {
-            const question = readCliFileArg(opts.file);
-            return askReviewQuestion(storyId, question);
-          }),
-        );
+        post: askReviewQuestion,
+      });
       kindCmd
         .command("human-done")
         .argument("<storyId>", "story id")

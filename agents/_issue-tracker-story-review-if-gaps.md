@@ -27,4 +27,4 @@ Absolute path for this file (Read this exact path):
    not leave `failed` with no remediation Task/link silently.
 
 Do not edit workspace source files. Then continue at story review's
-**Runtime outcome** step.
+**Outcome** step.

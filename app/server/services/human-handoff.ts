@@ -6,13 +6,14 @@ export const ALREADY_AWAITING_HUMAN = "review is already awaiting-human";
 export const NOT_AWAITING_HUMAN = "review is not awaiting-human";
 export const RUNTIME_CHECK_FAILED = "Runtime check failed";
 export const STORY_REVIEW_HAS_A_QUESTION = "Story review has a question";
+export const WOULD_REVERSE_YOUR_CHANGE = "Would reverse your change";
 
 const SECRET_KEY = /^[A-Z_][A-Z0-9_]*$/;
 const BULLET = /^[-*+] (.*)$/;
 const SECRET_ITEM = /^Secret `([^`]*)`:(.*)$/;
 const LABELED_ITEM = /^(Input|Observation):(.*)$/;
 
-/** Normalize a request, observation, or question file to the text stored as the comment body. */
+/** Normalize a request, observation, question, or reversal file to the text stored as the comment body. */
 export function normalizeCommentFileBody(body: string): string {
   const text = body.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   return text.endsWith("\n") ? text.slice(0, -1) : text;
@@ -118,7 +119,21 @@ export function reportRuntimeFailure(
   });
 }
 
-/** Stop for the human when Story review cannot tell what their guidance means. */
+/**
+ * Stop for the human on diff findings that would undo or rework a change
+ * they directed. `review` is unset so that clearing attention runs Story
+ * review again.
+ */
+export function reportReversal(storyId: string, reversal: string): Promise<Comment> {
+  return stopForHuman(storyId, "reversal", reversal, WOULD_REVERSE_YOUR_CHANGE, {
+    review: null,
+  });
+}
+
+/**
+ * Stop for the human when Story review cannot tell what their guidance means
+ * or whether a finding would reverse their change.
+ */
 export function askReviewQuestion(storyId: string, question: string): Promise<Comment> {
   return stopForHuman(storyId, "review-question", question, STORY_REVIEW_HAS_A_QUESTION);
 }

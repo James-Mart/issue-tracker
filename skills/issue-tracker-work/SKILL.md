@@ -22,15 +22,24 @@ on the cheap model, **Composer 2.5**, not a premium model (see **Models and
 subagent roles**). The model discriminator assigns an implementor model onto
 each Task; the implementor writes code, runs its own code review, records the
 commit, resolves each unresolved review thread linked to that Task with a reply
-naming the fix, and sets Task `status done`; the story-review agent records the Story
-gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
-workspace source, pauses the Story at `review` `awaiting-human` when a runtime
-check needs a human, raises Story `needsAttention` and unsets `review` when the
-runtime check fails, raises Story `needsAttention` with a question when it
-cannot tell what the human's standing guidance means, and when the branch is
-behind appends the
-update-from-merge-base Task without changing stored `review`; the git
-subagent owns branch create and Story finish.
+naming the fix, and sets Task `status done`. The git subagent owns branch
+create and Story finish.
+
+The story-review agent records the Story gate (`review`, `reviewedTasks`,
+optional remediation Tasks) without editing workspace source. Its stops and
+appends:
+
+- A runtime check needs a human: it pauses the Story at `review`
+  `awaiting-human`.
+- The runtime check fails: it raises Story `needsAttention` and unsets
+  `review`.
+- A diff finding would reverse a change the human directed: it raises Story
+  `needsAttention` and unsets `review`.
+- It cannot tell what the human's standing guidance means, or whether a
+  finding is such a reversal: it raises Story `needsAttention` with a
+  question.
+- The branch is behind: it appends the update-from-merge-base Task without
+  changing stored `review`.
 
 **You do not write code, run the app, or verify the work yourself.** You read the
 plan with `issue tree` and spawn subagents. Do **essentially no reasoning**:
@@ -199,7 +208,7 @@ not from a spawn-time argument.
 | Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
-| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story report-runtime-failure`; `issue story ask-review-question`; `issue story append`; `issue story comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story report-runtime-failure`; `issue story report-reversal`; `issue story ask-review-question`; `issue story append`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership
@@ -211,9 +220,10 @@ Coordinator never sets Task `status` or Task `commits`.
 | Task `status` `in-progress` | Implementor | on implement entry |
 | Task `status` `done` | Implementor | after its review, commit, summary comment, and resolving each unresolved review thread linked to the Task |
 | Task `commits` | Git | spawned by the implementor |
-| Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human; unset when the runtime check fails |
+| Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human; unset when the runtime check fails or a diff finding would reverse the human's change |
 | Story `needsAttention` (runtime check failed) | Story review | when the runtime check fails (`issue story report-runtime-failure`) |
-| Story `needsAttention` (story review has a question) | Story review | when it cannot tell what the human's standing guidance means (`issue story ask-review-question`) |
+| Story `needsAttention` (would reverse your change) | Story review | when a diff finding would reverse a change the human directed (`issue story report-reversal`) |
+| Story `needsAttention` (story review has a question) | Story review | when it cannot tell what the human's standing guidance means or whether a finding is a reversal (`issue story ask-review-question`) |
 | Story `review` cleared from `awaiting-human` | Human | Done on the Story's request (`issue story human-done`) |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 | Story `needsAttention` (review three-strike) | Coordinator | on the 3rd counted story-review resume in one session — see **Close a Story** |
