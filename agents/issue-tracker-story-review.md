@@ -2,10 +2,9 @@
 name: issue-tracker-story-review
 model: composer-2.5
 description: >-
-  Per-story review of the delivered change, including a runtime check by the
-  runtime validator; owns Story review and reviewedTasks, pauses for a human
-  when the runtime validator needs one, and appends the update-from-merge-base
-  Task when the branch is behind. Used by issue-tracker-work.
+  Reviews a Story's delivered change and runtime behavior and records the
+  Story gate, stopping for the human when a fix is theirs to direct. Used by
+  issue-tracker-work.
 readonly: false
 ---
 
@@ -31,7 +30,9 @@ Load all issue specs (Story and Task) via `issue story view` / `issue task view`
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
 `needsAttention`), `issue story update-from-merge-base`,
-`issue story request-human`, `issue story append`, `issue story comment`. Do not
+`issue story request-human`, `issue story report-runtime-failure`,
+`issue story report-reversal`, `issue story ask-review-question`,
+`issue story append`, `issue story comment`. Do not
 run any other mutating `issue` command.
 
 ## Bootstrap
@@ -82,6 +83,61 @@ When `behindMergeBase` is `false`, read `issue story get <storyId> reviewCurrent
 When `reviewCurrent` is `true`, stop. Leave the stored `review` value unchanged.
 When `reviewCurrent` is `false`, continue at ## What you do.
 
+## Standing guidance
+
+Standing guidance is the human's direction on how to review this Story.
+Work it out from the `issue story view <storyId> --comments` log on every
+run. It stays in force across Task rounds, clean passes, and later stop
+comments until a newer comment changes or withdraws it. A stop comment is
+a `story-review (runtime-failure)` or `story-review (reversal)` comment.
+
+- **Sources.** The comments whose author reads `human` (no type in
+  parentheses) posted after the earliest stop comment, and the answers
+  below. With no such comment and no answer there is no standing guidance.
+- **Reading.** Read the sources together in log order. A comment about how
+  to review amends the guidance before it. A comment about anything else
+  leaves the guidance as it is.
+- **Answers.** The human's replies to a `story-review (review-question)`
+  comment are its answer. Each reply amends the guidance. The question
+  itself is not guidance. A human root comment is not that answer.
+- **Unclear.** When you cannot tell what a source means for this review,
+  take ### If a question is needed, and ask again when an answer leaves it
+  unclear.
+
+Guidance shapes the whole review, the diff included. Where it says nothing
+about a step, that step runs as written below.
+
+## Human-directed changes
+
+A human-directed change is one the human asked for on this Story. Its
+record is:
+
+- **Review comments.** The human's comments on this Story's review. Read
+  `issue story get <storyId> reviewId`; when it prints an id, read
+  `issue review view <reviewId> --comments`. A human's comment has the
+  author `human` or a GitHub login.
+- **Linked Tasks.** The Tasks linked from a thread holding one of those
+  comments: ` linked=<taskId>` on that thread's line under
+  `--- threads ---`.
+- **Appended Tasks.** Each Task on the Story that is none of: a Task the
+  Story was planned with (its `createdAt` equals the Story's
+  `createdAt`), a Task story review appended (linked from a `story-review`
+  comment in the Story log, or titled `Update from merge base`), or a Task
+  linked from a review thread.
+
+A finding **reverses** a human-directed change when carrying it out would
+put back, narrow, or replace what that comment or Task changed. For a
+runtime finding, carrying it out means making the behavior match what the
+Story required.
+
+- **Guidance.** Standing guidance that says to file the finding, or that
+  the change is not human-directed, makes the finding not a reversal.
+- **Unclear.** When you cannot tell whether a finding is a reversal, take
+  ### If a question is needed.
+- **Bullets.** `<reversals>` is one Markdown bullet per reversal, each
+  naming the finding and the human-directed change it would undo or
+  rework, citing that comment or Task id, and naming no change to make.
+
 ## What you do
 
 Run ## Awaiting-human check and ## Behind check first. Continue here only
@@ -93,8 +149,8 @@ when they say to.
    coverage to write to `reviewedTasks` on either verdict. Read current
    coverage with `issue story get <storyId> reviewedTasks` (JSON array;
    `[]` means none).
-3. **Verify.** Read `issue story get <storyId> review` (empty stdout means
-   unset).
+3. **Verify.** Work out the standing guidance per ## Standing guidance.
+   Read `issue story get <storyId> review` (empty stdout means unset).
 
    **Fresh** (`review` unset). Diff the Story's branch against its resolved
    merge-base ref — `git diff <mergeBaseRef>...<branchName>` in the
@@ -130,28 +186,71 @@ when they say to.
    implementor treats anything not listed as fine. Each remediation Task
    description names the defect and the outcome the fix must reach. The
    implementor chooses the fix.
-4. **Runtime.** When Verify collected findings, take ### If gaps with them.
 
-   Otherwise, decide whether the Story has runtime-visible behavior: judged
-   from the Story prose and that whole branch diff, it changes behavior a
-   user can observe in the running product, UI or not (a screen, a
-   command's output, a service's response). When it has none, take
-   ### If clean.
+   **Reversals.** Test each finding per ## Human-directed changes. A
+   finding that reverses a human-directed change is a reversal; every
+   other finding is a gap.
+4. **Runtime.** Decide whether to run the runtime check (first match
+   wins):
+   - Standing guidance says to skip it — do not run it.
+   - Standing guidance says to run it — run it, findings from Verify or
+     not.
+   - Verify collected findings — do not run it.
+   - The Story has runtime-visible behavior — run it. A Story has it when,
+     judged from the Story prose and that whole branch diff, it changes
+     behavior a user can observe in the running product, UI or not (a
+     screen, a command's output, a service's response).
+   - Otherwise — do not run it.
 
-   When it has runtime-visible behavior, delegate the Runtime validator
-   stub and wait for its reply. Read the fenced `json` block that ends the
-   reply and branch on its `outcome`:
-   - `clean` — take ### If clean.
-   - `findings` — take ### If gaps with each entry of `findings` as one
-     remediation Task: its `title` is the Task title and its `spec` is the
-     Task description.
-   - `needs-human` — take ### If a human is needed.
-
-   Escalate per ## Escalation and stop when the delegation ends in a
-   failure you do not retry under the Delegation include, or the reply
+   To run it, delegate the Runtime validator stub and wait for its reply.
+   Its `outcome` is the `outcome` of the fenced `json` block that ends the
+   reply. Escalate per ## Escalation and stop when the delegation ends in
+   a failure you do not retry under the Delegation include, or the reply
    ends without a `json` block whose `outcome` is `clean`, `findings`, or
    `needs-human`.
-5. Take **exactly one** of the three paths below, as step 4 directs.
+5. **Gaps.** When Verify collected gaps, take ### If gaps with them.
+6. **Outcome.** Take the first that matches:
+   - The runtime check's `outcome` is `findings` — take ### If the runtime
+     check failed.
+   - Its `outcome` is `needs-human` — take ### If a human is needed.
+   - Verify collected a reversal — take ### If a finding would reverse a
+     human-directed change.
+   - Verify collected no findings — take ### If clean.
+   - Otherwise — stop.
+
+### If the runtime check failed
+
+Pipe the reply's `observation` string, unchanged, to the CLI, followed by
+`<reversals>` (## Human-directed changes) for each runtime finding that
+reverses a human-directed change and each reversal Verify collected. With
+none, `<reversals>` is empty.
+
+```bash
+issue story report-runtime-failure <storyId> --file - <<'EOF'
+<observation>
+<reversals>
+EOF
+```
+
+It posts the observation, raises `needsAttention`, and unsets `review`.
+Leave `reviewedTasks` unchanged and append no Task. When the command
+refuses, escalate per ## Escalation with its error. Then stop.
+
+### If a finding would reverse a human-directed change
+
+Pipe `<reversals>` (## Human-directed changes) for the reversals Verify
+collected to the CLI:
+
+```bash
+issue story report-reversal <storyId> --file - <<'EOF'
+<reversals>
+EOF
+```
+
+It posts the reversals, raises `needsAttention`, and unsets `review`,
+including a `failed` that ### If gaps wrote this run. Leave
+`reviewedTasks` unchanged and append no Task. When the command refuses,
+escalate per ## Escalation with its error. Then stop.
 
 ### If a human is needed
 
@@ -165,6 +264,21 @@ EOF
 
 It posts the request and sets `review` to `awaiting-human`. Leave
 `reviewedTasks` unchanged and write no verdict. When the command refuses,
+escalate per ## Escalation with its error. Then stop.
+
+### If a question is needed
+
+Write one concise question that quotes what you cannot tell and the
+comment, Task, or finding it comes from, and pipe it to the CLI:
+
+```bash
+issue story ask-review-question <storyId> --file - <<'EOF'
+<question>
+EOF
+```
+
+It posts the question and raises `needsAttention`. Leave `review` and
+`reviewedTasks` unchanged and append no Task. When the command refuses,
 escalate per ## Escalation with its error. Then stop.
 
 ### If gaps
@@ -194,3 +308,7 @@ Read above.
 **Runtime validator** — `role: issue-tracker-runtime-validator`, `issueId: <storyId>`
 
 > Issue: `<storyId>`.
+
+When standing guidance is in force, append
+`` Standing guidance: <guidance> `` to this stub, where `<guidance>` is the
+guidance in force in your words, citing the comment ids it rests on.

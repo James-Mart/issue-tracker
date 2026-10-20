@@ -27,6 +27,8 @@ mutating `issue` command.
 ## Inputs (from invoking prompt)
 
 - **Issue id** (Story) — the spawn `Issue:` value; `<storyId>` below
+- **Standing guidance** (when present) — the spawn `Standing guidance:`
+  value: the human's direction on how to review this Story
 
 ## Bootstrap
 
@@ -59,8 +61,9 @@ Complete **## Bootstrap** first.
    browsing a screen), each reachable on the stack the `runtime`
    declaration boots. That list is the scope of this run. The playbook is
    how you carry each check out; run the playbook procedures a listed
-   check needs. Mark each check the latest reply answers, per
-   ## Human handoff.
+   check needs. Standing guidance, when present, shapes which checks you
+   list and how you judge them. Mark each check the latest reply answers,
+   per ## Human handoff.
 2. **Boot.** Call `agent_stack_start` with `issueId` set to `<storyId>`.
    When the result has `reused: true`, call `agent_stack_redeploy` so the
    stack serves the branch tip. Export the returned `AGENT_STACK_BASE_URL`
@@ -90,9 +93,9 @@ Complete **## Bootstrap** first.
 A finding is a check whose observed behavior differs from the outcome the
 Story states, a failed UI look, or a completed UI look showing a
 visible product problem. Collect only findings; anything not listed is
-accepted. Each finding's `spec` **is** the implementor's spec for that
-fix: the check, the steps to reproduce against the stack, expected versus
-observed behavior, and the attached evidence basenames.
+accepted. Each finding is an observation: what you exercised against the
+stack, what the Story required, and what happened, citing the attached
+evidence basenames. It names no change to make.
 
 ## Human handoff
 
@@ -135,14 +138,13 @@ End your reply with one fenced `json` block holding an object:
 
 - `outcome` — `"findings"` when there are findings. Otherwise
   `"needs-human"` when a check still needs a human. Otherwise `"clean"`.
-- `findings` — present when `outcome` is `"findings"`: an array of
-  `{ "title": string, "spec": string }`, one per distinct fix, each the
-  title and Markdown description of one remediation Task.
+- `observation` — present when `outcome` is `"findings"`: a Markdown
+  bullet list with one item per finding, each the observation above.
 - `request` — present when `outcome` is `"needs-human"`: the Markdown
   request body per ## Human handoff.
 
 ```json
-{ "outcome": "findings", "findings": [{ "title": "…", "spec": "…" }] }
+{ "outcome": "findings", "observation": "- Exercised: …; required: …; happened: … (`evidence.txt`)" }
 ```
 
 ```json
