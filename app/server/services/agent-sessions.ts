@@ -55,7 +55,7 @@ import {
   EventPipeline,
   type NormalizedStep,
 } from "./event-pipeline.js";
-import { stopAgentStack } from "./agent-stack.js";
+import { cancelBootingAgentStack, stopAgentStack } from "./agent-stack.js";
 import { IssueError } from "./errors.js";
 import { parseModelKey } from "./model-selection.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
@@ -340,16 +340,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     return entry;
   }
 
-  async function stopConversationAgentStackBestEffort(
+  async function bestEffortAgentStack(
     conversationId: string,
+    failure: string,
+    step: () => Promise<unknown>,
   ): Promise<void> {
     try {
-      await stopAgentStack(conversationId);
+      await step();
     } catch (err) {
-      console.error(
-        `failed to stop agent stack for conversation ${conversationId}`,
-        err,
-      );
+      // Continue disposing even if stack cleanup fails.
+      console.error(`${failure} for conversation ${conversationId}`, err);
     }
   }
 
@@ -390,8 +390,16 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     stopIdleClock(entry);
     sessions.delete(conversationId);
     try {
+      // tearDownEntry waits on the turn pump, which can be inside agent_stack_start.
+      await bestEffortAgentStack(
+        conversationId,
+        "failed to cancel booting agent stack",
+        () => cancelBootingAgentStack(conversationId),
+      );
       await tearDownEntry(conversationId, entry);
-      await stopConversationAgentStackBestEffort(conversationId);
+      await bestEffortAgentStack(conversationId, "failed to stop agent stack", () =>
+        stopAgentStack(conversationId),
+      );
     } finally {
       releaseConversationEphemeralState(conversationId);
     }
@@ -845,7 +853,9 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       if (entry) await tearDown(conversationId, entry);
       else if (idleTeardown) await idleTeardown;
       else {
-        await stopConversationAgentStackBestEffort(conversationId);
+        await bestEffortAgentStack(conversationId, "failed to stop agent stack", () =>
+          stopAgentStack(conversationId),
+        );
         releaseConversationEphemeralState(conversationId);
       }
     },
