@@ -315,6 +315,7 @@ async function bootDeclaredRuntime(
       worktree: boot.worktree,
       runtime: boot.runtime,
       secrets,
+      signal: new AbortController().signal,
       onSpawned: (process, baseUrl) => {
         spawned = process;
         const state = freshState(conversationId, boot, resources, baseUrl, [process]);

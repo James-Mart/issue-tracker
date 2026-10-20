@@ -4,7 +4,11 @@ import { z } from "zod";
 import { reviewRuntimesDir } from "../config.js";
 import { isSlugSafe } from "../slug.js";
 import { IssueError } from "./errors.js";
-import { runtimeProcessSchema, runtimeProcessesLive, type RuntimeProcess } from "./runtime-boot.js";
+import {
+  runtimeBootPhaseReportSchema,
+  runtimeProcessSchema,
+  runtimeProcessesLive,
+} from "./runtime-boot.js";
 
 /**
  * Disk record and in-memory boot for a review-owned runtime. Worktree sync
@@ -22,13 +26,17 @@ const reviewRuntimeRecordSchema = z.object({
   dataDir: z.string().min(1).optional(),
   baseUrl: z.string().min(1).optional(),
   error: z.string().min(1).optional(),
+  /** The latest phase report while booting. */
+  bootPhase: runtimeBootPhaseReportSchema.optional(),
 });
 
 export type ReviewRuntimeRecord = z.infer<typeof reviewRuntimeRecordSchema>;
 
 export interface LiveBoot {
   worktree: string;
-  process?: RuntimeProcess;
+  controller: AbortController;
+  /** Settles once the boot has recorded its outcome or been cancelled. */
+  settled: Promise<void>;
 }
 
 const liveBoots = new Map<string, LiveBoot>();
@@ -39,16 +47,6 @@ export function peekLiveBoot(reviewId: string): LiveBoot | undefined {
 
 export function rememberLiveBoot(reviewId: string, boot: LiveBoot): void {
   liveBoots.set(reviewId, boot);
-}
-
-export function takeLiveBoot(reviewId: string): LiveBoot | undefined {
-  const boot = liveBoots.get(reviewId);
-  liveBoots.delete(reviewId);
-  return boot;
-}
-
-export function liveBootIsCurrent(reviewId: string, boot: LiveBoot): boolean {
-  return liveBoots.get(reviewId) === boot;
 }
 
 export function clearLiveBootIfCurrent(reviewId: string, boot: LiveBoot): void {

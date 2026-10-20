@@ -59,7 +59,7 @@ export function ReviewRuntimeRow({
   onStop: () => void;
 }) {
   const state = status?.state;
-  const action = rowAction(state);
+  const action = rowAction(state, stopPending);
   return (
     <div
       className="mt-2 flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1 rounded-md border border-border bg-card px-3 py-2 text-sm"
@@ -71,19 +71,26 @@ export function ReviewRuntimeRow({
         <Button
           type="button"
           size="sm"
-          variant={state === "running" ? "outline" : "current"}
+          variant={action.stops ? "outline" : "current"}
           className="shrink-0"
           data-testid="review-runtime-action"
-          disabled={state === "booting" || (state === "running" && stopPending)}
-          aria-busy={state === "booting" || undefined}
-          onClick={() => {
-            if (state === "running") onStop();
-            else onStart();
-          }}
+          disabled={action.pending}
+          aria-busy={action.pending || undefined}
+          onClick={action.stops ? onStop : onStart}
         >
           {actionIcon(action.icon)}
           {action.label}
         </Button>
+      ) : null}
+      {state === "booting" && !stopPending ? (
+        <p
+          className="flex min-w-0 items-center gap-1.5 text-muted-foreground"
+          data-testid="review-runtime-status"
+          role="status"
+        >
+          <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
+          Booting…
+        </p>
       ) : null}
       {state === "running" && status?.baseUrl ? (
         <a
@@ -112,16 +119,20 @@ export function ReviewRuntimeRow({
 
 function rowAction(
   state: ReviewRuntimeStatus["state"] | undefined,
-): { label: string; icon: "play" | "stop" | "spin" } | undefined {
+  stopPending: boolean,
+):
+  | { label: string; icon: "play" | "stop" | "spin"; stops: boolean; pending: boolean }
+  | undefined {
   switch (state) {
     case "running":
-      return { label: "Stop", icon: "stop" };
     case "booting":
-      return { label: "Booting...", icon: "spin" };
+      return stopPending
+        ? { label: "Stopping…", icon: "spin", stops: true, pending: true }
+        : { label: "Stop", icon: "stop", stops: true, pending: false };
     case "failed":
-      return { label: "Retry start", icon: "play" };
+      return { label: "Retry start", icon: "play", stops: false, pending: false };
     case "stopped":
-      return { label: "Start", icon: "play" };
+      return { label: "Start", icon: "play", stops: false, pending: false };
     default:
       return undefined;
   }
