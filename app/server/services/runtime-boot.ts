@@ -485,6 +485,9 @@ interface BootControl {
   /** Process groups the boot must collect before it reports cancellation. */
   groups: Set<number>;
   onPhase?: (report: RuntimeBootPhaseReport) => void;
+  /** Elapsed time anchor for the current `reportedPhase` (stable across readiness probes). */
+  reportedPhase?: RuntimeBootPhaseReport["phase"];
+  reportedPhaseStartedAt?: string;
 }
 
 function reportPhase(
@@ -493,7 +496,15 @@ function reportPhase(
   process: ProcessIdentity,
 ): void {
   control.groups.add(process.pid);
-  control.onPhase?.({ phase, startedAt: new Date().toISOString(), process });
+  if (control.reportedPhase !== phase) {
+    control.reportedPhase = phase;
+    control.reportedPhaseStartedAt = new Date().toISOString();
+  }
+  control.onPhase?.({
+    phase,
+    startedAt: control.reportedPhaseStartedAt!,
+    process,
+  });
 }
 
 /**
