@@ -1,17 +1,18 @@
-import type { Comment } from "../schemas.js";
+import type { Comment, CommentType, IssuePatch } from "../schemas.js";
 import { IssueError } from "./errors.js";
 import { appendComment, read, readComments, update } from "./issues.js";
 
 export const ALREADY_AWAITING_HUMAN = "review is already awaiting-human";
 export const NOT_AWAITING_HUMAN = "review is not awaiting-human";
 export const RUNTIME_CHECK_FAILED = "Runtime check failed";
+export const STORY_REVIEW_HAS_A_QUESTION = "Story review has a question";
 
 const SECRET_KEY = /^[A-Z_][A-Z0-9_]*$/;
 const BULLET = /^[-*+] (.*)$/;
 const SECRET_ITEM = /^Secret `([^`]*)`:(.*)$/;
 const LABELED_ITEM = /^(Input|Observation):(.*)$/;
 
-/** Normalize a request or observation file to the text stored as the comment body. */
+/** Normalize a request, observation, or question file to the text stored as the comment body. */
 export function normalizeCommentFileBody(body: string): string {
   const text = body.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   return text.endsWith("\n") ? text.slice(0, -1) : text;
@@ -86,26 +87,40 @@ export async function requestHuman(storyId: string, body: string): Promise<Comme
   return message;
 }
 
-/**
- * Stop for the human on a runtime failure. `review` is unset so that clearing
- * attention runs Story review again.
- */
-export async function reportRuntimeFailure(
+/** Post a story-review comment of `type` and raise `needsAttention` with `attentionReason`. */
+async function stopForHuman(
   storyId: string,
-  observation: string,
+  type: CommentType,
+  body: string,
+  attentionReason: string,
+  patch: IssuePatch = {},
 ): Promise<Comment> {
   assertStory(storyId);
   const message = await appendComment(storyId, {
     role: "story-review",
-    type: "runtime-failure",
-    body: normalizeCommentFileBody(observation),
+    type,
+    body: normalizeCommentFileBody(body),
   });
-  await update(storyId, {
-    needsAttention: true,
-    attentionReason: RUNTIME_CHECK_FAILED,
+  await update(storyId, { ...patch, needsAttention: true, attentionReason });
+  return message;
+}
+
+/**
+ * Stop for the human on a runtime failure. `review` is unset so that clearing
+ * attention runs Story review again.
+ */
+export function reportRuntimeFailure(
+  storyId: string,
+  observation: string,
+): Promise<Comment> {
+  return stopForHuman(storyId, "runtime-failure", observation, RUNTIME_CHECK_FAILED, {
     review: null,
   });
-  return message;
+}
+
+/** Stop for the human when Story review cannot tell what their guidance means. */
+export function askReviewQuestion(storyId: string, question: string): Promise<Comment> {
+  return stopForHuman(storyId, "review-question", question, STORY_REVIEW_HAS_A_QUESTION);
 }
 
 /** Reply to the latest human-request and clear `review`. */

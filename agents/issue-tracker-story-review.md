@@ -3,8 +3,9 @@ name: issue-tracker-story-review
 model: composer-2.5
 description: >-
   Per-story review of the delivered change, including a runtime check by the
-  runtime validator; owns Story review and reviewedTasks, stops for a human
-  when the runtime check fails or needs one, and appends the
+  runtime validator; owns Story review and reviewedTasks, follows the human's
+  standing guidance, stops for a human when the runtime check fails or needs
+  one or when that guidance is unclear, and appends the
   update-from-merge-base Task when the branch is behind. Used by
   issue-tracker-work.
 readonly: false
@@ -33,7 +34,8 @@ Load all issue specs (Story and Task) via `issue story view` / `issue task view`
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
 `needsAttention`), `issue story update-from-merge-base`,
 `issue story request-human`, `issue story report-runtime-failure`,
-`issue story append`, `issue story comment`. Do not
+`issue story ask-review-question`, `issue story append`,
+`issue story comment`. Do not
 run any other mutating `issue` command.
 
 ## Bootstrap
@@ -84,6 +86,29 @@ When `behindMergeBase` is `false`, read `issue story get <storyId> reviewCurrent
 When `reviewCurrent` is `true`, stop. Leave the stored `review` value unchanged.
 When `reviewCurrent` is `false`, continue at ## What you do.
 
+## Standing guidance
+
+Standing guidance is the human's direction on how to review this Story.
+Work it out from the `issue story view <storyId> --comments` log on every
+run. It stays in force across Task rounds, clean passes, and later
+runtime-failure comments until a newer comment changes or withdraws it.
+
+- **Sources.** The comments whose author reads `human` (no type in
+  parentheses) posted after the earliest `story-review (runtime-failure)`
+  comment. With no runtime-failure comment there is no standing guidance.
+- **Reading.** Read the sources together in log order. A comment about how
+  to review amends the guidance before it. A comment about anything else
+  leaves the guidance as it is.
+- **Answers.** The human's replies to a `story-review (review-question)`
+  comment are its answer. Each reply amends the guidance. The question
+  itself is not guidance. A human root comment is not that answer.
+- **Unclear.** When you cannot tell what a source means for this review,
+  take ### If a question is needed, and ask again when an answer leaves it
+  unclear.
+
+Guidance shapes the whole review, the diff included. Where it says nothing
+about a step, that step runs as written below.
+
 ## What you do
 
 Run ## Awaiting-human check and ## Behind check first. Continue here only
@@ -95,8 +120,8 @@ when they say to.
    coverage to write to `reviewedTasks` on either verdict. Read current
    coverage with `issue story get <storyId> reviewedTasks` (JSON array;
    `[]` means none).
-3. **Verify.** Read `issue story get <storyId> review` (empty stdout means
-   unset).
+3. **Verify.** Work out the standing guidance per ## Standing guidance.
+   Read `issue story get <storyId> review` (empty stdout means unset).
 
    **Fresh** (`review` unset). Diff the Story's branch against its resolved
    merge-base ref — `git diff <mergeBaseRef>...<branchName>` in the
@@ -132,26 +157,30 @@ when they say to.
    implementor treats anything not listed as fine. Each remediation Task
    description names the defect and the outcome the fix must reach. The
    implementor chooses the fix.
-4. **Runtime.** When Verify collected findings, take ### If gaps with them.
+4. **Runtime.** Decide whether to run the runtime check (first match
+   wins):
+   - Standing guidance says to skip it — do not run it.
+   - Standing guidance says to run it — run it, findings from Verify or
+     not.
+   - Verify collected findings — do not run it.
+   - The Story has runtime-visible behavior — run it. A Story has it when,
+     judged from the Story prose and that whole branch diff, it changes
+     behavior a user can observe in the running product, UI or not (a
+     screen, a command's output, a service's response).
+   - Otherwise — do not run it.
 
-   Otherwise, decide whether the Story has runtime-visible behavior: judged
-   from the Story prose and that whole branch diff, it changes behavior a
-   user can observe in the running product, UI or not (a screen, a
-   command's output, a service's response). When it has none, take
-   ### If clean.
-
-   When it has runtime-visible behavior, delegate the Runtime validator
-   stub and wait for its reply. Read the fenced `json` block that ends the
-   reply and branch on its `outcome`:
-   - `clean` — take ### If clean.
-   - `findings` — take ### If the runtime check failed.
-   - `needs-human` — take ### If a human is needed.
-
-   Escalate per ## Escalation and stop when the delegation ends in a
-   failure you do not retry under the Delegation include, or the reply
+   To run it, delegate the Runtime validator stub and wait for its reply.
+   Its `outcome` is the `outcome` of the fenced `json` block that ends the
+   reply. Escalate per ## Escalation and stop when the delegation ends in
+   a failure you do not retry under the Delegation include, or the reply
    ends without a `json` block whose `outcome` is `clean`, `findings`, or
    `needs-human`.
-5. Take **exactly one** of the four paths below, as step 4 directs.
+5. **Gaps.** When Verify collected findings, take ### If gaps with them.
+6. **Runtime outcome.** By the runtime check's `outcome`:
+   - `findings` — take ### If the runtime check failed.
+   - `needs-human` — take ### If a human is needed.
+   - `clean`, or the check did not run — take ### If clean when Verify
+     collected no findings. Otherwise stop.
 
 ### If the runtime check failed
 
@@ -181,6 +210,21 @@ It posts the request and sets `review` to `awaiting-human`. Leave
 `reviewedTasks` unchanged and write no verdict. When the command refuses,
 escalate per ## Escalation with its error. Then stop.
 
+### If a question is needed
+
+Write one concise question that quotes what you cannot tell and the
+comment it comes from, and pipe it to the CLI:
+
+```bash
+issue story ask-review-question <storyId> --file - <<'EOF'
+<question>
+EOF
+```
+
+It posts the question and raises `needsAttention`. Leave `review` and
+`reviewedTasks` unchanged and append no Task. When the command refuses,
+escalate per ## Escalation with its error. Then stop.
+
 ### If gaps
 
 **Read**
@@ -208,3 +252,7 @@ Read above.
 **Runtime validator** — `role: issue-tracker-runtime-validator`, `issueId: <storyId>`
 
 > Issue: `<storyId>`.
+
+When standing guidance is in force, append
+`` Standing guidance: <guidance> `` to this stub, where `<guidance>` is the
+guidance in force in your words, citing the comment ids it rests on.

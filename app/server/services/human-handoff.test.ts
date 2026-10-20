@@ -116,3 +116,26 @@ describe("reportRuntimeFailure", () => {
     expect(stored.reviewedTasks).toEqual(["t1"]);
   });
 });
+
+describe("askReviewQuestion", () => {
+  it("posts the question and raises attention, leaving review and reviewedTasks", async () => {
+    story({ review: "failed", reviewedTasks: ["t1"] });
+    const { askReviewQuestion, STORY_REVIEW_HAS_A_QUESTION } = await load();
+    const message = await askReviewQuestion("s", "Does “skip it” mean the runtime check?\n");
+
+    expect(message).toMatchObject({
+      role: "story-review",
+      type: "review-question",
+      body: "Does “skip it” mean the runtime check?",
+    });
+    expect(message.replyTo).toBeUndefined();
+    expect(readCommentLines("s")).toEqual([
+      expect.objectContaining({ id: message.id, type: "review-question" }),
+    ]);
+    const stored = readStored("s");
+    expect(stored.needsAttention).toBe(true);
+    expect(stored.attentionReason).toBe(STORY_REVIEW_HAS_A_QUESTION);
+    expect(stored.review).toBe("failed");
+    expect(stored.reviewedTasks).toEqual(["t1"]);
+  });
+});

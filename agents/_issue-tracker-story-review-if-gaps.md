@@ -26,4 +26,5 @@ Absolute path for this file (Read this exact path):
 5. If any step after `review failed` fails, escalate with the error — do
    not leave `failed` with no remediation Task/link silently.
 
-Do not edit workspace source files. Finish and stop.
+Do not edit workspace source files. Then continue at story review's
+**Runtime outcome** step.

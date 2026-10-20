@@ -27,6 +27,8 @@ mutating `issue` command.
 ## Inputs (from invoking prompt)
 
 - **Issue id** (Story) — the spawn `Issue:` value; `<storyId>` below
+- **Standing guidance** (when present) — the spawn `Standing guidance:`
+  value: the human's direction on how to review this Story
 
 ## Bootstrap
 
@@ -59,8 +61,9 @@ Complete **## Bootstrap** first.
    browsing a screen), each reachable on the stack the `runtime`
    declaration boots. That list is the scope of this run. The playbook is
    how you carry each check out; run the playbook procedures a listed
-   check needs. Mark each check the latest reply answers, per
-   ## Human handoff.
+   check needs. Standing guidance, when present, shapes which checks you
+   list and how you judge them. Mark each check the latest reply answers,
+   per ## Human handoff.
 2. **Boot.** Call `agent_stack_start` with `issueId` set to `<storyId>`.
    When the result has `reused: true`, call `agent_stack_redeploy` so the
    stack serves the branch tip. Export the returned `AGENT_STACK_BASE_URL`

@@ -535,6 +535,12 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   what happened. It sets `needsAttention` with `attentionReason`
   `Runtime check failed` and unsets `review`; `reviewedTasks` is unchanged.
   Prints the new comment id.
+- **`ask-review-question`** (story only) —
+  `issue story ask-review-question <storyId> --file <path|->` posts a
+  thread-root comment (`role` `story-review`, `type` `review-question`) whose
+  body is the question story review has about the human's standing guidance.
+  It sets `needsAttention` with `attentionReason` `Story review has a question`;
+  `review` and `reviewedTasks` are unchanged. Prints the new comment id.
 - **`standards set`** (review only) —
   `issue review standards set <reviewId> <submissionId> <file>` records
   coding-standards proposals for a submission whose assessment is `assessing`.
@@ -1393,7 +1399,7 @@ Resolution is a thread event, not a flag on the comment.
 | `body` | string | Markdown, may contain `issue:` links; non-empty, except a `human-response` with no note stores `""` |
 | `at` | ISO string | server-stamped on append (not supplied by the caller) |
 | `replyTo` | string? | when set, the `id` of the thread **root** this message replies to |
-| `type` | `"human-request"` \| `"human-response"` \| `"runtime-failure"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply, `report-runtime-failure` writes `runtime-failure` |
+| `type` | `"human-request"` \| `"human-response"` \| `"runtime-failure"` \| `"review-question"`? | absent on ordinary comments; `request-human` writes `human-request` on a thread root, `human-done` writes `human-response` on the reply, `report-runtime-failure` writes `runtime-failure`, `ask-review-question` writes `review-question` on a thread root |
 | `anchor` | object? | optional line or file anchor on a root comment only (see below) |
 | `kind` | `"review"` \| `"question"`? | thread root only; absent means review. Refused on a reply and on a non-review issue |
 | `source` | object? | optional GitHub mirror provenance (see below) |
@@ -1737,10 +1743,10 @@ no consumer can persist a broken file.
   and `POST /api/issues/:id/comments` share this path). `CommentInput` is the
   stored shape minus `id` and `at` — `{role, name?, body, type?}` plus optional
   `replyTo` and/or `anchor`; see [`comments.jsonl` message shape](#commentsjsonl-message-shape).
-  `requestHuman` / `humanDone` / `reportRuntimeFailure`
+  `requestHuman` / `humanDone` / `reportRuntimeFailure` / `askReviewQuestion`
   (`app/server/services/human-handoff.ts`) are the store operations behind
-  `issue story request-human`, `issue story human-done`, and
-  `issue story report-runtime-failure`.
+  `issue story request-human`, `issue story human-done`,
+  `issue story report-runtime-failure`, and `issue story ask-review-question`.
   `POST /api/stories/:id/human-done` calls `humanDone`.
   Append-time validation refuses invalid `replyTo`, `anchor`, and `commitSha`
   values.
@@ -2296,20 +2302,27 @@ so cannot drift:
   and leaves stored `review` unchanged. When `behindMergeBase` is `false` and
   `reviewCurrent` is `true`, story review stops without writing `review`.
   When `behindMergeBase` is `false` and `reviewCurrent` is `false`, story
-  review judges the diff. When that finds no gaps and the Story has
-  runtime-visible behavior (as `agents/issue-tracker-story-review.md`
-  defines it), story review spawns `issue-tracker-runtime-validator`. The
+  review judges the diff, decides whether to run the runtime check, and
+  records the outcome, all as `agents/issue-tracker-story-review.md`
+  defines. It follows the human's standing guidance (defined there too),
+  which may require the runtime check despite diff gaps, skip it, or change
+  how the diff is judged. When it cannot tell what that guidance means, it
+  posts a question with `issue story ask-review-question` and stops. When
+  it runs the check, it spawns `issue-tracker-runtime-validator` with the
+  guidance in force. The
   validator derives its checks from the outcomes the Story states, boots
   the Story's stack from the Project `runtime` declaration, and returns
-  `clean`, `findings`, or `needs-human`. Diff gaps become remediation Tasks
-  without spawning it. Runtime findings append no Task: each is an
+  `clean`, `findings`, or `needs-human`. Diff gaps become remediation
+  Tasks. A run that both files diff gaps and gets `findings` or
+  `needs-human` files the gaps first, then takes that runtime path below.
+  Runtime findings append no Task: each is an
   observation (what the check exercised, what the Story required, what
   happened) with no prescribed change, and story review posts them with
   `issue story report-runtime-failure`, which raises `needsAttention`
   (`Runtime check failed`) and unsets `review`, leaving `reviewedTasks`
   unchanged. Clearing that `needsAttention` with no new comment and no new
-  Tasks runs story review again from `review` unset: it judges the diff
-  and runs the runtime check when the diff is clean. A later runtime
+  Tasks runs story review again from `review` unset under the guidance
+  already in force. A later runtime
   failure posts a new observation the same way. The validator returns
   `needs-human` only when it is stuck on a check
   for something only a human can supply or observe. On `needs-human`,

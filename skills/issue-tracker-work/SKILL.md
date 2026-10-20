@@ -26,7 +26,9 @@ naming the fix, and sets Task `status done`; the story-review agent records the 
 gate (`review`, `reviewedTasks`, optional remediation Tasks) without editing
 workspace source, pauses the Story at `review` `awaiting-human` when a runtime
 check needs a human, raises Story `needsAttention` and unsets `review` when the
-runtime check fails, and when the branch is behind appends the
+runtime check fails, raises Story `needsAttention` with a question when it
+cannot tell what the human's standing guidance means, and when the branch is
+behind appends the
 update-from-merge-base Task without changing stored `review`; the git
 subagent owns branch create and Story finish.
 
@@ -197,7 +199,7 @@ not from a spawn-time argument.
 | Git | `issue-tracker-git` | Start a Story; finish a Story | `composer-2.5` | writes |
 | Model discriminator | `issue-tracker-model-discriminator` | Before implement — assigns implementor model onto Task `assignee` | `composer-2.5` | writes (`issue task set … assignee` only) |
 | Implementor | `issue-tracker-implementor-<family>` | Implement, review, and commit a Task | Role pin by family: `composer`→`composer-2.5`; `grok`→`cursor-grok-4.7`; `opus`→`claude-opus-5-5-thinking-high` | writes (see Field ownership) |
-| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story report-runtime-failure`; `issue story append`; `issue story comment`) |
+| Story review | `issue-tracker-story-review` | Close-Story | `composer-2.5` | writes (`issue story set … review` / `reviewedTasks` / `needsAttention`; `issue story update-from-merge-base`; `issue story request-human`; `issue story report-runtime-failure`; `issue story ask-review-question`; `issue story append`; `issue story comment`) |
 | Runtime validator | `issue-tracker-runtime-validator` | Spawned by Story review, not by you | `composer-2.5` | writes (`issue attach` on the Story) |
 
 ### Field ownership
@@ -211,6 +213,7 @@ Coordinator never sets Task `status` or Task `commits`.
 | Task `commits` | Git | spawned by the implementor |
 | Story `review` | Story review | on each review round `passed` / `failed`; `awaiting-human` when it pauses for a human; unset when the runtime check fails |
 | Story `needsAttention` (runtime check failed) | Story review | when the runtime check fails (`issue story report-runtime-failure`) |
+| Story `needsAttention` (story review has a question) | Story review | when it cannot tell what the human's standing guidance means (`issue story ask-review-question`) |
 | Story `review` cleared from `awaiting-human` | Human | Done on the Story's request (`issue story human-done`) |
 | Story `reviewedTasks` | Story review | all `done` Tasks inspected in that round |
 | Story `needsAttention` (review three-strike) | Coordinator | on the 3rd counted story-review resume in one session — see **Close a Story** |

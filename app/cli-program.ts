@@ -41,6 +41,7 @@ import { hasAttention } from "./server/kind.js";
 import { registerKindAdd } from "./cli-create.js";
 import { bindCliStdin, readCliFileArg } from "./cli-io.js";
 import {
+  askReviewQuestion,
   humanDone,
   reportRuntimeFailure,
   requestHuman,
@@ -425,6 +426,22 @@ function createIssueProgram(run: Run): Command {
           run(async () => {
             const observation = readCliFileArg(opts.file);
             return reportRuntimeFailure(storyId, observation);
+          }),
+        );
+      kindCmd
+        .command("ask-review-question")
+        .argument("<storyId>", "story id")
+        .requiredOption(
+          "--file <path>",
+          "question body (path, or - for stdin): what story review cannot tell about the human's guidance",
+        )
+        .description(
+          "post a story-review review-question comment and raise needsAttention (Story review has a question); review is unchanged",
+        )
+        .action((storyId: string, opts: { file: string }) =>
+          run(async () => {
+            const question = readCliFileArg(opts.file);
+            return askReviewQuestion(storyId, question);
           }),
         );
       kindCmd

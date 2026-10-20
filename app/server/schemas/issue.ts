@@ -39,6 +39,7 @@ export const COMMENT_TYPES = [
   "human-request",
   "human-response",
   "runtime-failure",
+  "review-question",
 ] as const;
 
 const nonEmpty = z.string().min(1);
