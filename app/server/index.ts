@@ -93,11 +93,15 @@ startPrSyncDriver();
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );
+const { sweepOrphanedReviewRuntimeBoots } = await import(
+  "./services/review-runtime.js"
+);
 const { skipsGuestDuties } = await import("./services/store-read-only.js");
 // Read-only shares the live conversations directory. Guest must not drop
 // the parent stack's record either. Either flag skips the sweep.
 if (!skipsGuestDuties()) {
-  dropUnownedAgentStackRecords();
+  await sweepOrphanedReviewRuntimeBoots();
+  await dropUnownedAgentStackRecords();
 }
 
 const { stopSpawnedMockupStacksOnShutdown } = await import(

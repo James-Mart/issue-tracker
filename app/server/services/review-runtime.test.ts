@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import {
   existsSync,
@@ -12,7 +12,14 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { holdOpen, waitForPids } from "./boot-process.test-helpers.js";
+import {
+  holdOpen,
+  killStrayGroups,
+  procStartTime,
+  trackDetachedGroup,
+  waitForPidFile,
+  waitForPids,
+} from "./boot-process.test-helpers.js";
 import type { ReviewRuntimeStatus } from "../schemas/review.js";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
@@ -22,6 +29,7 @@ let issuesDir: string;
 let worktree: string;
 let server: Server;
 let baseUrl: string;
+const strays: ChildProcess[] = [];
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(issuesDir, id), { recursive: true });
@@ -166,6 +174,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  killStrayGroups(strays);
+  strays.length = 0;
   const { stopReviewRuntime } = await import("./review-runtime.js").catch(() => ({
     stopReviewRuntime: undefined,
   }));
@@ -320,5 +330,68 @@ describe("review runtime", () => {
     } finally {
       writeFileSync(gate, "");
     }
+  });
+});
+
+describe("sweepOrphanedReviewRuntimeBoots", () => {
+  async function loadSweep() {
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesDir);
+    vi.stubEnv("ISSUE_TRACKER_GUEST", "");
+    return import("./review-runtime.js");
+  }
+
+  it("fails an orphaned boot, collects its group, and keeps the phase log", async () => {
+    seedReview({
+      start: "sleep 30",
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    });
+    const childPidFile = join(root, "child.pid");
+    const leaderPid = trackDetachedGroup(strays, childPidFile).pid!;
+    const childPid = await waitForPidFile(childPidFile);
+    const {
+      readReviewRuntime,
+      readReviewRuntimeLog,
+      sweepOrphanedReviewRuntimeBoots,
+    } = await loadSweep();
+    const { reviewRuntimeDir, writeReviewRuntimeRecord } = await import(
+      "./review-runtime-occupancy.js"
+    );
+    const dir = reviewRuntimeDir("rev");
+    const dataDir = join(dir, "data");
+    writeReviewRuntimeRecord({
+      reviewId: "rev",
+      worktree,
+      phase: "booting",
+      startedAt: STAMP,
+      processes: [],
+      dataDir,
+      bootPhase: {
+        phase: "build",
+        startedAt: STAMP,
+        process: { pid: childPid, startTime: procStartTime(childPid) },
+      },
+    });
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(dataDir, "marker"), "keep\n");
+    writeFileSync(join(dir, "build.log"), "compile step\n");
+
+    const swept = await sweepOrphanedReviewRuntimeBoots();
+
+    expect(swept).toEqual(["rev"]);
+    expect(existsSync(`/proc/${childPid}`)).toBe(false);
+    expect(existsSync(`/proc/${leaderPid}`)).toBe(false);
+    expect(existsSync(dir)).toBe(true);
+    expect(readFileSync(join(dataDir, "marker"), "utf8")).toBe("keep\n");
+    expect(readReviewRuntime("rev")).toEqual({
+      state: "failed",
+      error: "Interrupted by server restart",
+      failedPhase: "build",
+    });
+    expect(readReviewRuntimeLog("rev")).toEqual({
+      phase: "build",
+      log: "build.log",
+      lines: ["compile step"],
+    });
   });
 });

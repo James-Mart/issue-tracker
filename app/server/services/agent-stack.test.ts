@@ -47,6 +47,12 @@ function realSpawn(
 }
 
 import { spawn } from "node:child_process";
+import {
+  killStrayGroups,
+  procStartTime,
+  trackDetachedGroup,
+  waitForPidFile,
+} from "./boot-process.test-helpers.js";
 
 let root: string;
 let issuesDir: string;
@@ -107,15 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   spawnDelegate.impl = null;
   vi.restoreAllMocks();
-  for (const child of strays) {
-    if (child.pid !== undefined && child.exitCode === null) {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        // Already reaped by the test.
-      }
-    }
-  }
+  killStrayGroups(strays);
   strays.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -124,36 +122,6 @@ afterEach(() => {
 
 async function loadService() {
   return import("./agent-stack.js");
-}
-
-/** Independent read of the liveness token the service pins pids with. */
-function procStartTime(pid: number): string {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-  return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
-}
-
-/**
- * A detached sleeper that forks a sleeper of its own, mirroring how `tsx watch`
- * and Vite each hold children inside the group the service signals.
- */
-function spawnGroupLeader(childPidFile: string): number {
-  const child = spawn("sh", ["-c", `sleep 300 & echo $! > ${childPidFile}; wait`], {
-    detached: true,
-    stdio: "ignore",
-  });
-  strays.push(child);
-  return child.pid!;
-}
-
-async function waitForFile(path: string): Promise<string> {
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(path)) {
-      const body = readFileSync(path, "utf8").trim();
-      if (body) return body;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error(`timed out waiting for ${path}`);
 }
 
 /** Collection removes the /proc entry. State Z is still unreaped. */
@@ -196,21 +164,22 @@ function stackState(
   };
 }
 
+async function writeStackFile(conversationId: string, body: unknown) {
+  const { agentStackDir, agentStackStatePath } = await loadService();
+  mkdirSync(agentStackDir(conversationId), { recursive: true });
+  writeFileSync(agentStackStatePath(conversationId), JSON.stringify(body));
+}
+
 describe("stopAgentStack", () => {
   async function recordStack(conversationId: string, pid: number) {
-    const { agentStackDir, agentStackStatePath } = await loadService();
-    mkdirSync(agentStackDir(conversationId), { recursive: true });
-    writeFileSync(
-      agentStackStatePath(conversationId),
-      JSON.stringify(stackState(conversationId, pid, workspace)),
-    );
+    await writeStackFile(conversationId, stackState(conversationId, pid, workspace));
   }
 
   it("kills the whole process group and clears ownership", async () => {
     const { agentStackStatePath, stopAgentStack } = await loadService();
     const childPidFile = join(root, "child.pid");
-    const leaderPid = spawnGroupLeader(childPidFile);
-    const forkedPid = Number(await waitForFile(childPidFile));
+    const leaderPid = trackDetachedGroup(strays, childPidFile).pid!;
+    const forkedPid = await waitForPidFile(childPidFile);
     await recordStack("my-conversation", leaderPid);
 
     const result = await stopAgentStack("my-conversation");
@@ -236,7 +205,7 @@ describe("stopAgentStack", () => {
       { detached: true, stdio: "ignore" },
     );
     strays.push(holder);
-    const childPid = Number(await waitForFile(pidFile));
+    const childPid = await waitForPidFile(pidFile);
     await recordStack("my-conversation", childPid);
     const before = procInfo(childPid);
     const kill = vi.spyOn(process, "kill");
@@ -265,7 +234,7 @@ describe("startAgentStack", () => {
       startAgentStack,
       stopAgentStack,
     } = await loadService();
-    const pid = spawnGroupLeader(join(root, "child.pid"));
+    const pid = trackDetachedGroup(strays, join(root, "child.pid")).pid!;
     mkdirSync(agentStackDir("my-conversation"), { recursive: true });
     writeFileSync(
       agentStackStatePath("my-conversation"),

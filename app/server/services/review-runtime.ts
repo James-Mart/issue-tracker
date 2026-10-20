@@ -1,7 +1,9 @@
-import { existsSync, rmSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { reviewRuntimesDir } from "../config.js";
 import type { ReviewRuntimeLog, ReviewRuntimeStatus } from "../schemas/review.js";
 import type { Runtime } from "../schemas.js";
+import { isSlugSafe } from "../slug.js";
 import { loadPhaseSecrets } from "./agent-stack-secrets.js";
 import { IssueError } from "./errors.js";
 import {
@@ -19,17 +21,20 @@ import {
   reviewRuntimeDir,
   writeReviewRuntimeRecord,
   type LiveBoot,
+  type ReviewRuntimeRecord,
 } from "./review-runtime-occupancy.js";
 import {
   allocateRuntimeResources,
   bootRuntime,
   discardRuntimeDataDir,
   missingDeclaredRuntimeFields,
+  runtimeRecordOwnedByThisProcess,
   readRuntimeBootPhaseLogLines,
   RuntimeBootCancelled,
   runtimeBootPhaseLogBasename,
   runtimeProcessesLive,
   stopRuntimeProcesses,
+  terminateOrphanProcessGroup,
   type RuntimeBootPhaseReport,
   type RuntimeProcess,
   type RuntimeResources,
@@ -301,6 +306,41 @@ function stopBootingReviewRuntime(
     if (record && record.phase !== "booting") return undefined;
     return beginStop(reviewId, true);
   });
+}
+
+/**
+ * Startup. A review runtime still booting belongs to a server that is gone.
+ * A live phase group is matched by pid and start time, then collected from
+ * `/proc`. The record becomes failed and the runtime directory stays, so its
+ * phase log remains readable. A runtime this process still owns, and one that
+ * has reached running, stay up. Returns the review ids swept.
+ */
+export async function sweepOrphanedReviewRuntimeBoots(): Promise<string[]> {
+  if (!existsSync(reviewRuntimesDir)) return [];
+  const booting: ReviewRuntimeRecord[] = [];
+  for (const entry of readdirSync(reviewRuntimesDir)) {
+    if (!isSlugSafe(entry)) continue;
+    const dir = join(reviewRuntimesDir, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const record = readReviewRuntimeRecord(entry);
+    if (!record || record.phase !== "booting") continue;
+    if (runtimeRecordOwnedByThisProcess(record.processes, record.bootPhase)) continue;
+    booting.push(record);
+  }
+  await Promise.all(
+    booting.map(async (record) => {
+      if (record.bootPhase) {
+        await terminateOrphanProcessGroup(record.bootPhase.process);
+      }
+      writeReviewRuntimeRecord({
+        ...record,
+        phase: "failed",
+        processes: [],
+        error: "Interrupted by server restart",
+      });
+    }),
+  );
+  return booting.map((record) => record.reviewId);
 }
 
 /**

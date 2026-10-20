@@ -25,17 +25,18 @@ import {
   bootRuntime,
   discardRuntimeDataDir,
   expandRuntimeBaseUrl,
-  isOurRecordedProcess,
   missingDeclaredRuntimeFields,
   phaseEnv,
   RuntimeBootCancelled,
   runtimeBootPhaseReportSchema,
   runtimeProcessesLive,
+  runtimeRecordOwnedByThisProcess,
   runtimeVarEnv,
   runRuntimeShell,
   runtimeProcessSchema,
   stopRuntimeProcesses,
   tailRuntimeOutput,
+  terminateOrphanProcessGroup,
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
@@ -506,23 +507,32 @@ function releaseAgentStackRecord(state: AgentStackState): void {
 }
 
 /**
- * Drop recorded stacks this process does not own. Does not signal them.
- * Returns the conversation ids removed.
+ * Drop recorded stacks this process does not own. An in-flight boot is
+ * signaled first: the group is matched by pid and start time, because this
+ * process is not its parent, and collected when it leaves `/proc`. A stack
+ * that has finished booting is released with no signal. Returns the
+ * conversation ids removed.
  */
-export function dropUnownedAgentStackRecords(): string[] {
+export async function dropUnownedAgentStackRecords(): Promise<string[]> {
   if (!existsSync(conversationsDir)) return [];
-  const dropped: string[] = [];
+  const unowned: AgentStackState[] = [];
   for (const entry of readdirSync(conversationsDir)) {
     if (!isSlugSafe(entry)) continue;
     const dir = join(conversationsDir, entry);
     if (!statSync(dir).isDirectory()) continue;
     const state = readAgentStackState(entry);
-    if (!state) continue;
-    if (state.processes.some(isOurRecordedProcess)) continue;
-    releaseAgentStackRecord(state);
-    dropped.push(entry);
+    if (!state || runtimeRecordOwnedByThisProcess(state.processes, state.bootPhase)) continue;
+    unowned.push(state);
   }
-  return dropped;
+  await Promise.all(
+    unowned.map(async (state) => {
+      if (state.bootPhase) {
+        await terminateOrphanProcessGroup(state.bootPhase.process);
+      }
+      releaseAgentStackRecord(state);
+    }),
+  );
+  return unowned.map((state) => state.conversationId);
 }
 
 /**

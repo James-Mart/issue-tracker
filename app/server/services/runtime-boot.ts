@@ -55,7 +55,8 @@ export const runtimeBootPhaseReportSchema = z.object({
 
 export type RuntimeBootPhaseReport = z.infer<typeof runtimeBootPhaseReportSchema>;
 type ShellPhase = Exclude<RuntimeBootPhaseReport["phase"], "start">;
-type ProcessIdentity = RuntimeBootPhaseReport["process"];
+/** Pid and `/proc` start time of the process group a boot phase is running. */
+export type ProcessIdentity = RuntimeBootPhaseReport["process"];
 
 export interface RuntimeResources {
   port: number;
@@ -287,13 +288,22 @@ export function missingDeclaredRuntimeFields(runtime: Runtime | undefined): stri
 }
 
 /** The recorded process is a child of this process (running or zombie). */
-export function isOurRecordedProcess(proc: RuntimeProcess): boolean {
+export function isOurRecordedProcess(proc: ProcessIdentity): boolean {
   const info = readProcInfo(proc.pid);
   return (
     info !== null &&
     info.ppid === process.pid &&
     info.startTime === proc.startTime
   );
+}
+
+/** True when a running process or the in-flight boot group belongs to this process. */
+export function runtimeRecordOwnedByThisProcess(
+  processes: readonly ProcessIdentity[],
+  bootPhase?: { process: ProcessIdentity },
+): boolean {
+  if (processes.some(isOurRecordedProcess)) return true;
+  return bootPhase !== undefined && isOurRecordedProcess(bootPhase.process);
 }
 
 /** Masked stdout/stderr appended to one role log file (`start.log`, `build.log`, …). */
@@ -755,22 +765,45 @@ export async function bootRuntime(
   }
 }
 
-/** True when any child of this process still belongs to one of these groups. */
-function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
-  if (groups.size === 0) return false;
-  let entries: string[];
-  try {
-    entries = readdirSync("/proc");
-  } catch {
-    return false;
-  }
+type ProcInfo = NonNullable<ReturnType<typeof readProcInfo>>;
+
+/**
+ * True when any `/proc` entry satisfies `match`. A failure to list `/proc`
+ * propagates: treating it as an empty scan would report the group gone.
+ */
+function anyProc(match: (info: ProcInfo) => boolean): boolean {
+  const entries = readdirSync("/proc");
   for (const entry of entries) {
     if (!/^[1-9]\d*$/.test(entry)) continue;
     const info = readProcInfo(Number(entry));
-    if (!info) continue;
-    if (info.ppid === process.pid && groups.has(info.pgrp)) return true;
+    if (info && match(info)) return true;
   }
   return false;
+}
+
+/** True when any child of this process still belongs to one of these groups. */
+function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
+  if (groups.size === 0) return false;
+  return anyProc((info) => info.ppid === process.pid && groups.has(info.pgrp));
+}
+
+/**
+ * Poll until `done()` or `timeoutMs` elapses. `tick` runs first each pass
+ * (owned groups reap before they are counted absent). `Infinity` waits until
+ * `done()`.
+ */
+async function pollUntil(
+  done: () => boolean,
+  timeoutMs: number,
+  tick?: () => void,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    tick?.();
+    if (done()) return true;
+    if (Date.now() >= deadline) return false;
+    await delay(EXIT_POLL_MS);
+  }
 }
 
 /**
@@ -778,37 +811,76 @@ function groupsHaveOurChildren(groups: ReadonlySet<number>): boolean {
  * reporting that the group is still uncollected. `Infinity` waits until
  * `waitpid` collects it.
  */
-async function waitUntilGroupsCollected(
+function waitUntilGroupsCollected(
   groups: ReadonlySet<number>,
   timeoutMs: number,
 ): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    reapExitedChildren();
-    if (!groupsHaveOurChildren(groups)) return true;
-    if (Date.now() >= deadline) return false;
-    await delay(EXIT_POLL_MS);
-  }
+  return pollUntil(
+    () => !groupsHaveOurChildren(groups),
+    timeoutMs,
+    reapExitedChildren,
+  );
 }
 
 /**
- * SIGTERM each group, then SIGKILL after `TERM_GRACE_MS`. The promise settles
- * only after `waitpid` collects every group. Past `KILL_GRACE_MS` it keeps
- * waiting, then rejects naming `survivors()`. `label` names the owner in that
- * error.
+ * SIGTERM each group, then SIGKILL after `TERM_GRACE_MS`. True when
+ * `collected` reports the groups gone within the kill grace.
+ */
+async function termThenKill(
+  groups: Iterable<number>,
+  collected: (timeoutMs: number) => Promise<boolean>,
+): Promise<boolean> {
+  for (const pgrp of groups) killProcessGroup(pgrp, "SIGTERM");
+  if (await collected(TERM_GRACE_MS)) return true;
+  for (const pgrp of groups) killProcessGroup(pgrp, "SIGKILL");
+  return collected(KILL_GRACE_MS);
+}
+
+/**
+ * SIGTERM, then SIGKILL after the term grace. The promise settles only after
+ * `waitpid` collects every group. Past the kill grace it keeps waiting, then
+ * rejects naming `survivors()`. `label` names the owner in that error.
  */
 async function terminateProcessGroups(
   groups: ReadonlySet<number>,
   label: string,
   survivors: () => string,
 ): Promise<void> {
-  for (const pgrp of groups) killProcessGroup(pgrp, "SIGTERM");
-  if (await waitUntilGroupsCollected(groups, TERM_GRACE_MS)) return;
-  for (const pgrp of groups) killProcessGroup(pgrp, "SIGKILL");
-  if (await waitUntilGroupsCollected(groups, KILL_GRACE_MS)) return;
+  const collected = (timeoutMs: number) => waitUntilGroupsCollected(groups, timeoutMs);
+  if (await termThenKill(groups, collected)) return;
   const named = survivors() || "group still uncollected";
-  await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+  await collected(Number.POSITIVE_INFINITY);
   throw new Error(`${label} survived SIGKILL: ${named}`);
+}
+
+/** True when any process still belongs to `pgrp`, including a zombie. */
+function processGroupPresent(pgrp: number): boolean {
+  return anyProc((info) => info.pgrp === pgrp);
+}
+
+/**
+ * `timeoutMs` is how long to wait before reporting that a member remains.
+ * This process did not spawn the group, so a zombie here is not ours to
+ * `waitpid`.
+ */
+function waitUntilOrphanGroupGone(pgrp: number, timeoutMs: number): Promise<boolean> {
+  return pollUntil(() => !processGroupPresent(pgrp), timeoutMs);
+}
+
+/**
+ * Signal a process group recorded by a server that is gone. The pid is still
+ * that process only when its `/proc` start time matches; a recycled pid is
+ * left alone. This process is not the parent, so it cannot `waitpid` the
+ * group. SIGTERM, then SIGKILL after the term grace. The promise settles
+ * when no `/proc` entry remains in the group.
+ */
+export async function terminateOrphanProcessGroup(proc: ProcessIdentity): Promise<void> {
+  const info = readProcInfo(proc.pid);
+  if (!info || info.startTime !== proc.startTime) return;
+  const { pgrp } = info;
+  const collected = (timeoutMs: number) => waitUntilOrphanGroupGone(pgrp, timeoutMs);
+  if (await termThenKill([pgrp], collected)) return;
+  await collected(Number.POSITIVE_INFINITY);
 }
 
 /**
