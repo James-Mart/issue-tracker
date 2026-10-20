@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { holdOpen, killPidsInFile, waitForPids } from "./boot-process.test-helpers.js";
 
 let root: string;
 let issuesDir: string;
@@ -209,7 +210,7 @@ describe("declared runtime boot", () => {
     let childPid = 0;
     try {
       const state = await waitForPhase(readAgentStackState, "build");
-      childPid = Number(await waitForFile(pidFile));
+      [childPid] = await waitForPids(pidFile, 1);
       expect(state.processes).toEqual([]);
       expect(state.bootPhase?.phase).toBe("build");
       expect(existsSync(`/proc/${childPid}`)).toBe(true);
@@ -224,13 +225,7 @@ describe("declared runtime boot", () => {
       await expect(pending).rejects.toThrow(/boot cancelled/);
     } finally {
       writeFileSync(gate, "");
-      if (childPid !== 0 && existsSync(`/proc/${childPid}`)) {
-        try {
-          process.kill(childPid, "SIGKILL");
-        } catch {
-          // The boot cancel already collected it.
-        }
-      }
+      killPidsInFile(pidFile);
       await pending.catch(() => undefined);
     }
   });
@@ -248,22 +243,6 @@ function seedProject(runtime: Record<string, unknown>): void {
 
 function listenNow(): string {
   return nodeScript(listenOnStackPort(0));
-}
-
-function holdOpen(pidFile: string, gateFile: string): string {
-  return `sleep 30 & echo $! > ${JSON.stringify(pidFile)}; while [ ! -e ${JSON.stringify(gateFile)} ]; do sleep 0.05; done`;
-}
-
-async function waitForFile(path: string): Promise<string> {
-  const deadline = Date.now() + 8_000;
-  while (Date.now() < deadline) {
-    if (existsSync(path)) {
-      const body = readFileSync(path, "utf8").trim();
-      if (body) return body;
-    }
-    await delay(20);
-  }
-  throw new Error(`timed out waiting for ${path}`);
 }
 
 async function waitForPhase(

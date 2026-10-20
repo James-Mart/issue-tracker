@@ -12,6 +12,7 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { holdOpen, waitForPids } from "./boot-process.test-helpers.js";
 import type { ReviewRuntimeStatus } from "../schemas/review.js";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
@@ -97,25 +98,27 @@ function checkoutHead(dir: string): string {
   return git("rev-parse", "HEAD").trim();
 }
 
-function seedReview(runtime: Record<string, string>): void {
+function seedReview(runtime: Record<string, string>, ids = ["rev"]): void {
   const headSha = checkoutHead(worktree);
   writeIssue("proj", { kind: "project", workspace: worktree, runtime });
-  writeIssue("rev", {
-    kind: "review",
-    partOf: "proj",
-    archived: false,
-    marks: { all: {}, commits: {} },
-    submissions: [],
-    pr: {
-      url: "https://github.com/example/repo/pull/1",
-      number: 1,
-      baseRef: "main",
-      headRef: "feature",
+  for (const id of ids) {
+    writeIssue(id, {
+      kind: "review",
+      partOf: "proj",
+      archived: false,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      pr: {
+        url: "https://github.com/example/repo/pull/1",
+        number: 1,
+        baseRef: "main",
+        headRef: "feature",
         headSha,
-      fork: false,
-    },
-    worktreePath: worktree,
-  });
+        fork: false,
+      },
+      worktreePath: worktree,
+    });
+  }
 }
 
 async function runtime(method: string, id = "rev"): Promise<Response> {
@@ -166,7 +169,10 @@ afterEach(async () => {
   const { stopReviewRuntime } = await import("./review-runtime.js").catch(() => ({
     stopReviewRuntime: undefined,
   }));
-  if (stopReviewRuntime) await stopReviewRuntime("rev").catch(() => undefined);
+  if (stopReviewRuntime) {
+    await stopReviewRuntime("rev").catch(() => undefined);
+    await stopReviewRuntime("rev-b").catch(() => undefined);
+  }
   if (server?.listening) {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
@@ -222,19 +228,14 @@ describe("review runtime", () => {
     const buildChild = join(root, "build-child.pid");
     const gate = join(root, "build-may-finish");
     seedReview({
-      build: `sleep 30 & echo $! > ${buildChild}; echo build >> ${marker}; while [ ! -e ${gate} ]; do sleep 0.05; done; kill $!`,
+      build: holdOpen(buildChild, gate, { phaseMarker: marker }),
       start: listenScript(marker),
       baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
     });
     await boot();
 
     expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
-    const deadline = Date.now() + 8_000;
-    while (!existsSync(buildChild) || readFileSync(buildChild, "utf8").trim() === "") {
-      if (Date.now() > deadline) throw new Error("build never started");
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    const sleepPid = Number(readFileSync(buildChild, "utf8").trim());
+    const [sleepPid] = await waitForPids(buildChild, 1);
     const record = JSON.parse(
       readFileSync(join(dirname(issuesDir), "review-runtimes", "rev", "state.json"), "utf8"),
     ) as { bootPhase?: { phase: string } };
@@ -287,5 +288,37 @@ describe("review runtime", () => {
       log: "build.log",
       lines: expect.any(Array),
     });
+  });
+
+  it("cancels every in-flight review runtime boot on shutdown", async () => {
+    const marker = join(root, "phases");
+    const buildChild = join(root, "build-child.pid");
+    const gate = join(root, "build-may-finish");
+    seedReview(
+      {
+        build: holdOpen(buildChild, gate, { append: true, phaseMarker: marker }),
+        start: listenScript(marker),
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
+      ["rev", "rev-b"],
+    );
+    await boot();
+
+    expect(await (await runtime("POST", "rev")).json()).toEqual({ state: "booting" });
+    expect(await (await runtime("POST", "rev-b")).json()).toEqual({ state: "booting" });
+    const pids = await waitForPids(buildChild, 2);
+
+    const { stopInFlightReviewRuntimesOnShutdown } = await import("./review-runtime.js");
+    try {
+      const stopped = await stopInFlightReviewRuntimesOnShutdown();
+      expect(stopped).toEqual([{ state: "stopped" }, { state: "stopped" }]);
+      for (const pid of pids) expect(existsSync(`/proc/${pid}`)).toBe(false);
+      for (const id of ["rev", "rev-b"]) {
+        expect(existsSync(join(dirname(issuesDir), "review-runtimes", id))).toBe(false);
+        expect(await (await runtime("GET", id)).json()).toEqual({ state: "stopped" });
+      }
+    } finally {
+      writeFileSync(gate, "");
+    }
   });
 });

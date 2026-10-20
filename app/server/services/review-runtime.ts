@@ -12,6 +12,7 @@ import {
 import { readAll, readReviewOrThrow } from "./issues.js";
 import {
   clearLiveBootIfCurrent,
+  inFlightReviewRuntimeIds,
   peekLiveBoot,
   readReviewRuntimeRecord,
   rememberLiveBoot,
@@ -33,6 +34,7 @@ import {
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
+import { settledValues } from "./settled-values.js";
 
 export { reviewRuntimeBusy } from "./review-runtime-occupancy.js";
 
@@ -286,4 +288,26 @@ export function stopReviewRuntime(
   options?: { syncWorktree?: boolean },
 ): Promise<ReviewRuntimeStatus> {
   return withGate(reviewId, () => beginStop(reviewId, options?.syncWorktree !== false));
+}
+
+function stopBootingReviewRuntime(
+  reviewId: string,
+): Promise<ReviewRuntimeStatus | undefined> {
+  return withGate(reviewId, async () => {
+    if (!peekLiveBoot(reviewId)) return undefined;
+    const record = readReviewRuntimeRecord(reviewId);
+    // `running` is written before the live boot is cleared. Stop would tear
+    // that runtime down; shutdown leaves it up.
+    if (record && record.phase !== "booting") return undefined;
+    return beginStop(reviewId, true);
+  });
+}
+
+/**
+ * API shutdown. Cancels review runtimes still booting, through the same path
+ * as Stop, and settles once each of those records and directories is gone.
+ * A runtime that has reached running stays up.
+ */
+export function stopInFlightReviewRuntimesOnShutdown(): Promise<ReviewRuntimeStatus[]> {
+  return settledValues(inFlightReviewRuntimeIds().map((id) => stopBootingReviewRuntime(id)));
 }

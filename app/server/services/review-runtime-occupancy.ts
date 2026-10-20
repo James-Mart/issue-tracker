@@ -45,6 +45,11 @@ export function peekLiveBoot(reviewId: string): LiveBoot | undefined {
   return liveBoots.get(reviewId);
 }
 
+/** Review ids whose boot has not settled. Snapshot; later starts are absent. */
+export function inFlightReviewRuntimeIds(): string[] {
+  return [...liveBoots.keys()];
+}
+
 export function rememberLiveBoot(reviewId: string, boot: LiveBoot): void {
   liveBoots.set(reviewId, boot);
 }

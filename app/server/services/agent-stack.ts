@@ -39,6 +39,7 @@ import {
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
+import { settledValues } from "./settled-values.js";
 import { ancestorChain, nearestWorktreeIssue } from "./subtree.js";
 
 /**
@@ -312,6 +313,18 @@ interface LiveAgentStackBoot {
 
 const liveBoots = new Map<string, LiveAgentStackBoot>();
 
+/** Conversation ids whose boot has not settled. Snapshot; later starts are absent. */
+function inFlightAgentStackBootIds(): string[] {
+  return [...liveBoots.keys()];
+}
+
+async function settleLiveAgentStackBoot(conversationId: string): Promise<void> {
+  const live = liveBoots.get(conversationId);
+  if (!live) return;
+  live.controller.abort();
+  await live.settled;
+}
+
 async function bootDeclaredRuntime(
   conversationId: string,
   boot: ResolvedBoot,
@@ -517,9 +530,25 @@ export function dropUnownedAgentStackRecords(): string[] {
  * finished booting stays up, so conversation teardown can cancel the turn
  * before stopping it.
  */
-export async function cancelBootingAgentStack(conversationId: string): Promise<void> {
-  if (!liveBoots.has(conversationId)) return;
-  await stopAgentStack(conversationId);
+export async function cancelBootingAgentStack(
+  conversationId: string,
+): Promise<AgentStackStopResult | undefined> {
+  if (!liveBoots.has(conversationId)) return undefined;
+  await settleLiveAgentStackBoot(conversationId);
+  // Success drops `bootPhase` before the live boot is cleared. A running
+  // stack stays up. A cancelled boot keeps the phase report for Stop.
+  const state = readAgentStackState(conversationId);
+  if (!state?.bootPhase) return undefined;
+  return stopRecordedStack(state);
+}
+
+/**
+ * API shutdown. Cancels agent-stack boots still in flight, through the same
+ * path as Stop, and settles once each of those records and data directories
+ * is gone. A stack that has finished booting stays up.
+ */
+export function cancelInFlightAgentStackBootsOnShutdown(): Promise<AgentStackStopResult[]> {
+  return settledValues(inFlightAgentStackBootIds().map((id) => cancelBootingAgentStack(id)));
 }
 
 /**
@@ -537,18 +566,13 @@ export async function stopAgentStack(
   conversationId: string,
 ): Promise<AgentStackStopResult> {
   ensureChildReaper();
-  const live = liveBoots.get(conversationId);
-  if (live) {
-    live.controller.abort();
-    await live.settled;
-  }
+  await settleLiveAgentStackBoot(conversationId);
   const state = readAgentStackState(conversationId);
   if (!state) return { stopped: false, state: null, memoryLimitFailures: [] };
-  const memoryLimitFailures = await stopRecordedStack(state);
-  return { stopped: true, state, memoryLimitFailures };
+  return stopRecordedStack(state);
 }
 
-async function stopRecordedStack(state: AgentStackState): Promise<string[]> {
+async function stopRecordedStack(state: AgentStackState): Promise<AgentStackStopResult> {
   const memoryLimitFailures = collectAgentStackMemoryLimitFailures(state.dataDir);
   try {
     await stopRuntimeProcesses(state.processes, `agent stack for ${state.conversationId}`);
@@ -557,7 +581,7 @@ async function stopRecordedStack(state: AgentStackState): Promise<string[]> {
     throw err;
   }
   await releaseStoppedStackAndSync(state);
-  return memoryLimitFailures;
+  return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {
