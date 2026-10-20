@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import {
   readReviewRuntime,
+  readReviewRuntimeLog,
   startReviewRuntime,
   stopReviewRuntime,
 } from "../services/review-runtime.js";
@@ -17,6 +18,13 @@ export function createReviewRuntimeRouter(): Router {
     "/:id/runtime",
     asyncRoute(async (req, res) => {
       res.json(readReviewRuntime(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/runtime/log",
+    asyncRoute(async (req, res) => {
+      res.json(readReviewRuntimeLog(req.params.id));
     }),
   );
 

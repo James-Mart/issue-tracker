@@ -1,4 +1,10 @@
-import { skipToken, useQuery, type Query, type UseQueryResult } from "@tanstack/react-query";
+import {
+  skipToken,
+  useQuery,
+  useQueryClient,
+  type Query,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/errors";
 import type {
   ReviewAgentRun,
@@ -7,6 +13,7 @@ import type {
   ReviewDiff,
   ReviewProgress,
   ReviewRecordView,
+  ReviewRuntimeLog,
   ReviewRuntimeStatus,
   ReviewView,
 } from "@server/schemas";
@@ -20,6 +27,7 @@ import {
   fetchReviewRecordCommits,
   fetchReviewRecordDiff,
   fetchReviewRuntime,
+  fetchReviewRuntimeLog,
   fetchReviews,
 } from "./client";
 import { reviewAgentRunsRefetchInterval } from "../lib/review-agent-runs";
@@ -184,6 +192,25 @@ export function useReviewRuntimeQuery(
       if (state === "booting") return RUNTIME_BOOT_POLL_MS;
       if (state === "running") return RUNTIME_POLL_MS;
       return false;
+    },
+  });
+}
+
+export function useReviewRuntimeLogQuery(
+  reviewId: string,
+  enabled: boolean,
+): UseQueryResult<ReviewRuntimeLog, Error> {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: reviewKeys.runtimeLog(reviewId),
+    queryFn: () => fetchReviewRuntimeLog(reviewId),
+    enabled: Boolean(reviewId) && enabled,
+    retry: retryReviewRead,
+    refetchInterval: () => {
+      const status = queryClient.getQueryData<ReviewRuntimeStatus>(
+        reviewKeys.runtime(reviewId),
+      );
+      return status?.state === "booting" ? RUNTIME_BOOT_POLL_MS : false;
     },
   });
 }

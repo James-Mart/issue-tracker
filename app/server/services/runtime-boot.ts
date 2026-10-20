@@ -204,6 +204,32 @@ function tailLog(path: string, maxLines = 20): string {
   }
 }
 
+export type RuntimeBootPhase = RuntimeBootPhaseReport["phase"];
+
+export function runtimeBootPhaseLogFilename(phase: RuntimeBootPhase): string {
+  if (phase === "build" || phase === "seed") return `${phase}.log`;
+  return "start.log";
+}
+
+/** Role log path for a boot phase (`start.log` covers start and readiness). */
+export function runtimeBootPhaseLogFile(logDir: string, phase: RuntimeBootPhase): string {
+  return join(logDir, runtimeBootPhaseLogFilename(phase));
+}
+
+/** Last lines of a phase log file, split for JSON APIs. */
+export function readRuntimeBootPhaseLogLines(
+  logDir: string,
+  phase: RuntimeBootPhase,
+  maxLines = 200,
+): string[] {
+  const text = tailLog(runtimeBootPhaseLogFile(logDir, phase), maxLines);
+  return text ? text.split("\n") : [];
+}
+
+export function runtimeBootPhaseLogBasename(phase: RuntimeBootPhase): string {
+  return runtimeBootPhaseLogFilename(phase);
+}
+
 function unrefReadable(stream: Readable): void {
   if ("unref" in stream && typeof stream.unref === "function") stream.unref();
 }
@@ -270,6 +296,37 @@ export function isOurRecordedProcess(proc: RuntimeProcess): boolean {
   );
 }
 
+/** Masked stdout/stderr appended to one role log file (`start.log`, `build.log`, …). */
+function openMaskedRoleLog(secrets: Record<string, string>, logPath: string) {
+  const logFd = openSync(logPath, "w");
+  const masker = createPhaseOutputMasker(secrets);
+  let closed = false;
+  const write = (text: string) => {
+    if (!closed && text.length > 0) writeSync(logFd, text);
+  };
+  return {
+    push(chunk: Buffer | string): string {
+      if (closed) return "";
+      const text = masker.push(chunk);
+      write(text);
+      return text;
+    },
+    flush(): string {
+      if (closed) return "";
+      const text = masker.flush();
+      write(text);
+      return text;
+    },
+    close(): void {
+      if (closed) return;
+      const tail = masker.flush();
+      closed = true;
+      if (tail.length > 0) writeSync(logFd, tail);
+      closeSync(logFd);
+    },
+  };
+}
+
 /**
  * Spawn a stack child in its own process group (`detached`), so it outlives the
  * caller and `stop` can signal the whole tree, including children the start
@@ -286,21 +343,11 @@ async function spawnChild(
   secrets: Record<string, string>,
   label: string,
 ): Promise<{ child: ChildProcess; record: RuntimeProcess }> {
-  const logFd = openSync(join(logDir, `${role}.log`), "w");
-  const masker = createPhaseOutputMasker(secrets);
-  let logClosed = false;
+  const roleLog = openMaskedRoleLog(secrets, join(logDir, `${role}.log`));
   const writeMasked = (chunk: Buffer | string) => {
-    if (logClosed) return;
-    const text = masker.push(chunk);
-    if (text.length > 0) writeSync(logFd, text);
+    roleLog.push(chunk);
   };
-  const closeLog = () => {
-    if (logClosed) return;
-    logClosed = true;
-    const text = masker.flush();
-    if (text.length > 0) writeSync(logFd, text);
-    closeSync(logFd);
-  };
+  const closeLog = () => roleLog.close();
   let child: ChildProcess;
   try {
     child = spawn(command, args, {
@@ -360,15 +407,24 @@ function spawnRuntimeShell(
   env: NodeJS.ProcessEnv,
   secrets: Record<string, string>,
   detached: boolean,
+  logFilePath?: string,
 ): { child: ChildProcess; result: Promise<ShellResult> } {
-  const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
-    cwd,
-    env,
-    detached,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const roleLog =
+    logFilePath === undefined ? undefined : openMaskedRoleLog(secrets, logFilePath);
+  const memoryMasker = roleLog === undefined ? createPhaseOutputMasker(secrets) : undefined;
+  let child: ChildProcess;
+  try {
+    child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
+      cwd,
+      env,
+      detached,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    roleLog?.close();
+    throw err;
+  }
   const result = new Promise<ShellResult>((resolvePromise, reject) => {
-    const masker = createPhaseOutputMasker(secrets);
     let output = "";
     let settled = false;
     const finish = (fn: () => void) => {
@@ -377,13 +433,28 @@ function spawnRuntimeShell(
       fn();
     };
     const append = (chunk: Buffer | string) => {
-      output = appendOutputTail(output, masker.push(chunk));
+      if (roleLog) {
+        roleLog.push(chunk);
+        return;
+      }
+      output = appendOutputTail(output, memoryMasker!.push(chunk));
+    };
+    const flushOutput = () => {
+      if (roleLog) {
+        roleLog.flush();
+        roleLog.close();
+        return;
+      }
+      output = appendOutputTail(output, memoryMasker!.flush());
     };
     child.stdout?.on("data", append);
     child.stderr?.on("data", append);
-    child.on("error", (err) => finish(() => reject(err)));
+    child.on("error", (err) => finish(() => {
+      flushOutput();
+      reject(err);
+    }));
     child.on("close", (code) => {
-      output = appendOutputTail(output, masker.flush());
+      flushOutput();
       finish(() => resolvePromise({ code: code ?? 1, output }));
     });
   });
@@ -414,6 +485,9 @@ interface BootControl {
   /** Process groups the boot must collect before it reports cancellation. */
   groups: Set<number>;
   onPhase?: (report: RuntimeBootPhaseReport) => void;
+  /** Elapsed time anchor for the current `reportedPhase` (stable across readiness probes). */
+  reportedPhase?: RuntimeBootPhaseReport["phase"];
+  reportedPhaseStartedAt?: string;
 }
 
 function reportPhase(
@@ -422,7 +496,15 @@ function reportPhase(
   process: ProcessIdentity,
 ): void {
   control.groups.add(process.pid);
-  control.onPhase?.({ phase, startedAt: new Date().toISOString(), process });
+  if (control.reportedPhase !== phase) {
+    control.reportedPhase = phase;
+    control.reportedPhaseStartedAt = new Date().toISOString();
+  }
+  control.onPhase?.({
+    phase,
+    startedAt: control.reportedPhaseStartedAt!,
+    process,
+  });
 }
 
 /**
@@ -431,6 +513,11 @@ function reportPhase(
  * for the boot to collect. `timeoutMs` kills the group and lets the shell
  * settle with its exit status.
  */
+function shellPhaseLogFile(logDir: string, phase: ShellPhase): string | undefined {
+  if (phase === "readiness") return undefined;
+  return runtimeBootPhaseLogFile(logDir, phase);
+}
+
 async function runPhaseShell(
   control: BootControl,
   phase: ShellPhase,
@@ -438,10 +525,18 @@ async function runPhaseShell(
   cwd: string,
   env: NodeJS.ProcessEnv,
   secrets: Record<string, string>,
+  logDir: string,
   timeoutMs?: number,
 ): Promise<ShellResult> {
   control.signal.throwIfAborted();
-  const { child, result } = spawnRuntimeShell(command, cwd, env, secrets, true);
+  const { child, result } = spawnRuntimeShell(
+    command,
+    cwd,
+    env,
+    secrets,
+    true,
+    shellPhaseLogFile(logDir, phase),
+  );
   const pid = child.pid;
   if (pid === undefined) return result;
   // The shell cannot be reaped before this synchronous read, so it is present
@@ -460,16 +555,19 @@ async function runPhaseShell(
 
 async function runPhaseOrThrow(
   control: BootControl,
-  phase: ShellPhase,
+  phase: "build" | "seed",
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
   secrets: Record<string, string>,
   label: string,
+  logDir: string,
 ): Promise<void> {
-  const { code, output } = await runPhaseShell(control, phase, command, cwd, env, secrets);
+  const { code } = await runPhaseShell(control, phase, command, cwd, env, secrets, logDir);
   if (code !== 0) {
-    throw new Error(`${label} ${phase} failed (exit ${code}):\n${tailRuntimeOutput(output)}`);
+    throw new Error(
+      `${label} ${phase} failed (exit ${code}):\n${tailLog(shellPhaseLogFile(logDir, phase)!)}`,
+    );
   }
 }
 
@@ -544,6 +642,7 @@ async function waitForReadiness(
       cwd,
       env,
       secrets,
+      logDir,
       remaining,
     );
     lastOutput = output;
@@ -601,6 +700,7 @@ export async function bootRuntime(
         phaseEnv(resources, undefined, secrets),
         secrets,
         label,
+        logDir,
       );
     }
     signal.throwIfAborted();
@@ -629,6 +729,7 @@ export async function bootRuntime(
         phaseEnv(resources, baseUrl, secrets),
         secrets,
         label,
+        logDir,
       );
     }
     if (runtime.readiness) {

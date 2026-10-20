@@ -177,6 +177,24 @@ describe("declared runtime boot", () => {
     await stopAgentStack("conv");
   });
 
+  it("writes build and seed stdout to role logs beside start.log", async () => {
+    const buildMarker = "build-log-marker";
+    const seedMarker = "seed-log-marker";
+    seedProject({
+      build: nodeScript(`console.log(${JSON.stringify(buildMarker)});`),
+      start: listenNow(),
+      seed: nodeScript(`console.log(${JSON.stringify(seedMarker)});`),
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    });
+    const { agentStackDir, startAgentStack, stopAgentStack } = await loadService();
+    await startAgentStack("conv", { issueId: "task-a" });
+    const dir = agentStackDir("conv");
+    expect(readFileSync(join(dir, "build.log"), "utf8")).toContain(buildMarker);
+    expect(readFileSync(join(dir, "seed.log"), "utf8")).toContain(seedMarker);
+    expect(existsSync(join(dir, "start.log"))).toBe(true);
+    await stopAgentStack("conv");
+  });
+
   it("cancels a boot during build and the blocked start throws boot cancelled", async () => {
     const pidFile = join(root, "build-child.pid");
     const gate = join(root, "build-gate");
