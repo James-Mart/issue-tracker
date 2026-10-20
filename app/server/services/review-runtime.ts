@@ -1,7 +1,9 @@
-import { existsSync, rmSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { reviewRuntimesDir } from "../config.js";
 import type { ReviewRuntimeLog, ReviewRuntimeStatus } from "../schemas/review.js";
 import type { Runtime } from "../schemas.js";
+import { isSlugSafe } from "../slug.js";
 import { loadPhaseSecrets } from "./agent-stack-secrets.js";
 import { IssueError } from "./errors.js";
 import {
@@ -12,27 +14,32 @@ import {
 import { readAll, readReviewOrThrow } from "./issues.js";
 import {
   clearLiveBootIfCurrent,
+  inFlightReviewRuntimeIds,
   peekLiveBoot,
   readReviewRuntimeRecord,
   rememberLiveBoot,
   reviewRuntimeDir,
   writeReviewRuntimeRecord,
   type LiveBoot,
+  type ReviewRuntimeRecord,
 } from "./review-runtime-occupancy.js";
 import {
   allocateRuntimeResources,
   bootRuntime,
   discardRuntimeDataDir,
   missingDeclaredRuntimeFields,
+  runtimeRecordOwnedByThisProcess,
   readRuntimeBootPhaseLogLines,
   RuntimeBootCancelled,
   runtimeBootPhaseLogBasename,
   runtimeProcessesLive,
   stopRuntimeProcesses,
+  terminateOrphanProcessGroup,
   type RuntimeBootPhaseReport,
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
+import { settledValues } from "./settled-values.js";
 
 export { reviewRuntimeBusy } from "./review-runtime-occupancy.js";
 
@@ -286,4 +293,61 @@ export function stopReviewRuntime(
   options?: { syncWorktree?: boolean },
 ): Promise<ReviewRuntimeStatus> {
   return withGate(reviewId, () => beginStop(reviewId, options?.syncWorktree !== false));
+}
+
+function stopBootingReviewRuntime(
+  reviewId: string,
+): Promise<ReviewRuntimeStatus | undefined> {
+  return withGate(reviewId, async () => {
+    if (!peekLiveBoot(reviewId)) return undefined;
+    const record = readReviewRuntimeRecord(reviewId);
+    // `running` is written before the live boot is cleared. Stop would tear
+    // that runtime down; shutdown leaves it up.
+    if (record && record.phase !== "booting") return undefined;
+    return beginStop(reviewId, true);
+  });
+}
+
+/**
+ * Startup. A review runtime still booting belongs to a server that is gone.
+ * A live phase group is matched by pid and start time, then collected from
+ * `/proc`. The record becomes failed and the runtime directory stays, so its
+ * phase log remains readable. A runtime this process still owns, and one that
+ * has reached running, stay up. Returns the review ids swept.
+ */
+export async function sweepOrphanedReviewRuntimeBoots(): Promise<string[]> {
+  if (!existsSync(reviewRuntimesDir)) return [];
+  const booting: ReviewRuntimeRecord[] = [];
+  for (const entry of readdirSync(reviewRuntimesDir)) {
+    if (!isSlugSafe(entry)) continue;
+    const dir = join(reviewRuntimesDir, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const record = readReviewRuntimeRecord(entry);
+    if (!record || record.phase !== "booting") continue;
+    if (runtimeRecordOwnedByThisProcess(record.processes, record.bootPhase)) continue;
+    booting.push(record);
+  }
+  await Promise.all(
+    booting.map(async (record) => {
+      if (record.bootPhase) {
+        await terminateOrphanProcessGroup(record.bootPhase.process);
+      }
+      writeReviewRuntimeRecord({
+        ...record,
+        phase: "failed",
+        processes: [],
+        error: "Interrupted by server restart",
+      });
+    }),
+  );
+  return booting.map((record) => record.reviewId);
+}
+
+/**
+ * API shutdown. Cancels review runtimes still booting, through the same path
+ * as Stop, and settles once each of those records and directories is gone.
+ * A runtime that has reached running stays up.
+ */
+export function stopInFlightReviewRuntimesOnShutdown(): Promise<ReviewRuntimeStatus[]> {
+  return settledValues(inFlightReviewRuntimeIds().map((id) => stopBootingReviewRuntime(id)));
 }

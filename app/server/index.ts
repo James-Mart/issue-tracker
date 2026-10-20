@@ -93,15 +93,25 @@ startPrSyncDriver();
 const { dropUnownedAgentStackRecords } = await import(
   "./services/agent-stack.js"
 );
+const { sweepOrphanedReviewRuntimeBoots } = await import(
+  "./services/review-runtime.js"
+);
 const { skipsGuestDuties } = await import("./services/store-read-only.js");
 // Read-only shares the live conversations directory. Guest must not drop
 // the parent stack's record either. Either flag skips the sweep.
 if (!skipsGuestDuties()) {
-  dropUnownedAgentStackRecords();
+  await sweepOrphanedReviewRuntimeBoots();
+  await dropUnownedAgentStackRecords();
 }
 
 const { stopSpawnedMockupStacksOnShutdown } = await import(
   "./services/mockup-stack.js"
+);
+const { stopInFlightReviewRuntimesOnShutdown } = await import(
+  "./services/review-runtime.js"
+);
+const { cancelInFlightAgentStackBootsOnShutdown } = await import(
+  "./services/agent-stack.js"
 );
 
 const { migrateOpenReviewWorktrees } = await import(
@@ -129,8 +139,19 @@ let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`received ${signal}; disposing agent sessions…`);
+  console.log(
+    `received ${signal}; cancelling in-flight boots and disposing agent sessions…`,
+  );
   let failed: unknown;
+  const bootStops = await Promise.allSettled([
+    stopInFlightReviewRuntimesOnShutdown(),
+    cancelInFlightAgentStackBootsOnShutdown(),
+  ]);
+  for (const result of bootStops) {
+    if (result.status !== "rejected") continue;
+    failed ??= result.reason;
+    console.error("shutdown failed", result.reason);
+  }
   try {
     await disposeSessionsAndReleasePrewarm(
       () => agentSessions.disposeAll(),
@@ -138,7 +159,7 @@ async function shutdown(signal: string): Promise<void> {
     );
     await stopSpawnedMockupStacksOnShutdown();
   } catch (err) {
-    failed = err;
+    failed ??= err;
     console.error("shutdown failed", err);
   }
   await new Promise<void>((resolve) => {

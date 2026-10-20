@@ -25,20 +25,22 @@ import {
   bootRuntime,
   discardRuntimeDataDir,
   expandRuntimeBaseUrl,
-  isOurRecordedProcess,
   missingDeclaredRuntimeFields,
   phaseEnv,
   RuntimeBootCancelled,
   runtimeBootPhaseReportSchema,
   runtimeProcessesLive,
+  runtimeRecordOwnedByThisProcess,
   runtimeVarEnv,
   runRuntimeShell,
   runtimeProcessSchema,
   stopRuntimeProcesses,
   tailRuntimeOutput,
+  terminateOrphanProcessGroup,
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
+import { settledValues } from "./settled-values.js";
 import { ancestorChain, nearestWorktreeIssue } from "./subtree.js";
 
 /**
@@ -312,6 +314,18 @@ interface LiveAgentStackBoot {
 
 const liveBoots = new Map<string, LiveAgentStackBoot>();
 
+/** Conversation ids whose boot has not settled. Snapshot; later starts are absent. */
+function inFlightAgentStackBootIds(): string[] {
+  return [...liveBoots.keys()];
+}
+
+async function settleLiveAgentStackBoot(conversationId: string): Promise<void> {
+  const live = liveBoots.get(conversationId);
+  if (!live) return;
+  live.controller.abort();
+  await live.settled;
+}
+
 async function bootDeclaredRuntime(
   conversationId: string,
   boot: ResolvedBoot,
@@ -493,23 +507,32 @@ function releaseAgentStackRecord(state: AgentStackState): void {
 }
 
 /**
- * Drop recorded stacks this process does not own. Does not signal them.
- * Returns the conversation ids removed.
+ * Drop recorded stacks this process does not own. An in-flight boot is
+ * signaled first: the group is matched by pid and start time, because this
+ * process is not its parent, and collected when it leaves `/proc`. A stack
+ * that has finished booting is released with no signal. Returns the
+ * conversation ids removed.
  */
-export function dropUnownedAgentStackRecords(): string[] {
+export async function dropUnownedAgentStackRecords(): Promise<string[]> {
   if (!existsSync(conversationsDir)) return [];
-  const dropped: string[] = [];
+  const unowned: AgentStackState[] = [];
   for (const entry of readdirSync(conversationsDir)) {
     if (!isSlugSafe(entry)) continue;
     const dir = join(conversationsDir, entry);
     if (!statSync(dir).isDirectory()) continue;
     const state = readAgentStackState(entry);
-    if (!state) continue;
-    if (state.processes.some(isOurRecordedProcess)) continue;
-    releaseAgentStackRecord(state);
-    dropped.push(entry);
+    if (!state || runtimeRecordOwnedByThisProcess(state.processes, state.bootPhase)) continue;
+    unowned.push(state);
   }
-  return dropped;
+  await Promise.all(
+    unowned.map(async (state) => {
+      if (state.bootPhase) {
+        await terminateOrphanProcessGroup(state.bootPhase.process);
+      }
+      releaseAgentStackRecord(state);
+    }),
+  );
+  return unowned.map((state) => state.conversationId);
 }
 
 /**
@@ -517,9 +540,25 @@ export function dropUnownedAgentStackRecords(): string[] {
  * finished booting stays up, so conversation teardown can cancel the turn
  * before stopping it.
  */
-export async function cancelBootingAgentStack(conversationId: string): Promise<void> {
-  if (!liveBoots.has(conversationId)) return;
-  await stopAgentStack(conversationId);
+export async function cancelBootingAgentStack(
+  conversationId: string,
+): Promise<AgentStackStopResult | undefined> {
+  if (!liveBoots.has(conversationId)) return undefined;
+  await settleLiveAgentStackBoot(conversationId);
+  // Success drops `bootPhase` before the live boot is cleared. A running
+  // stack stays up. A cancelled boot keeps the phase report for Stop.
+  const state = readAgentStackState(conversationId);
+  if (!state?.bootPhase) return undefined;
+  return stopRecordedStack(state);
+}
+
+/**
+ * API shutdown. Cancels agent-stack boots still in flight, through the same
+ * path as Stop, and settles once each of those records and data directories
+ * is gone. A stack that has finished booting stays up.
+ */
+export function cancelInFlightAgentStackBootsOnShutdown(): Promise<AgentStackStopResult[]> {
+  return settledValues(inFlightAgentStackBootIds().map((id) => cancelBootingAgentStack(id)));
 }
 
 /**
@@ -537,18 +576,13 @@ export async function stopAgentStack(
   conversationId: string,
 ): Promise<AgentStackStopResult> {
   ensureChildReaper();
-  const live = liveBoots.get(conversationId);
-  if (live) {
-    live.controller.abort();
-    await live.settled;
-  }
+  await settleLiveAgentStackBoot(conversationId);
   const state = readAgentStackState(conversationId);
   if (!state) return { stopped: false, state: null, memoryLimitFailures: [] };
-  const memoryLimitFailures = await stopRecordedStack(state);
-  return { stopped: true, state, memoryLimitFailures };
+  return stopRecordedStack(state);
 }
 
-async function stopRecordedStack(state: AgentStackState): Promise<string[]> {
+async function stopRecordedStack(state: AgentStackState): Promise<AgentStackStopResult> {
   const memoryLimitFailures = collectAgentStackMemoryLimitFailures(state.dataDir);
   try {
     await stopRuntimeProcesses(state.processes, `agent stack for ${state.conversationId}`);
@@ -557,7 +591,7 @@ async function stopRecordedStack(state: AgentStackState): Promise<string[]> {
     throw err;
   }
   await releaseStoppedStackAndSync(state);
-  return memoryLimitFailures;
+  return { stopped: true, state, memoryLimitFailures };
 }
 
 function releaseStoppedStack(state: AgentStackState): void {

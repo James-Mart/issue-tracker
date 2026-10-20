@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import {
   existsSync,
@@ -12,6 +12,14 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  holdOpen,
+  killStrayGroups,
+  procStartTime,
+  trackDetachedGroup,
+  waitForPidFile,
+  waitForPids,
+} from "./boot-process.test-helpers.js";
 import type { ReviewRuntimeStatus } from "../schemas/review.js";
 
 const STAMP = "2026-01-01T00:00:00.000Z";
@@ -21,6 +29,7 @@ let issuesDir: string;
 let worktree: string;
 let server: Server;
 let baseUrl: string;
+const strays: ChildProcess[] = [];
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
   mkdirSync(join(issuesDir, id), { recursive: true });
@@ -97,25 +106,27 @@ function checkoutHead(dir: string): string {
   return git("rev-parse", "HEAD").trim();
 }
 
-function seedReview(runtime: Record<string, string>): void {
+function seedReview(runtime: Record<string, string>, ids = ["rev"]): void {
   const headSha = checkoutHead(worktree);
   writeIssue("proj", { kind: "project", workspace: worktree, runtime });
-  writeIssue("rev", {
-    kind: "review",
-    partOf: "proj",
-    archived: false,
-    marks: { all: {}, commits: {} },
-    submissions: [],
-    pr: {
-      url: "https://github.com/example/repo/pull/1",
-      number: 1,
-      baseRef: "main",
-      headRef: "feature",
+  for (const id of ids) {
+    writeIssue(id, {
+      kind: "review",
+      partOf: "proj",
+      archived: false,
+      marks: { all: {}, commits: {} },
+      submissions: [],
+      pr: {
+        url: "https://github.com/example/repo/pull/1",
+        number: 1,
+        baseRef: "main",
+        headRef: "feature",
         headSha,
-      fork: false,
-    },
-    worktreePath: worktree,
-  });
+        fork: false,
+      },
+      worktreePath: worktree,
+    });
+  }
 }
 
 async function runtime(method: string, id = "rev"): Promise<Response> {
@@ -163,10 +174,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  killStrayGroups(strays);
+  strays.length = 0;
   const { stopReviewRuntime } = await import("./review-runtime.js").catch(() => ({
     stopReviewRuntime: undefined,
   }));
-  if (stopReviewRuntime) await stopReviewRuntime("rev").catch(() => undefined);
+  if (stopReviewRuntime) {
+    await stopReviewRuntime("rev").catch(() => undefined);
+    await stopReviewRuntime("rev-b").catch(() => undefined);
+  }
   if (server?.listening) {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
@@ -222,19 +238,14 @@ describe("review runtime", () => {
     const buildChild = join(root, "build-child.pid");
     const gate = join(root, "build-may-finish");
     seedReview({
-      build: `sleep 30 & echo $! > ${buildChild}; echo build >> ${marker}; while [ ! -e ${gate} ]; do sleep 0.05; done; kill $!`,
+      build: holdOpen(buildChild, gate, { phaseMarker: marker }),
       start: listenScript(marker),
       baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
     });
     await boot();
 
     expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
-    const deadline = Date.now() + 8_000;
-    while (!existsSync(buildChild) || readFileSync(buildChild, "utf8").trim() === "") {
-      if (Date.now() > deadline) throw new Error("build never started");
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    const sleepPid = Number(readFileSync(buildChild, "utf8").trim());
+    const [sleepPid] = await waitForPids(buildChild, 1);
     const record = JSON.parse(
       readFileSync(join(dirname(issuesDir), "review-runtimes", "rev", "state.json"), "utf8"),
     ) as { bootPhase?: { phase: string } };
@@ -286,6 +297,101 @@ describe("review runtime", () => {
       phase: "build",
       log: "build.log",
       lines: expect.any(Array),
+    });
+  });
+
+  it("cancels every in-flight review runtime boot on shutdown", async () => {
+    const marker = join(root, "phases");
+    const buildChild = join(root, "build-child.pid");
+    const gate = join(root, "build-may-finish");
+    seedReview(
+      {
+        build: holdOpen(buildChild, gate, { append: true, phaseMarker: marker }),
+        start: listenScript(marker),
+        baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+      },
+      ["rev", "rev-b"],
+    );
+    await boot();
+
+    expect(await (await runtime("POST", "rev")).json()).toEqual({ state: "booting" });
+    expect(await (await runtime("POST", "rev-b")).json()).toEqual({ state: "booting" });
+    const pids = await waitForPids(buildChild, 2);
+
+    const { stopInFlightReviewRuntimesOnShutdown } = await import("./review-runtime.js");
+    try {
+      const stopped = await stopInFlightReviewRuntimesOnShutdown();
+      expect(stopped).toEqual([{ state: "stopped" }, { state: "stopped" }]);
+      for (const pid of pids) expect(existsSync(`/proc/${pid}`)).toBe(false);
+      for (const id of ["rev", "rev-b"]) {
+        expect(existsSync(join(dirname(issuesDir), "review-runtimes", id))).toBe(false);
+        expect(await (await runtime("GET", id)).json()).toEqual({ state: "stopped" });
+      }
+    } finally {
+      writeFileSync(gate, "");
+    }
+  });
+});
+
+describe("sweepOrphanedReviewRuntimeBoots", () => {
+  async function loadSweep() {
+    vi.resetModules();
+    vi.stubEnv("ISSUES_DIR", issuesDir);
+    vi.stubEnv("ISSUE_TRACKER_GUEST", "");
+    return import("./review-runtime.js");
+  }
+
+  it("fails an orphaned boot, collects its group, and keeps the phase log", async () => {
+    seedReview({
+      start: "sleep 30",
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    });
+    const childPidFile = join(root, "child.pid");
+    const leaderPid = trackDetachedGroup(strays, childPidFile).pid!;
+    const childPid = await waitForPidFile(childPidFile);
+    const {
+      readReviewRuntime,
+      readReviewRuntimeLog,
+      sweepOrphanedReviewRuntimeBoots,
+    } = await loadSweep();
+    const { reviewRuntimeDir, writeReviewRuntimeRecord } = await import(
+      "./review-runtime-occupancy.js"
+    );
+    const dir = reviewRuntimeDir("rev");
+    const dataDir = join(dir, "data");
+    writeReviewRuntimeRecord({
+      reviewId: "rev",
+      worktree,
+      phase: "booting",
+      startedAt: STAMP,
+      processes: [],
+      dataDir,
+      bootPhase: {
+        phase: "build",
+        startedAt: STAMP,
+        process: { pid: childPid, startTime: procStartTime(childPid) },
+      },
+    });
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(dataDir, "marker"), "keep\n");
+    writeFileSync(join(dir, "build.log"), "compile step\n");
+
+    const swept = await sweepOrphanedReviewRuntimeBoots();
+
+    expect(swept).toEqual(["rev"]);
+    expect(existsSync(`/proc/${childPid}`)).toBe(false);
+    expect(existsSync(`/proc/${leaderPid}`)).toBe(false);
+    expect(existsSync(dir)).toBe(true);
+    expect(readFileSync(join(dataDir, "marker"), "utf8")).toBe("keep\n");
+    expect(readReviewRuntime("rev")).toEqual({
+      state: "failed",
+      error: "Interrupted by server restart",
+      failedPhase: "build",
+    });
+    expect(readReviewRuntimeLog("rev")).toEqual({
+      phase: "build",
+      log: "build.log",
+      lines: ["compile step"],
     });
   });
 });
