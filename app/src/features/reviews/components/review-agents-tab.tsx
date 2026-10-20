@@ -123,7 +123,7 @@ function ReviewAgentRunCard({
   return (
     <div
       ref={cardRef}
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-card"
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shell:shrink-0"
       data-testid="review-agent-run-card"
       data-conversation-id={run.conversationId}
       data-status={run.status}

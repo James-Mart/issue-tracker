@@ -138,4 +138,29 @@ describe("ReviewAgentsTab", () => {
     expect(finished?.getAttribute("data-expanded")).toBe("");
     expect(finished?.querySelector('[data-slot="agent-run-body"]')).toBe(body);
   });
+
+  it("applies shell shrink on run cards so the wide list can scroll", () => {
+    state.runs = [
+      run({
+        conversationId: "conv-a",
+        role: "issue-tracker-review-tasker",
+        status: "completed",
+        endedAt: "2026-10-14T16:42:00.000Z",
+      }),
+      run({
+        conversationId: "conv-b",
+        role: "issue-tracker-review-tasker",
+        status: "completed",
+        endedAt: "2026-10-14T16:43:00.000Z",
+      }),
+    ];
+    mount();
+
+    const cards = container.querySelectorAll("[data-testid='review-agent-run-card']");
+    expect(cards.length).toBe(2);
+    for (const card of cards) {
+      expect(card.className).toContain("shell:shrink-0");
+      expect(card.className).not.toMatch(/(?:^|\s)shrink-0(?:\s|$)/);
+    }
+  });
 });
