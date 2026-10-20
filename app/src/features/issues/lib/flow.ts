@@ -243,7 +243,18 @@ export function flowItemNeedsAttention(item: FlowItem): boolean {
       status === "planned"
     );
   }
-  return hasAttention(item.issue) && item.issue.needsAttention;
+  return storedAttentionIssue(item) !== undefined;
+}
+
+/** Why a stored attention flag is up; null for derived Idea attention. */
+export function flowItemAttentionReason(item: FlowItem): string | null {
+  return storedAttentionIssue(item)?.attentionReason ?? null;
+}
+
+function storedAttentionIssue(item: FlowItem) {
+  return hasAttention(item.issue) && item.issue.needsAttention
+    ? item.issue
+    : undefined;
 }
 
 /**

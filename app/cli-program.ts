@@ -40,7 +40,11 @@ import { formatSummary, summarize } from "./server/services/summary.js";
 import { hasAttention } from "./server/kind.js";
 import { registerKindAdd } from "./cli-create.js";
 import { bindCliStdin, readCliFileArg } from "./cli-io.js";
-import { humanDone, requestHuman } from "./server/services/human-handoff.js";
+import {
+  humanDone,
+  reportRuntimeFailure,
+  requestHuman,
+} from "./server/services/human-handoff.js";
 import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
 import { registerReviewStandardsCommands } from "./cli-review-standards.js";
@@ -405,6 +409,22 @@ function createIssueProgram(run: Run): Command {
           run(async () => {
             const body = readCliFileArg(opts.file);
             return requestHuman(storyId, body);
+          }),
+        );
+      kindCmd
+        .command("report-runtime-failure")
+        .argument("<storyId>", "story id")
+        .requiredOption(
+          "--file <path>",
+          "observation body (path, or - for stdin): what the runtime check exercised, what the Story required, and what happened",
+        )
+        .description(
+          "post a story-review runtime-failure comment, raise needsAttention (Runtime check failed), and unset review",
+        )
+        .action((storyId: string, opts: { file: string }) =>
+          run(async () => {
+            const observation = readCliFileArg(opts.file);
+            return reportRuntimeFailure(storyId, observation);
           }),
         );
       kindCmd

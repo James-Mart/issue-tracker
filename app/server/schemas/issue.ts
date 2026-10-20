@@ -35,7 +35,11 @@ export {
 export const TASK_STATUSES = ["todo", "in-progress", "done"] as const;
 export const RETRO_STATUSES = ["in-progress", "done"] as const;
 export const REVIEW_STATUSES = ["passed", "failed", "awaiting-human"] as const;
-export const COMMENT_TYPES = ["human-request", "human-response"] as const;
+export const COMMENT_TYPES = [
+  "human-request",
+  "human-response",
+  "runtime-failure",
+] as const;
 
 const nonEmpty = z.string().min(1);
 

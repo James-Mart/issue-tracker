@@ -11,6 +11,7 @@ import { projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
 import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
+  flowItemAttentionReason,
   flowItemNeedsAttention,
   flowRowIsLive,
   isCapturedIdeaFlowItem,
@@ -139,6 +140,7 @@ export function FlowRow({
   const drillInTo = flowRowDrillInTo(item, indexes, to);
   const chips = flowRowStatusChips(item, indexes);
   const attention = flowRowShowsAttentionTriangle(item);
+  const attentionReason = attention ? flowItemAttentionReason(item) : null;
   const blocked = Boolean(item.state?.blocked);
   const gates =
     isCapturedIdeaFlowItem(item) && item.issue.stakeholder ? (
@@ -157,10 +159,21 @@ export function FlowRow({
       <span className="cockpit-row-meta inline-flex items-center gap-1.5">
         {chips}
         {attention ? (
-          <AlertTriangle
-            aria-label="needs attention"
-            className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--warning))]"
-          />
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <AlertTriangle
+              aria-label="needs attention"
+              className="h-3.5 w-3.5 shrink-0 [color:hsl(var(--warning))]"
+            />
+            {attentionReason ? (
+              <span
+                data-testid="cockpit-row-attention-reason"
+                className="max-w-[12rem] truncate text-[11px] text-muted-foreground"
+                title={attentionReason}
+              >
+                {attentionReason}
+              </span>
+            ) : null}
+          </span>
         ) : null}
         {blocked ? (
           <AlertCircle

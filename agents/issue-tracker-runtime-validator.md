@@ -90,9 +90,9 @@ Complete **## Bootstrap** first.
 A finding is a check whose observed behavior differs from the outcome the
 Story states, a failed UI look, or a completed UI look showing a
 visible product problem. Collect only findings; anything not listed is
-accepted. Each finding's `spec` **is** the implementor's spec for that
-fix: the check, the steps to reproduce against the stack, expected versus
-observed behavior, and the attached evidence basenames.
+accepted. Each finding is an observation: what you exercised against the
+stack, what the Story required, and what happened, citing the attached
+evidence basenames. It names no change to make.
 
 ## Human handoff
 
@@ -135,14 +135,13 @@ End your reply with one fenced `json` block holding an object:
 
 - `outcome` — `"findings"` when there are findings. Otherwise
   `"needs-human"` when a check still needs a human. Otherwise `"clean"`.
-- `findings` — present when `outcome` is `"findings"`: an array of
-  `{ "title": string, "spec": string }`, one per distinct fix, each the
-  title and Markdown description of one remediation Task.
+- `observation` — present when `outcome` is `"findings"`: a Markdown
+  bullet list with one item per finding, each the observation above.
 - `request` — present when `outcome` is `"needs-human"`: the Markdown
   request body per ## Human handoff.
 
 ```json
-{ "outcome": "findings", "findings": [{ "title": "…", "spec": "…" }] }
+{ "outcome": "findings", "observation": "- Exercised: …; required: …; happened: … (`evidence.txt`)" }
 ```
 
 ```json

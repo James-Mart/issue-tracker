@@ -88,3 +88,31 @@ describe("requestHuman", () => {
     expect(stored[0]?.replyTo).toBeUndefined();
   });
 });
+
+describe("reportRuntimeFailure", () => {
+  const OBSERVATION = [
+    "- Exercised: `issue story view s` on the booted stack",
+    "- Required: the view prints the review chip",
+    "- Happened: no chip; evidence `view.txt`",
+  ].join("\n");
+
+  it("posts the observation, raises attention, and unsets review", async () => {
+    story({ review: "failed", reviewedTasks: ["t1"] });
+    const { reportRuntimeFailure, RUNTIME_CHECK_FAILED } = await load();
+    const message = await reportRuntimeFailure("s", `${OBSERVATION}\n`);
+
+    expect(message).toMatchObject({
+      role: "story-review",
+      type: "runtime-failure",
+      body: OBSERVATION,
+    });
+    expect(readCommentLines("s")).toEqual([
+      expect.objectContaining({ id: message.id, type: "runtime-failure" }),
+    ]);
+    const stored = readStored("s");
+    expect(stored.needsAttention).toBe(true);
+    expect(stored.attentionReason).toBe(RUNTIME_CHECK_FAILED);
+    expect(stored.review).toBeUndefined();
+    expect(stored.reviewedTasks).toEqual(["t1"]);
+  });
+});

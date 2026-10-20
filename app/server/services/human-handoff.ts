@@ -4,14 +4,15 @@ import { appendComment, read, readComments, update } from "./issues.js";
 
 export const ALREADY_AWAITING_HUMAN = "review is already awaiting-human";
 export const NOT_AWAITING_HUMAN = "review is not awaiting-human";
+export const RUNTIME_CHECK_FAILED = "Runtime check failed";
 
 const SECRET_KEY = /^[A-Z_][A-Z0-9_]*$/;
 const BULLET = /^[-*+] (.*)$/;
 const SECRET_ITEM = /^Secret `([^`]*)`:(.*)$/;
 const LABELED_ITEM = /^(Input|Observation):(.*)$/;
 
-/** Normalize a request file to the text stored as the comment body. */
-export function normalizeRequestBody(body: string): string {
+/** Normalize a request or observation file to the text stored as the comment body. */
+export function normalizeCommentFileBody(body: string): string {
   const text = body.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   return text.endsWith("\n") ? text.slice(0, -1) : text;
 }
@@ -22,7 +23,7 @@ export function normalizeRequestBody(body: string): string {
  * Returns an error naming the first bad item, or undefined when the body follows the format.
  */
 export function requestFormatError(body: string): string | undefined {
-  const lines = normalizeRequestBody(body).split("\n");
+  const lines = normalizeCommentFileBody(body).split("\n");
   let sawItem = false;
   for (const line of lines) {
     if (line.trim() === "") continue;
@@ -79,9 +80,31 @@ export async function requestHuman(storyId: string, body: string): Promise<Comme
   const message = await appendComment(storyId, {
     role: "story-review",
     type: "human-request",
-    body: normalizeRequestBody(body),
+    body: normalizeCommentFileBody(body),
   });
   await update(storyId, { review: "awaiting-human" });
+  return message;
+}
+
+/**
+ * Stop for the human on a runtime failure. `review` is unset so that clearing
+ * attention runs Story review again.
+ */
+export async function reportRuntimeFailure(
+  storyId: string,
+  observation: string,
+): Promise<Comment> {
+  assertStory(storyId);
+  const message = await appendComment(storyId, {
+    role: "story-review",
+    type: "runtime-failure",
+    body: normalizeCommentFileBody(observation),
+  });
+  await update(storyId, {
+    needsAttention: true,
+    attentionReason: RUNTIME_CHECK_FAILED,
+    review: null,
+  });
   return message;
 }
 

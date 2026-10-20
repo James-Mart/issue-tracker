@@ -3,9 +3,10 @@ name: issue-tracker-story-review
 model: composer-2.5
 description: >-
   Per-story review of the delivered change, including a runtime check by the
-  runtime validator; owns Story review and reviewedTasks, pauses for a human
-  when the runtime validator needs one, and appends the update-from-merge-base
-  Task when the branch is behind. Used by issue-tracker-work.
+  runtime validator; owns Story review and reviewedTasks, stops for a human
+  when the runtime check fails or needs one, and appends the
+  update-from-merge-base Task when the branch is behind. Used by
+  issue-tracker-work.
 readonly: false
 ---
 
@@ -31,7 +32,8 @@ Load all issue specs (Story and Task) via `issue story view` / `issue task view`
 
 **Allowed writes:** `issue story set` (for `review`, `reviewedTasks`, and
 `needsAttention`), `issue story update-from-merge-base`,
-`issue story request-human`, `issue story append`, `issue story comment`. Do not
+`issue story request-human`, `issue story report-runtime-failure`,
+`issue story append`, `issue story comment`. Do not
 run any other mutating `issue` command.
 
 ## Bootstrap
@@ -142,16 +144,28 @@ when they say to.
    stub and wait for its reply. Read the fenced `json` block that ends the
    reply and branch on its `outcome`:
    - `clean` — take ### If clean.
-   - `findings` — take ### If gaps with each entry of `findings` as one
-     remediation Task: its `title` is the Task title and its `spec` is the
-     Task description.
+   - `findings` — take ### If the runtime check failed.
    - `needs-human` — take ### If a human is needed.
 
    Escalate per ## Escalation and stop when the delegation ends in a
    failure you do not retry under the Delegation include, or the reply
    ends without a `json` block whose `outcome` is `clean`, `findings`, or
    `needs-human`.
-5. Take **exactly one** of the three paths below, as step 4 directs.
+5. Take **exactly one** of the four paths below, as step 4 directs.
+
+### If the runtime check failed
+
+Pipe the reply's `observation` string, unchanged, to the CLI:
+
+```bash
+issue story report-runtime-failure <storyId> --file - <<'EOF'
+<observation>
+EOF
+```
+
+It posts the observation, raises `needsAttention`, and unsets `review`.
+Leave `reviewedTasks` unchanged and append no Task. When the command
+refuses, escalate per ## Escalation with its error. Then stop.
 
 ### If a human is needed
 
