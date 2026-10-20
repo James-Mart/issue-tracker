@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { ReviewAgentRun } from "@server/schemas";
 import { ShellInlineFault, ShellLoadingState, ShellState } from "@/app/shell-state";
@@ -11,6 +11,7 @@ import type { CommentThread } from "@/features/issues/lib/comment-threads";
 import { toolStatusVariant } from "@/features/agents/components/transcript-ui";
 import { cn } from "@/lib/utils/cn";
 import { useReviewAgentRunsQuery } from "../api/queries";
+import { useReviewAgentsListScroll } from "../hooks/use-review-agents-list-scroll";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { useReviewRunSearch } from "../hooks/use-review-run-search";
 import { useWideReviewWorkbench } from "../hooks/use-wide-review-workbench";
@@ -175,17 +176,18 @@ export function ReviewAgentsTab({
 }) {
   const { data, isLoading, error } = useReviewAgentRunsQuery(projectId, reviewId);
   const { threads } = useReviewCommentThreads(reviewId);
-  const wide = useWideReviewWorkbench() === true;
+  const measuredWide = useWideReviewWorkbench();
+  const wide = measuredWide === true;
   const { runId: focusedRunId, openRun, closeRun } = useReviewRunSearch();
   const [latch, setLatch] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const dismissedRunId = useRef<string | null>(null);
-  const scrolledRunId = useRef<string | null>(null);
-  const focusedCard = useRef<HTMLDivElement | null>(null);
-  const setFocusedCard = useCallback((node: HTMLDivElement | null) => {
-    focusedCard.current = node;
-  }, []);
   const listed = data?.runs;
   const runs = listed ?? [];
+  const { listRef, contentRef, focusedCardRef, stayWithToggledCard } = useReviewAgentsListScroll(
+    measuredWide,
+    focusedRunId,
+    !error && runs.length > 0 ? runs : null,
+  );
 
   useEffect(() => {
     setLatch((current) =>
@@ -198,15 +200,6 @@ export function ReviewAgentsTab({
       ),
     );
   }, [listed, wide, focusedRunId]);
-
-  useEffect(() => {
-    if (!wide || !focusedRunId) return;
-    if (scrolledRunId.current === focusedRunId) return;
-    const card = focusedCard.current;
-    if (!card) return;
-    scrolledRunId.current = focusedRunId;
-    card.scrollIntoView({ block: "nearest" });
-  }, [wide, focusedRunId, listed]);
 
   function expandedFor(run: ReviewAgentRun): boolean {
     const stored = latch.get(run.conversationId);
@@ -228,6 +221,7 @@ export function ReviewAgentsTab({
     );
     const latched = next.latched;
     if (latched === undefined) return;
+    stayWithToggledCard();
     if (!next.expanded && run.conversationId === focusedRunId) {
       dismissedRunId.current = focusedRunId;
       closeRun();
@@ -277,22 +271,25 @@ export function ReviewAgentsTab({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-2"
+      ref={listRef}
+      className="min-h-0 flex-1 overflow-y-auto py-2"
       data-testid="review-agents-tab"
       data-slot="agent-runs-panel"
     >
-      {runs.map((run) => (
-        <ReviewAgentRunCard
-          key={run.conversationId}
-          run={run}
-          wide={wide}
-          expanded={expandedFor(run)}
-          cardRef={run.conversationId === focusedRunId ? setFocusedCard : undefined}
-          onToggle={() => toggle(run)}
-          onOpenRun={() => openRun(run.conversationId)}
-          onOpenName={(name) => openName(run, name)}
-        />
-      ))}
+      <div ref={contentRef} className="flex flex-col gap-2">
+        {runs.map((run) => (
+          <ReviewAgentRunCard
+            key={run.conversationId}
+            run={run}
+            wide={wide}
+            expanded={expandedFor(run)}
+            cardRef={run.conversationId === focusedRunId ? focusedCardRef : undefined}
+            onToggle={() => toggle(run)}
+            onOpenRun={() => openRun(run.conversationId)}
+            onOpenName={(name) => openName(run, name)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
