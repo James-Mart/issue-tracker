@@ -106,11 +106,23 @@ export type ReviewCandidates = {
   stories: ReviewCandidate[];
 };
 
+export type RuntimeBootPhase = "build" | "start" | "seed" | "readiness";
+
 /** `GET/POST/DELETE /api/reviews/:id/runtime`. */
 export type ReviewRuntimeStatus = {
   state: "stopped" | "booting" | "running" | "failed";
   baseUrl?: string;
   error?: string;
+  phase?: RuntimeBootPhase;
+  phaseStartedAt?: string;
+  failedPhase?: RuntimeBootPhase;
+};
+
+/** `GET /api/reviews/:id/runtime/log`. */
+export type ReviewRuntimeLog = {
+  phase: RuntimeBootPhase;
+  log: string;
+  lines: string[];
 };
 
 export const openReviewBodySchema = z.union([

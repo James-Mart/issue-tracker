@@ -204,6 +204,32 @@ function tailLog(path: string, maxLines = 20): string {
   }
 }
 
+export type RuntimeBootPhase = RuntimeBootPhaseReport["phase"];
+
+export function runtimeBootPhaseLogFilename(phase: RuntimeBootPhase): string {
+  if (phase === "build" || phase === "seed") return `${phase}.log`;
+  return "start.log";
+}
+
+/** Role log path for a boot phase (`start.log` covers start and readiness). */
+export function runtimeBootPhaseLogFile(logDir: string, phase: RuntimeBootPhase): string {
+  return join(logDir, runtimeBootPhaseLogFilename(phase));
+}
+
+/** Last lines of a phase log file, split for JSON APIs. */
+export function readRuntimeBootPhaseLogLines(
+  logDir: string,
+  phase: RuntimeBootPhase,
+  maxLines = 200,
+): string[] {
+  const text = tailLog(runtimeBootPhaseLogFile(logDir, phase), maxLines);
+  return text ? text.split("\n") : [];
+}
+
+export function runtimeBootPhaseLogBasename(phase: RuntimeBootPhase): string {
+  return runtimeBootPhaseLogFilename(phase);
+}
+
 function unrefReadable(stream: Readable): void {
   if ("unref" in stream && typeof stream.unref === "function") stream.unref();
 }
@@ -477,8 +503,8 @@ function reportPhase(
  * settle with its exit status.
  */
 function shellPhaseLogFile(logDir: string, phase: ShellPhase): string | undefined {
-  if (phase === "build" || phase === "seed") return join(logDir, `${phase}.log`);
-  return undefined;
+  if (phase === "readiness") return undefined;
+  return runtimeBootPhaseLogFile(logDir, phase);
 }
 
 async function runPhaseShell(

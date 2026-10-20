@@ -122,6 +122,10 @@ async function runtime(method: string, id = "rev"): Promise<Response> {
   return fetch(`${baseUrl}/api/reviews/${id}/runtime`, { method });
 }
 
+async function runtimeLog(id = "rev"): Promise<Response> {
+  return fetch(`${baseUrl}/api/reviews/${id}/runtime/log`);
+}
+
 async function until(
   state: ReviewRuntimeStatus["state"],
 ): Promise<ReviewRuntimeStatus> {
@@ -236,6 +240,19 @@ describe("review runtime", () => {
     ) as { bootPhase?: { phase: string } };
     expect(record.bootPhase?.phase).toBe("build");
 
+    expect(await (await runtime("GET")).json()).toMatchObject({
+      state: "booting",
+      phase: "build",
+      phaseStartedAt: expect.any(String),
+    });
+    const logRes = await runtimeLog();
+    expect(logRes.status).toBe(200);
+    expect(await logRes.json()).toMatchObject({
+      phase: "build",
+      log: "build.log",
+      lines: expect.any(Array),
+    });
+
     const stopped = await runtime("DELETE");
     expect(await stopped.json()).toEqual({ state: "stopped" });
     expect(existsSync(`/proc/${sleepPid}`)).toBe(false);
@@ -246,5 +263,29 @@ describe("review runtime", () => {
     expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
     expect((await until("running")).state).toBe("running");
     expect(readFileSync(marker, "utf8").trim().split("\n")).toEqual(["build", "build", "start"]);
+  });
+
+  it("reports failed phase and serves its log after a build failure", async () => {
+    const marker = join(root, "phases");
+    seedReview({
+      build: markerScript(marker, "build", 1),
+      start: listenScript(marker),
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    });
+    await boot();
+
+    expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
+    const failed = await until("failed");
+    expect(failed).toMatchObject({
+      state: "failed",
+      failedPhase: "build",
+      error: expect.stringContaining("build failed"),
+    });
+    const logRes = await runtimeLog();
+    expect(await logRes.json()).toMatchObject({
+      phase: "build",
+      log: "build.log",
+      lines: expect.any(Array),
+    });
   });
 });

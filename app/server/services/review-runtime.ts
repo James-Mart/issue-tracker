@@ -1,6 +1,6 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ReviewRuntimeStatus } from "../schemas/review.js";
+import type { ReviewRuntimeLog, ReviewRuntimeStatus } from "../schemas/review.js";
 import type { Runtime } from "../schemas.js";
 import { loadPhaseSecrets } from "./agent-stack-secrets.js";
 import { IssueError } from "./errors.js";
@@ -24,9 +24,12 @@ import {
   bootRuntime,
   discardRuntimeDataDir,
   missingDeclaredRuntimeFields,
+  readRuntimeBootPhaseLogLines,
   RuntimeBootCancelled,
+  runtimeBootPhaseLogBasename,
   runtimeProcessesLive,
   stopRuntimeProcesses,
+  type RuntimeBootPhaseReport,
   type RuntimeProcess,
   type RuntimeResources,
 } from "./runtime-boot.js";
@@ -72,14 +75,24 @@ function observe(reviewId: string): ReviewRuntimeStatus {
   const record = readReviewRuntimeRecord(reviewId);
   if (!record) return { state: "stopped" };
   if (record.phase === "failed") {
-    return { state: "failed", error: record.error ?? "Runtime failed to start." };
+    return {
+      state: "failed",
+      error: record.error ?? "Runtime failed to start.",
+      failedPhase: record.bootPhase?.phase,
+    };
   }
   const inflight = peekLiveBoot(reviewId) !== undefined;
   const live = runtimeProcessesLive(record.processes);
   if (record.phase === "running" && live && record.baseUrl) {
     return { state: "running", baseUrl: record.baseUrl };
   }
-  if (record.phase === "booting" && (inflight || live)) return { state: "booting" };
+  if (record.phase === "booting" && (inflight || live)) {
+    return {
+      state: "booting",
+      phase: record.bootPhase?.phase,
+      phaseStartedAt: record.bootPhase?.startedAt,
+    };
+  }
   if (record.phase === "running") return { state: "failed", error: "Runtime exited." };
   return {
     state: "failed",
@@ -134,6 +147,7 @@ async function discardRuntime(reviewId: string): Promise<string | undefined> {
 async function runBoot(reviewId: string, spec: BootSpec, signal: AbortSignal): Promise<void> {
   let resources: RuntimeResources | undefined;
   let started: RuntimeProcess | undefined;
+  let lastBootPhase: RuntimeBootPhaseReport | undefined;
   try {
     resources = await allocateRuntimeResources(reviewRuntimeDir(reviewId));
     const { port, auxPort, dataDir } = resources;
@@ -155,6 +169,7 @@ async function runBoot(reviewId: string, spec: BootSpec, signal: AbortSignal): P
       label: "runtime",
       signal,
       onPhase: (bootPhase) => {
+        lastBootPhase = bootPhase;
         if (bootPhase.phase === "start") started = { role: "start", ...bootPhase.process };
         writeReviewRuntimeRecord({
           ...recordBase,
@@ -187,6 +202,7 @@ async function runBoot(reviewId: string, spec: BootSpec, signal: AbortSignal): P
       startedAt: spec.startedAt,
       processes: [],
       error: failureLine(err),
+      bootPhase: lastBootPhase,
     });
   }
 }
@@ -244,6 +260,21 @@ async function beginStop(
 export function readReviewRuntime(reviewId: string): ReviewRuntimeStatus {
   readReviewOrThrow(reviewId);
   return observe(reviewId);
+}
+
+export function readReviewRuntimeLog(reviewId: string): ReviewRuntimeLog {
+  readReviewOrThrow(reviewId);
+  const record = readReviewRuntimeRecord(reviewId);
+  if (!record?.bootPhase) {
+    throw new IssueError("not_found", `review runtime "${reviewId}" has no boot phase log`);
+  }
+  const phase = record.bootPhase.phase;
+  const logDir = reviewRuntimeDir(reviewId);
+  return {
+    phase,
+    log: runtimeBootPhaseLogBasename(phase),
+    lines: readRuntimeBootPhaseLogLines(logDir, phase),
+  };
 }
 
 export function startReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {

@@ -7,6 +7,7 @@ import type {
   ReviewDiff,
   ReviewProgress,
   ReviewRecordView,
+  ReviewRuntimeLog,
   ReviewRuntimeStatus,
   ReviewView,
   SetReviewMarkBody,
@@ -258,6 +259,10 @@ export function reviewRuntimeUrl(reviewId: string): string {
 
 export function fetchReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {
   return request<ReviewRuntimeStatus>(reviewRuntimeUrl(reviewId));
+}
+
+export function fetchReviewRuntimeLog(reviewId: string): Promise<ReviewRuntimeLog> {
+  return request<ReviewRuntimeLog>(`${reviewRuntimeUrl(reviewId)}/log`);
 }
 
 export function postReviewRuntime(reviewId: string): Promise<ReviewRuntimeStatus> {
