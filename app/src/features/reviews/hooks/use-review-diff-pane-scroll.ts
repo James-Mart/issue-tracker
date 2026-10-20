@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
+import { pageScroller } from "../lib/page-scroller";
 import {
   restoreForPane,
   REVIEW_DIFF_SCROLLER_CLASS,
@@ -7,14 +8,6 @@ import {
   type ReviewDiffPaneScroll,
 } from "../lib/review-diff-pane-scroll";
 import type { ReviewDiffPane } from "../lib/review-diff-pane";
-
-function pageScroller(): HTMLElement {
-  const el = document.scrollingElement;
-  if (!(el instanceof HTMLElement)) {
-    throw new Error("review diff pane scroll: the page has no scrolling element");
-  }
-  return el;
-}
 
 /** Absent when this scope has no file changes, so there is no diff scroller yet. */
 function diffScroller(): HTMLElement | null {

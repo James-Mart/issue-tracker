@@ -2,11 +2,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewAgentRun, TranscriptEvent } from "@server/schemas";
 
 const state = vi.hoisted(() => ({
-  wide: true,
+  wide: true as boolean | undefined,
   runs: [] as ReviewAgentRun[],
   events: [] as TranscriptEvent[],
 }));
@@ -138,29 +138,70 @@ describe("ReviewAgentsTab", () => {
     expect(finished?.getAttribute("data-expanded")).toBe("");
     expect(finished?.querySelector('[data-slot="agent-run-body"]')).toBe(body);
   });
+});
 
-  it("applies shell shrink on run cards so the wide list can scroll", () => {
-    state.runs = [
+const LIST_CONTENT_PX = 2000;
+const PAGE_CONTENT_PX = 3000;
+const VIEWPORT_PX = 500;
+const scrollTops = new WeakMap<Element, number>();
+
+function isList(el: Element): boolean {
+  return el.getAttribute("data-testid") === "review-agents-tab";
+}
+
+function contentHeight(el: Element): number {
+  if (isList(el)) return LIST_CONTENT_PX;
+  if (el === document.documentElement) return PAGE_CONTENT_PX;
+  return 0;
+}
+
+function viewportHeight(el: Element): number {
+  return isList(el) || el === document.documentElement ? VIEWPORT_PX : 0;
+}
+
+const fakeGeometry: PropertyDescriptorMap = {
+  scrollHeight: { configurable: true, get(this: Element) { return contentHeight(this); } },
+  clientHeight: { configurable: true, get(this: Element) { return viewportHeight(this); } },
+  scrollTop: {
+    configurable: true,
+    get(this: Element) {
+      return scrollTops.get(this) ?? 0;
+    },
+    set(this: Element, value: number) {
+      const max = Math.max(0, contentHeight(this) - viewportHeight(this));
+      scrollTops.set(this, Math.min(Math.max(0, value), max));
+    },
+  },
+};
+
+describe("ReviewAgentsTab scrolling", () => {
+  beforeAll(() => {
+    Object.defineProperties(HTMLElement.prototype, fakeGeometry);
+  });
+
+  afterAll(() => {
+    for (const key of Object.keys(fakeGeometry)) {
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+    }
+  });
+
+  it("opens the wide list on the newest run once the width is measured", () => {
+    state.runs = Array.from({ length: 21 }, (_, index) =>
       run({
-        conversationId: "conv-a",
+        conversationId: `conv-${index + 1}`,
         role: "issue-tracker-review-tasker",
         status: "completed",
         endedAt: "2026-10-14T16:42:00.000Z",
       }),
-      run({
-        conversationId: "conv-b",
-        role: "issue-tracker-review-tasker",
-        status: "completed",
-        endedAt: "2026-10-14T16:43:00.000Z",
-      }),
-    ];
+    );
+    state.wide = undefined;
     mount();
+    const list = container.querySelector<HTMLElement>("[data-testid='review-agents-tab']")!;
+    expect(list.scrollTop).toBe(0);
 
-    const cards = container.querySelectorAll("[data-testid='review-agent-run-card']");
-    expect(cards.length).toBe(2);
-    for (const card of cards) {
-      expect(card.className).toContain("shell:shrink-0");
-      expect(card.className).not.toMatch(/(?:^|\s)shrink-0(?:\s|$)/);
-    }
+    state.wide = true;
+    rerender();
+    expect(list.scrollTop).toBe(LIST_CONTENT_PX - VIEWPORT_PX);
+    expect(document.documentElement.scrollTop).toBe(0);
   });
 });
