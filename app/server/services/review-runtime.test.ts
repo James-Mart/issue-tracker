@@ -212,4 +212,39 @@ describe("review runtime", () => {
     expect(await (await runtime("GET")).json()).toEqual({ state: "stopped" });
     expect(await portOpen(port)).toBe(false);
   });
+
+  it("stops a boot during build, collects the build group, and lets Start boot again", async () => {
+    const marker = join(root, "phases");
+    const buildChild = join(root, "build-child.pid");
+    const gate = join(root, "build-may-finish");
+    seedReview({
+      build: `sleep 30 & echo $! > ${buildChild}; echo build >> ${marker}; while [ ! -e ${gate} ]; do sleep 0.05; done; kill $!`,
+      start: listenScript(marker),
+      baseUrl: "http://127.0.0.1:$AGENT_STACK_PORT",
+    });
+    await boot();
+
+    expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
+    const deadline = Date.now() + 8_000;
+    while (!existsSync(buildChild) || readFileSync(buildChild, "utf8").trim() === "") {
+      if (Date.now() > deadline) throw new Error("build never started");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const sleepPid = Number(readFileSync(buildChild, "utf8").trim());
+    const record = JSON.parse(
+      readFileSync(join(dirname(issuesDir), "review-runtimes", "rev", "state.json"), "utf8"),
+    ) as { bootPhase?: { phase: string } };
+    expect(record.bootPhase?.phase).toBe("build");
+
+    const stopped = await runtime("DELETE");
+    expect(await stopped.json()).toEqual({ state: "stopped" });
+    expect(existsSync(`/proc/${sleepPid}`)).toBe(false);
+    expect(existsSync(join(dirname(issuesDir), "review-runtimes", "rev"))).toBe(false);
+    expect(await (await runtime("GET")).json()).toEqual({ state: "stopped" });
+
+    writeFileSync(gate, "");
+    expect(await (await runtime("POST")).json()).toEqual({ state: "booting" });
+    expect((await until("running")).state).toBe("running");
+    expect(readFileSync(marker, "utf8").trim().split("\n")).toEqual(["build", "build", "start"]);
+  });
 });

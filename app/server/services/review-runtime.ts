@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import type { ReviewRuntimeStatus } from "../schemas/review.js";
 import type { Runtime } from "../schemas.js";
 import { loadPhaseSecrets } from "./agent-stack-secrets.js";
-import { killProcessGroup } from "./bounded-process.js";
 import { IssueError } from "./errors.js";
 import {
   assertGuestAllowsOutwardEffect,
@@ -13,22 +12,19 @@ import {
 import { readAll, readReviewOrThrow } from "./issues.js";
 import {
   clearLiveBootIfCurrent,
-  liveBootIsCurrent,
   peekLiveBoot,
   readReviewRuntimeRecord,
   rememberLiveBoot,
   reviewRuntimeDir,
-  takeLiveBoot,
   writeReviewRuntimeRecord,
   type LiveBoot,
-  type ReviewRuntimeRecord,
 } from "./review-runtime-occupancy.js";
 import {
   allocateRuntimeResources,
   bootRuntime,
   discardRuntimeDataDir,
   missingDeclaredRuntimeFields,
-  RuntimeBootAborted,
+  RuntimeBootCancelled,
   runtimeProcessesLive,
   stopRuntimeProcesses,
   type RuntimeProcess,
@@ -118,37 +114,37 @@ function requireBoot(reviewId: string): BootSpec {
   };
 }
 
-function trackedProcesses(
-  record: ReviewRuntimeRecord | null,
-  boot: LiveBoot | undefined,
-): RuntimeProcess[] {
-  const processes = [...(record?.processes ?? [])];
-  if (
-    boot?.process &&
-    !processes.some(
-      (proc) => proc.pid === boot.process?.pid && proc.startTime === boot.process.startTime,
-    )
-  ) {
-    processes.push(boot.process);
+/** Remove the runtime like a stop, returning the worktree it booted in. */
+async function discardRuntime(reviewId: string): Promise<string | undefined> {
+  const boot = peekLiveBoot(reviewId);
+  if (boot) {
+    boot.controller.abort();
+    // The boot writes the record until it settles, and its phase may still be
+    // running in the worktree.
+    await boot.settled;
   }
-  return processes;
-}
-
-async function discardExisting(reviewId: string): Promise<void> {
-  const boot = takeLiveBoot(reviewId);
   const record = readReviewRuntimeRecord(reviewId);
-  const processes = trackedProcesses(record, boot);
-  if (processes.length > 0) {
-    await stopRuntimeProcesses(processes, `review runtime ${reviewId}`);
+  if (record && record.processes.length > 0) {
+    await stopRuntimeProcesses(record.processes, `review runtime ${reviewId}`);
   }
   rmSync(reviewRuntimeDir(reviewId), { recursive: true, force: true });
+  return record?.worktree ?? boot?.worktree;
 }
 
-async function runBoot(reviewId: string, boot: LiveBoot, spec: BootSpec): Promise<void> {
+async function runBoot(reviewId: string, spec: BootSpec, signal: AbortSignal): Promise<void> {
   let resources: RuntimeResources | undefined;
+  let started: RuntimeProcess | undefined;
   try {
     resources = await allocateRuntimeResources(reviewRuntimeDir(reviewId));
     const { port, auxPort, dataDir } = resources;
+    const recordBase = {
+      reviewId,
+      worktree: spec.worktree,
+      startedAt: spec.startedAt,
+      port,
+      auxPort,
+      dataDir,
+    };
     const secrets = loadPhaseSecrets(spec.projectId);
     const booted = await bootRuntime({
       logDir: reviewRuntimeDir(reviewId),
@@ -157,49 +153,33 @@ async function runBoot(reviewId: string, boot: LiveBoot, spec: BootSpec): Promis
       runtime: spec.runtime,
       secrets,
       label: "runtime",
-      aborted: () => !liveBootIsCurrent(reviewId, boot),
-      onSpawned: (process, baseUrl) => {
-        if (!liveBootIsCurrent(reviewId, boot)) {
-          killProcessGroup(process.pid, "SIGTERM");
-          throw new RuntimeBootAborted();
-        }
-        boot.process = process;
+      signal,
+      onPhase: (bootPhase) => {
+        if (bootPhase.phase === "start") started = { role: "start", ...bootPhase.process };
         writeReviewRuntimeRecord({
-          reviewId,
-          worktree: spec.worktree,
+          ...recordBase,
           phase: "booting",
-          startedAt: spec.startedAt,
-          processes: [process],
-          port,
-          auxPort,
-          dataDir,
-          baseUrl,
+          processes: started ? [started] : [],
+          bootPhase,
         });
       },
     });
-    if (!liveBootIsCurrent(reviewId, boot)) return;
     writeReviewRuntimeRecord({
-      reviewId,
-      worktree: spec.worktree,
+      ...recordBase,
       phase: "running",
-      startedAt: spec.startedAt,
       processes: [booted.process],
-      port,
-      auxPort,
-      dataDir,
       baseUrl: booted.baseUrl,
     });
   } catch (err) {
-    if (err instanceof RuntimeBootAborted || !liveBootIsCurrent(reviewId, boot)) return;
-    if (boot.process) {
+    if (err instanceof RuntimeBootCancelled) return;
+    if (started) {
       try {
-        await stopRuntimeProcesses([boot.process], `review runtime ${reviewId}`);
+        await stopRuntimeProcesses([started], `review runtime ${reviewId}`);
       } catch (stopErr) {
         console.error(`review runtime ${reviewId} failed to stop after boot error:`, stopErr);
       }
     }
     if (resources) discardRuntimeDataDir(resources.dataDir);
-    if (!liveBootIsCurrent(reviewId, boot)) return;
     writeReviewRuntimeRecord({
       reviewId,
       worktree: spec.worktree,
@@ -208,8 +188,6 @@ async function runBoot(reviewId: string, boot: LiveBoot, spec: BootSpec): Promis
       processes: [],
       error: failureLine(err),
     });
-  } finally {
-    clearLiveBootIfCurrent(reviewId, boot);
   }
 }
 
@@ -219,9 +197,7 @@ async function beginStart(reviewId: string): Promise<ReviewRuntimeStatus> {
   const current = observe(reviewId);
   if (current.state === "running") return current;
   if (current.state === "booting" && peekLiveBoot(reviewId)) return current;
-  await discardExisting(reviewId);
-  const boot: LiveBoot = { worktree: spec.worktree };
-  rememberLiveBoot(reviewId, boot);
+  await discardRuntime(reviewId);
   writeReviewRuntimeRecord({
     reviewId,
     worktree: spec.worktree,
@@ -229,9 +205,17 @@ async function beginStart(reviewId: string): Promise<ReviewRuntimeStatus> {
     startedAt: spec.startedAt,
     processes: [],
   });
-  void runBoot(reviewId, boot, spec).catch((err: unknown) => {
-    console.error(`review runtime boot failed for ${reviewId}:`, err);
-  });
+  const controller = new AbortController();
+  const boot: LiveBoot = {
+    worktree: spec.worktree,
+    controller,
+    settled: runBoot(reviewId, spec, controller.signal)
+      .catch((err: unknown) => {
+        console.error(`review runtime boot failed for ${reviewId}:`, err);
+      })
+      .finally(() => clearLiveBootIfCurrent(reviewId, boot)),
+  };
+  rememberLiveBoot(reviewId, boot);
   return { state: "booting" };
 }
 
@@ -252,14 +236,7 @@ async function beginStop(
 ): Promise<ReviewRuntimeStatus> {
   assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_RUNTIME_STOP);
   readReviewOrThrow(reviewId);
-  const boot = takeLiveBoot(reviewId);
-  const record = readReviewRuntimeRecord(reviewId);
-  const processes = trackedProcesses(record, boot);
-  if (processes.length > 0) {
-    await stopRuntimeProcesses(processes, `review runtime ${reviewId}`);
-  }
-  const worktree = record?.worktree ?? boot?.worktree;
-  rmSync(reviewRuntimeDir(reviewId), { recursive: true, force: true });
+  const worktree = await discardRuntime(reviewId);
   if (sync && worktree) await syncWorktree(worktree);
   return { state: "stopped" };
 }

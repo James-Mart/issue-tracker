@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { addAbortListener } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   closeSync,
@@ -45,6 +46,17 @@ export const runtimeProcessSchema = z.object({
 export type RuntimeProcess = z.infer<typeof runtimeProcessSchema>;
 export type RuntimeProcessRole = RuntimeProcess["role"];
 
+/** The boot phase whose process group is active, from the moment its shell spawns. */
+export const runtimeBootPhaseReportSchema = z.object({
+  phase: z.enum(["build", "start", "seed", "readiness"]),
+  startedAt: z.string().min(1),
+  process: runtimeProcessSchema.pick({ pid: true, startTime: true }),
+});
+
+export type RuntimeBootPhaseReport = z.infer<typeof runtimeBootPhaseReportSchema>;
+type ShellPhase = Exclude<RuntimeBootPhaseReport["phase"], "start">;
+type ProcessIdentity = RuntimeBootPhaseReport["process"];
+
 export interface RuntimeResources {
   port: number;
   auxPort: number;
@@ -53,11 +65,14 @@ export interface RuntimeResources {
 
 const BASE_URL_VAR = /\$\{(AGENT_STACK_[A-Z0-9_]+)\}|\$(AGENT_STACK_[A-Z0-9_]+)/g;
 
-/** The caller stopped this boot. Callers do not record it as a failure. */
-export class RuntimeBootAborted extends Error {
+/**
+ * The caller aborted this boot and its process groups are collected. Callers
+ * do not record it as a failure.
+ */
+export class RuntimeBootCancelled extends Error {
   constructor() {
-    super("runtime boot aborted");
-    this.name = "RuntimeBootAborted";
+    super("runtime boot cancelled");
+    this.name = "RuntimeBootCancelled";
   }
 }
 
@@ -336,20 +351,23 @@ async function spawnChild(
   return { child, record: { role, pid, startTime: info.startTime } };
 }
 
-export function runRuntimeShell(
+type ShellResult = { code: number; output: string };
+
+/** `detached` puts the shell in its own process group, led by its pid. */
+function spawnRuntimeShell(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
   secrets: Record<string, string>,
-  timeoutMs?: number,
-): Promise<{ code: number; output: string }> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
-      cwd,
-      env,
-      detached: timeoutMs !== undefined,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+  detached: boolean,
+): { child: ChildProcess; result: Promise<ShellResult> } {
+  const child = spawn("sh", ["-c", wrapPhaseShellCommand(command)], {
+    cwd,
+    env,
+    detached,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const result = new Promise<ShellResult>((resolvePromise, reject) => {
     const masker = createPhaseOutputMasker(secrets);
     let output = "";
     let settled = false;
@@ -363,33 +381,93 @@ export function runRuntimeShell(
     };
     child.stdout?.on("data", append);
     child.stderr?.on("data", append);
-    const timer = timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => {
-          if (settled) return;
-          if (child.pid !== undefined) killProcessGroup(child.pid);
-        }, timeoutMs);
-    child.on("error", (err) => {
-      if (timer) clearTimeout(timer);
-      finish(() => reject(err));
-    });
+    child.on("error", (err) => finish(() => reject(err)));
     child.on("close", (code) => {
-      if (timer) clearTimeout(timer);
       output = appendOutputTail(output, masker.flush());
       finish(() => resolvePromise({ code: code ?? 1, output }));
     });
   });
+  return { child, result };
 }
 
-async function runShellOrThrow(
-  phase: string,
+export function runRuntimeShell(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  secrets: Record<string, string>,
+): Promise<ShellResult> {
+  return spawnRuntimeShell(command, cwd, env, secrets, false).result;
+}
+
+/** Settles with `work`, or rejects with the abort reason as soon as `signal` aborts. */
+function unlessAborted<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+  return new Promise((resolvePromise, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const listener = addAbortListener(signal, () => reject(signal.reason));
+    work.then(resolvePromise, reject).finally(() => listener[Symbol.dispose]());
+  });
+}
+
+/** One boot's cancellation state, shared by every phase it runs. */
+interface BootControl {
+  signal: AbortSignal;
+  /** Process groups the boot must collect before it reports cancellation. */
+  groups: Set<number>;
+  onPhase?: (report: RuntimeBootPhaseReport) => void;
+}
+
+function reportPhase(
+  control: BootControl,
+  phase: RuntimeBootPhaseReport["phase"],
+  process: ProcessIdentity,
+): void {
+  control.groups.add(process.pid);
+  control.onPhase?.({ phase, startedAt: new Date().toISOString(), process });
+}
+
+/**
+ * Run one phase shell in its own process group. The group stays in
+ * `control.groups` until the shell settles, so an abort meanwhile leaves it
+ * for the boot to collect. `timeoutMs` kills the group and lets the shell
+ * settle with its exit status.
+ */
+async function runPhaseShell(
+  control: BootControl,
+  phase: ShellPhase,
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  secrets: Record<string, string>,
+  timeoutMs?: number,
+): Promise<ShellResult> {
+  control.signal.throwIfAborted();
+  const { child, result } = spawnRuntimeShell(command, cwd, env, secrets, true);
+  const pid = child.pid;
+  if (pid === undefined) return result;
+  // The shell cannot be reaped before this synchronous read, so it is present
+  // even when the command has already exited.
+  const info = readProcInfo(pid)!;
+  reportPhase(control, phase, { pid, startTime: info.startTime });
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => killProcessGroup(pid), timeoutMs);
+  try {
+    const settled = await unlessAborted(control.signal, result);
+    control.groups.delete(pid);
+    return settled;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runPhaseOrThrow(
+  control: BootControl,
+  phase: ShellPhase,
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
   secrets: Record<string, string>,
   label: string,
 ): Promise<void> {
-  const { code, output } = await runRuntimeShell(command, cwd, env, secrets);
+  const { code, output } = await runPhaseShell(control, phase, command, cwd, env, secrets);
   if (code !== 0) {
     throw new Error(`${label} ${phase} failed (exit ${code}):\n${tailRuntimeOutput(output)}`);
   }
@@ -425,17 +503,17 @@ async function waitForPort(
   port: number,
   spawned: { child: ChildProcess; record: RuntimeProcess },
   label: string,
-  aborted?: () => boolean,
+  signal: AbortSignal,
 ): Promise<void> {
   const timeoutMs = readyTimeoutMs();
   const deadline = Date.now() + timeoutMs;
   let lastFailure = "no probe attempted";
   while (Date.now() < deadline) {
-    if (aborted?.()) throw new RuntimeBootAborted();
+    signal.throwIfAborted();
     throwIfExited(logDir, spawned, label);
     if (await tcpAccepts(port)) return;
     lastFailure = `port ${port} refused`;
-    await delay(READY_POLL_MS);
+    await delay(READY_POLL_MS, undefined, { signal });
   }
   throw new Error(
     `${label} port ${port} did not accept connections within ${timeoutMs}ms (${lastFailure}):\n${tailLog(join(logDir, `${spawned.record.role}.log`))}`,
@@ -443,6 +521,7 @@ async function waitForPort(
 }
 
 async function waitForReadiness(
+  control: BootControl,
   logDir: string,
   command: string,
   cwd: string,
@@ -450,21 +529,27 @@ async function waitForReadiness(
   secrets: Record<string, string>,
   spawned: { child: ChildProcess; record: RuntimeProcess },
   label: string,
-  aborted?: () => boolean,
 ): Promise<void> {
   const timeoutMs = readyTimeoutMs();
   const deadline = Date.now() + timeoutMs;
   let lastOutput = "";
   let lastCode = "none";
   while (Date.now() < deadline) {
-    if (aborted?.()) throw new RuntimeBootAborted();
     throwIfExited(logDir, spawned, label);
     const remaining = Math.max(1, deadline - Date.now());
-    const { code, output } = await runRuntimeShell(command, cwd, env, secrets, remaining);
+    const { code, output } = await runPhaseShell(
+      control,
+      "readiness",
+      command,
+      cwd,
+      env,
+      secrets,
+      remaining,
+    );
     lastOutput = output;
     lastCode = String(code);
     if (code === 0) return;
-    await delay(READY_POLL_MS);
+    await delay(READY_POLL_MS, undefined, { signal: control.signal });
   }
   throw new Error(
     `${label} readiness was not ready within ${timeoutMs}ms (exit ${lastCode}):\n${tailRuntimeOutput(lastOutput)}`,
@@ -479,80 +564,94 @@ export interface RuntimeBootSpec {
   secrets: Record<string, string>;
   /** Error text names this owner. Agent stacks keep the historical "agent stack". */
   label?: string;
-  aborted?: () => boolean;
+  /** Aborting cancels the boot in whichever phase is active. */
+  signal: AbortSignal;
+  /** Called as each phase shell spawns, including every readiness probe. */
+  onPhase?: (report: RuntimeBootPhaseReport) => void;
   /** Called after the start process is spawned and before readiness. */
   onSpawned?: (process: RuntimeProcess, baseUrl: string) => void;
 }
 
 /**
- * Run build, start, port wait, seed, and readiness in the worktree.
- * Does not record ownership and does not clean up after a thrown failure.
+ * Run build, start, port wait, seed, and readiness in the worktree, each phase
+ * shell in its own process group. Does not record ownership and does not clean
+ * up after a thrown failure. When `signal` aborts, it terminates the active
+ * phase's group and the start group, and rejects with `RuntimeBootCancelled`
+ * once `waitpid` collects them.
  */
 export async function bootRuntime(
   spec: RuntimeBootSpec,
 ): Promise<{ baseUrl: string; process: RuntimeProcess }> {
   ensureChildReaper();
   const label = spec.label ?? "agent stack";
-  const { resources, runtime, secrets, worktree, logDir } = spec;
-  const throwIfAborted = () => {
-    if (spec.aborted?.()) throw new RuntimeBootAborted();
-  };
-  throwIfAborted();
-  if (!runtime.baseUrl || !runtime.start) {
-    throw new Error(`${label} runtime is missing start and baseUrl`);
-  }
-  const baseUrl = expandRuntimeBaseUrl(runtime.baseUrl, runtimeVarEnv(resources));
-  throwIfAborted();
-  if (runtime.build) {
-    await runShellOrThrow(
-      "build",
-      runtime.build,
-      worktree,
+  const { resources, runtime, secrets, worktree, logDir, signal } = spec;
+  const control: BootControl = { signal, groups: new Set(), onPhase: spec.onPhase };
+  try {
+    signal.throwIfAborted();
+    if (!runtime.baseUrl || !runtime.start) {
+      throw new Error(`${label} runtime is missing start and baseUrl`);
+    }
+    const baseUrl = expandRuntimeBaseUrl(runtime.baseUrl, runtimeVarEnv(resources));
+    if (runtime.build) {
+      await runPhaseOrThrow(
+        control,
+        "build",
+        runtime.build,
+        worktree,
+        phaseEnv(resources, undefined, secrets),
+        secrets,
+        label,
+      );
+    }
+    signal.throwIfAborted();
+    const spawned = await spawnChild(
+      "start",
+      "sh",
+      ["-c", wrapPhaseShellCommand(runtime.start)],
       phaseEnv(resources, undefined, secrets),
-      secrets,
-      label,
-    );
-  }
-  throwIfAborted();
-  const spawned = await spawnChild(
-    "start",
-    "sh",
-    ["-c", wrapPhaseShellCommand(runtime.start)],
-    phaseEnv(resources, undefined, secrets),
-    logDir,
-    worktree,
-    secrets,
-    label,
-  );
-  spec.onSpawned?.(spawned.record, baseUrl);
-  throwIfAborted();
-  await waitForPort(logDir, resources.port, spawned, label, spec.aborted);
-  if (runtime.seed) {
-    throwIfAborted();
-    await runShellOrThrow(
-      "seed",
-      runtime.seed,
-      worktree,
-      phaseEnv(resources, baseUrl, secrets),
-      secrets,
-      label,
-    );
-  }
-  if (runtime.readiness) {
-    throwIfAborted();
-    await waitForReadiness(
       logDir,
-      runtime.readiness,
       worktree,
-      phaseEnv(resources, baseUrl, secrets),
       secrets,
-      spawned,
       label,
-      spec.aborted,
     );
+    reportPhase(control, "start", {
+      pid: spawned.record.pid,
+      startTime: spawned.record.startTime,
+    });
+    spec.onSpawned?.(spawned.record, baseUrl);
+    await waitForPort(logDir, resources.port, spawned, label, signal);
+    if (runtime.seed) {
+      await runPhaseOrThrow(
+        control,
+        "seed",
+        runtime.seed,
+        worktree,
+        phaseEnv(resources, baseUrl, secrets),
+        secrets,
+        label,
+      );
+    }
+    if (runtime.readiness) {
+      await waitForReadiness(
+        control,
+        logDir,
+        runtime.readiness,
+        worktree,
+        phaseEnv(resources, baseUrl, secrets),
+        secrets,
+        spawned,
+        label,
+      );
+    }
+    signal.throwIfAborted();
+    return { baseUrl, process: spawned.record };
+  } catch (err) {
+    if (!signal.aborted) throw err;
+    await terminateProcessGroups(control.groups, label, () =>
+      [...control.groups].map((pgrp) => `group ${pgrp}`).join(", "),
+    );
+    throw new RuntimeBootCancelled();
   }
-  throwIfAborted();
-  return { baseUrl, process: spawned.record };
 }
 
 /** True when any child of this process still belongs to one of these groups. */
@@ -592,11 +691,28 @@ async function waitUntilGroupsCollected(
 }
 
 /**
+ * SIGTERM each group, then SIGKILL after `TERM_GRACE_MS`. The promise settles
+ * only after `waitpid` collects every group. Past `KILL_GRACE_MS` it keeps
+ * waiting, then rejects naming `survivors()`. `label` names the owner in that
+ * error.
+ */
+async function terminateProcessGroups(
+  groups: ReadonlySet<number>,
+  label: string,
+  survivors: () => string,
+): Promise<void> {
+  for (const pgrp of groups) killProcessGroup(pgrp, "SIGTERM");
+  if (await waitUntilGroupsCollected(groups, TERM_GRACE_MS)) return;
+  for (const pgrp of groups) killProcessGroup(pgrp, "SIGKILL");
+  if (await waitUntilGroupsCollected(groups, KILL_GRACE_MS)) return;
+  const named = survivors() || "group still uncollected";
+  await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
+  throw new Error(`${label} survived SIGKILL: ${named}`);
+}
+
+/**
  * Stop recorded processes. A pid that is not this process's child is left
- * unsignaled. Owned live groups get SIGTERM, then SIGKILL after `TERM_GRACE_MS`.
- * The promise settles only after `waitpid` collects the group. Past
- * `KILL_GRACE_MS` it keeps waiting, then rejects. `label` names the owner in
- * that error.
+ * unsignaled. Owned live groups are terminated per `terminateProcessGroups`.
  */
 export async function stopRuntimeProcesses(
   processes: readonly RuntimeProcess[],
@@ -604,30 +720,20 @@ export async function stopRuntimeProcesses(
 ): Promise<void> {
   ensureChildReaper();
   const owned = processes.filter(isOurRecordedProcess);
-  const live = owned.filter(isProcessLive);
   const groups = new Set<number>();
   for (const proc of owned) {
     const info = readProcInfo(proc.pid);
     if (info) groups.add(info.pgrp);
   }
 
-  if (live.length > 0) {
-    for (const proc of live) killProcessGroup(proc.pid, "SIGTERM");
-    const collectedOnTerm = await waitUntilGroupsCollected(groups, TERM_GRACE_MS);
-    if (!collectedOnTerm) {
-      for (const pgrp of groups) killProcessGroup(pgrp, "SIGKILL");
-      const collectedOnKill = await waitUntilGroupsCollected(groups, KILL_GRACE_MS);
-      if (!collectedOnKill) {
-        const survivors = owned.filter(isOurRecordedProcess);
-        await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
-        throw new Error(
-          `${label} survived SIGKILL: ${
-            survivors.map((proc) => `${proc.role}(${proc.pid})`).join(", ") ||
-            "group still uncollected"
-          }`,
-        );
-      }
-    }
+  if (owned.some(isProcessLive)) {
+    await terminateProcessGroups(groups, label, () =>
+      // Read after the SIGKILL grace, so it names only what is still uncollected.
+      owned
+        .filter(isOurRecordedProcess)
+        .map((proc) => `${proc.role}(${proc.pid})`)
+        .join(", "),
+    );
   } else if (groups.size > 0) {
     await waitUntilGroupsCollected(groups, Number.POSITIVE_INFINITY);
   }

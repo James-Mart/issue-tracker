@@ -24,10 +24,14 @@ import {
   allocateRuntimeResources,
   bootRuntime,
   discardRuntimeDataDir,
+  expandRuntimeBaseUrl,
   isOurRecordedProcess,
   missingDeclaredRuntimeFields,
   phaseEnv,
+  RuntimeBootCancelled,
+  runtimeBootPhaseReportSchema,
   runtimeProcessesLive,
+  runtimeVarEnv,
   runRuntimeShell,
   runtimeProcessSchema,
   stopRuntimeProcesses,
@@ -66,6 +70,8 @@ export const agentStackStateSchema = z.object({
    * an `agent-stack-cursor-index` entry pointing at this app conversation.
    */
   cursorConversationIds: z.array(z.string().min(1)).default([]),
+  /** Latest phase report while a boot is in flight. Absent once the stack is running. */
+  bootPhase: runtimeBootPhaseReportSchema.optional(),
 });
 
 export type AgentStackRole = RuntimeProcess["role"];
@@ -298,6 +304,14 @@ function attachCursor(
   return rememberCursorConversationId(state, cursorConversationId);
 }
 
+interface LiveAgentStackBoot {
+  controller: AbortController;
+  /** Resolves once this boot attempt has finished, including a cancelled one. */
+  settled: Promise<void>;
+}
+
+const liveBoots = new Map<string, LiveAgentStackBoot>();
+
 async function bootDeclaredRuntime(
   conversationId: string,
   boot: ResolvedBoot,
@@ -305,41 +319,120 @@ async function bootDeclaredRuntime(
   secrets: Record<string, string>,
 ): Promise<AgentStackHandle> {
   const resources = await allocateRuntimeResources(agentStackDir(conversationId));
-  let stateWritten = false;
-  let spawned: RuntimeProcess | undefined;
-  let recorded: AgentStackState | undefined;
+  const controller = new AbortController();
+  const done = runAgentStackBoot(
+    conversationId,
+    boot,
+    resources,
+    cursorConversationId,
+    secrets,
+    controller.signal,
+  );
+  const live: LiveAgentStackBoot = {
+    controller,
+    settled: done.then(
+      () => undefined,
+      () => undefined,
+    ),
+  };
+  liveBoots.set(conversationId, live);
   try {
-    await bootRuntime({
+    return await done;
+  } finally {
+    if (liveBoots.get(conversationId) === live) liveBoots.delete(conversationId);
+  }
+}
+
+async function runAgentStackBoot(
+  conversationId: string,
+  boot: ResolvedBoot,
+  resources: RuntimeResources,
+  cursorConversationId: string | undefined,
+  secrets: Record<string, string>,
+  signal: AbortSignal,
+): Promise<AgentStackHandle> {
+  let stateWritten = false;
+  let phasePid: number | undefined;
+  let started: RuntimeProcess | undefined;
+  let recorded: AgentStackState | undefined;
+  let bootBaseUrl: string | undefined;
+  try {
+    const booted = await bootRuntime({
       logDir: agentStackDir(conversationId),
       resources,
       worktree: boot.worktree,
       runtime: boot.runtime,
       secrets,
-      onSpawned: (process, baseUrl) => {
-        spawned = process;
-        const state = freshState(conversationId, boot, resources, baseUrl, [process]);
-        writeAgentStackState(state);
+      signal,
+      onPhase: (report) => {
+        phasePid = report.process.pid;
+        if (report.phase === "start") {
+          started = { role: "start", ...report.process };
+        }
+        // `bootRuntime` rejects a missing baseUrl before the first phase.
+        const baseUrl =
+          bootBaseUrl ??
+          expandRuntimeBaseUrl(boot.runtime.baseUrl!, runtimeVarEnv(resources));
+        bootBaseUrl = baseUrl;
+        const next: AgentStackState = {
+          ...(recorded ?? freshState(conversationId, boot, resources, baseUrl, [])),
+          processes: started ? [started] : [],
+          bootPhase: report,
+        };
+        writeAgentStackState(next);
         stateWritten = true;
-        recorded = attachCursor(state, cursorConversationId);
+        recorded = attachCursor(next, cursorConversationId);
       },
     });
     if (!recorded) {
       throw new Error(`agent stack for ${conversationId} lost its state`);
     }
+    const { bootPhase: _bootPhase, ...rest } = recorded;
+    const running: AgentStackState = {
+      ...rest,
+      baseUrl: booted.baseUrl,
+      processes: [booted.process],
+    };
+    writeAgentStackState(running);
     return {
-      state: recorded,
-      env: agentStackEnv(recorded),
+      state: running,
+      env: agentStackEnv(running),
       reused: false,
       memoryLimitFailures: [],
     };
   } catch (err) {
-    if (stateWritten) await stopAgentStack(conversationId);
-    else {
-      if (spawned) killProcessGroup(spawned.pid, "SIGTERM");
-      discardRuntimeDataDir(resources.dataDir);
+    if (err instanceof RuntimeBootCancelled) {
+      // The stop that aborted this boot releases the record after `settled`.
+      if (!stateWritten) releaseUnrecordedBoot(resources.dataDir, phasePid);
+      throw err;
     }
+    // `stopAgentStack` waits on `settled`, which resolves only after this
+    // cleanup returns, so a failed boot releases its own record.
+    await releaseFailedBoot(conversationId, resources.dataDir, stateWritten, phasePid);
     throw err;
   }
+}
+
+function releaseUnrecordedBoot(dataDir: string, phasePid: number | undefined): void {
+  if (phasePid !== undefined) killProcessGroup(phasePid, "SIGTERM");
+  discardRuntimeDataDir(dataDir);
+}
+
+async function releaseFailedBoot(
+  conversationId: string,
+  dataDir: string,
+  stateWritten: boolean,
+  phasePid: number | undefined,
+): Promise<void> {
+  if (!stateWritten) {
+    releaseUnrecordedBoot(dataDir, phasePid);
+    return;
+  }
+  const state = readAgentStackState(conversationId);
+  if (!state) {
+    throw new Error(`agent stack for ${conversationId} lost its state`);
+  }
+  await stopRecordedStack(state);
 }
 
 /**
@@ -420,31 +513,51 @@ export function dropUnownedAgentStackRecords(): string[] {
 }
 
 /**
+ * Abort a boot still in flight and release its record. A stack that has
+ * finished booting stays up, so conversation teardown can cancel the turn
+ * before stopping it.
+ */
+export async function cancelBootingAgentStack(conversationId: string): Promise<void> {
+  if (!liveBoots.has(conversationId)) return;
+  await stopAgentStack(conversationId);
+}
+
+/**
  * Stop this conversation's stack and release its ports and ownership. A
  * conversation with no recorded stack is not an error — teardown paths call
  * this unconditionally.
  *
- * A recorded pid that is not this process's child is removed with no signal.
- * Owned live groups get SIGTERM, then SIGKILL after the term grace. The
- * promise settles only after `waitpid` collects the group.
+ * An in-flight boot is aborted and its phase group is collected before the
+ * record and data directory are released. A recorded pid that is not this
+ * process's child is removed with no signal. Owned live groups get SIGTERM,
+ * then SIGKILL after the term grace. The promise settles only after `waitpid`
+ * collects those groups.
  */
 export async function stopAgentStack(
   conversationId: string,
 ): Promise<AgentStackStopResult> {
   ensureChildReaper();
+  const live = liveBoots.get(conversationId);
+  if (live) {
+    live.controller.abort();
+    await live.settled;
+  }
   const state = readAgentStackState(conversationId);
   if (!state) return { stopped: false, state: null, memoryLimitFailures: [] };
+  const memoryLimitFailures = await stopRecordedStack(state);
+  return { stopped: true, state, memoryLimitFailures };
+}
 
+async function stopRecordedStack(state: AgentStackState): Promise<string[]> {
   const memoryLimitFailures = collectAgentStackMemoryLimitFailures(state.dataDir);
   try {
-    await stopRuntimeProcesses(state.processes, `agent stack for ${conversationId}`);
+    await stopRuntimeProcesses(state.processes, `agent stack for ${state.conversationId}`);
   } catch (err) {
     await releaseStoppedStackAndSync(state);
     throw err;
   }
-
   await releaseStoppedStackAndSync(state);
-  return { stopped: true, state, memoryLimitFailures };
+  return memoryLimitFailures;
 }
 
 function releaseStoppedStack(state: AgentStackState): void {
