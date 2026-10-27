@@ -62,6 +62,7 @@ import {
   GUEST_REFUSED_CONVERSATION_PROMPT,
 } from "./guest-agent-launch.js";
 import { list, readIssueOrThrow, update } from "./issues.js";
+import { refuseAppendPlanningCreate } from "./refuse-append-planning.js";
 import { queueDeparturePatch } from "./work-queue.js";
 import { uniqueSlug } from "./slug.js";
 import { refuseIfNoFreeSlot } from "./work-slots.js";
@@ -450,6 +451,7 @@ export async function createIssueChannelSession(
     if (input.channel === "implementing") {
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
+    refuseAppendPlanningCreate(issueId, input.channel);
 
     for (const existing of predecessors) {
       archiveIdleConversation(existing, sessions);
