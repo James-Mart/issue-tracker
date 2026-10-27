@@ -180,8 +180,9 @@ function workRootOf(
 
 /**
  * Stamp `workQueuedAt` and append `workQueuePosition` on each plan root's
- * work root when an auto-planned Idea archives. Roots already queued are
- * left as they are. Roots are ordered so each sits after its `blockedBy`
+ * work root when an auto-planned Idea archives. Append Ideas (`appendTo`)
+ * never stamp. Roots already queued are left as they are. Roots are ordered
+ * so each sits after its `blockedBy`
  * Epics. A root whose blocker is outside the queue and not finished is
  * left unchanged — not queued, and not marked needs-attention — and so is
  * every root that depends on it.
@@ -195,6 +196,7 @@ export function planWorkQueueStamps(
   if (existing.kind !== "idea" || existing.archived) return [];
   if (patch.archived !== true) return [];
   if (!existing.stakeholder) return [];
+  if (existing.appendTo) return [];
   if (existing.executionGate === true) return [];
 
   const derived = derive(issues);

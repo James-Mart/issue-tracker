@@ -85,6 +85,44 @@ describe("work queue enqueue on Idea archive", () => {
     expect(readRaw("child").workQueuePosition).toBeUndefined();
   });
 
+  it("does not stamp plan roots when the Idea has appendTo", async () => {
+    seedProject();
+    writeIssue("target", {
+      kind: "story",
+      title: "Target",
+      partOf: "p",
+      order: 1,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("idea", {
+      kind: "idea",
+      title: "Append",
+      partOf: "p",
+      order: 0,
+      archived: false,
+      stakeholder: "composer-2.5",
+      appendTo: "target",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("task", {
+      kind: "task",
+      title: "Task",
+      partOf: "target",
+      order: 0,
+      sourceIdea: "idea",
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const { update } = await loadIssues();
+    await update("idea", { archived: true });
+
+    expect(readRaw("target").workQueuedAt).toBeUndefined();
+    expect(readRaw("target").workQueuePosition).toBeUndefined();
+  });
+
   it("does not stamp when executionGate is true", async () => {
     seedProject();
     writeIssue("idea", {

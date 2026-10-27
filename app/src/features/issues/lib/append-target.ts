@@ -13,34 +13,22 @@ export const APPEND_TARGET_MERGED =
 export const APPEND_TARGET_UNSAVED_PLANNING =
   "Nothing saved yet — planning will create a new root Story.";
 
-export const APPEND_TARGET_MERGED_PLANNING_BLOCKED =
-  "Planning is blocked until you clear the append target or choose an open Story. Post-landing follow-up belongs in a new root Story.";
+export { APPEND_TARGET_MERGED_PLANNING_BLOCKED } from "@server/append-planning-context";
 
-export type SavedAppendTargetState =
-  | { kind: "none" }
-  | { kind: "valid"; storyTitle: string }
-  | { kind: "merged"; storyTitle: string }
-  | { kind: "invalid" };
+type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
 
-export function savedAppendTargetState(
+/** Same-project Story named by a saved append target, when one resolves. */
+export function appendStoryTarget(
   appendTo: string | null | undefined,
   ideaProjectId: string,
   byId: Map<string, IssueRecord>,
-): SavedAppendTargetState {
+): StoryRecord | undefined {
   const id = appendTo?.trim();
-  if (!id) return { kind: "none" };
-
+  if (!id) return undefined;
   const target = byId.get(id);
-  if (!target || projectIdOf(id, byId) !== ideaProjectId) {
-    return { kind: "invalid" };
-  }
-  if (target.kind !== "story") {
-    return { kind: "invalid" };
-  }
-  if (target.merged) {
-    return { kind: "merged", storyTitle: target.title };
-  }
-  return { kind: "valid", storyTitle: target.title };
+  if (!target || target.kind !== "story") return undefined;
+  if (projectIdOf(id, byId) !== ideaProjectId) return undefined;
+  return target;
 }
 
 export function appendTargetWrongKindReason(kind: IssueKind): string {

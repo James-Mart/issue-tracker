@@ -44,6 +44,12 @@ vi.mock("../api/queries", () => ({
       derived: {},
     },
   }),
+  useProjectWorktreesQuery: () => ({
+    data: { worktrees: {} },
+    isFetched: true,
+    isSuccess: true,
+    isError: false,
+  }),
 }));
 
 vi.mock("../hooks/use-issue-patch-action", () => ({

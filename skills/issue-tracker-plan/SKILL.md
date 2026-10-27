@@ -58,11 +58,32 @@ Before grilling:
 4. `issue view <id>` — load the full capture (`description.md`).
 5. `issue project get <projectId> trunk` — Project trunk (`<projectId>` from
    step 1).
-6. `issue idea get <id> mergeBase` — printed branch → merge-base answer
+6. `issue idea get <id> appendTo` — when this prints a Story id, `issue
+   view` that Story and resolve **## Append planning context** for it. After
+   the grill (including the mock-or-skip check and its rounds), continue at
+   **## Append**. Empty output → step 7.
+7. `issue idea get <id> mergeBase` — printed branch → merge-base answer
    for **Merge-base first**; empty output → settle in **Merge-base first**.
-7. `issue idea get <id> appendTo` — when this prints a Story id, `issue
-   view` that Story. After the grill (including the mock-or-skip check and
-   its rounds), continue at **## Append**.
+
+## Append planning context
+
+For an Idea with `appendTo`, every **Focused codebase research** spawn in
+the session follows the target Story's context. `<storyId>` is the
+`appendTo` value; the first matching step applies:
+
+1. `issue story get <storyId> merged` prints `true` → tell the user
+   "Planning is blocked until you clear the append target or choose an open
+   Story. Post-landing follow-up belongs in a new root Story." and stop.
+2. `issue story get <storyId> worktree` reports `exists: true` → research
+   reads the bootstrap `Workspace:` (that Story worktree, including
+   uncommitted changes) and omits `Ref`.
+3. `issue story get <storyId> mergeBase` prints a ref → research passes
+   that ref as `Ref`, including when it is the Project trunk.
+4. Otherwise planning cannot start. When `issue story get <storyId>
+   stackedOn` prints a parent id, tell the user "The parent has no branch
+   yet. Start its work loop or resolve its merge base before planning."
+   Otherwise tell the user the Story's merge base is unresolved. Stop
+   either way.
 
 ## Grill-me protocol (inline)
 
@@ -81,8 +102,10 @@ mid-grill.
 
 **Rules (mandatory):**
 
-- **Merge-base first** — settle which git ref the plan is built on before
-  any other grill question. Bootstrap step 6 — printed branch → that branch
+- **Merge-base first** — for an Idea without `appendTo`, settle which git
+  ref the plan is built on before any other grill question. An Idea with
+  `appendTo` follows **## Append planning context** instead. Bootstrap
+  step 7 — printed branch → that branch
   is the answer. Empty output → ask **one** question about which git ref
   the plan should be built on. That question recommends the Project
   **trunk** from Bootstrap step 5 via `(recommended)` in the answer list.
@@ -99,7 +122,8 @@ mid-grill.
   - **Non-trunk branch** — for every **Focused codebase research** spawn
     during the rest of the grill, pass the merge-base answer as `Ref` so
     research reads at that ref (see Spawn stubs).
-- After the merge-base answer and before any other grill question, spawn one
+- After the merge-base answer (or the append planning context) and before
+  any other grill question, spawn one
   **Focused codebase research** (Spawn stubs; `role: issue-tracker-research`)
   whose `Research` surveys how the host repository already solves directory
   placement and what a directory's location means, test registration and
@@ -113,7 +137,7 @@ mid-grill.
   only via a `(recommended)` prefix in the **list of answers** (not inside the
   question).
 - When a further **focused** codebase question or fact needs answering (cwd =
-  Project `Workspace:`), **delegate** research rather than reading widely
+  bootstrap `Workspace:`), **delegate** research rather than reading widely
   yourself — spawn **Focused codebase research** (Spawn stubs); wait for its
   summary, then continue the grill.
 - Product and dependency decisions remain the **stakeholder's** — including
