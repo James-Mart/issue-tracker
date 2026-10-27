@@ -94,12 +94,12 @@ export function appendPlanningRefusal(
     : APPEND_PLANNING_MERGE_BASE_UNRESOLVED;
 }
 
-/** Body sentence for where research reads. Merged planning has no research line. */
+/** Planning-tab body copy: where append research reads when launch is open. */
 export function appendPlanningResearchSentence(
   context: AppendPlanningContext,
 ): string | undefined {
-  if (context.status === "merged") return undefined;
-  if (context.status === "open" && context.context === "worktree") {
+  if (context.status !== "open") return undefined;
+  if (context.context === "worktree") {
     return APPEND_PLANNING_WORKTREE_RESEARCH;
   }
   return APPEND_PLANNING_MERGE_BASE_RESEARCH;
