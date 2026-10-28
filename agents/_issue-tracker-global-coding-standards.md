@@ -31,3 +31,11 @@ its mechanism.
 Extract a function to introduce a meaningful abstraction, not merely to reduce
 lines of code. Two passages share one function when they express the same
 concept.
+
+## File length
+
+Keep first-party source files at or under **1000 newlines** per file. If a Task
+would push a file over that limit, or edits a file already over it, **include
+the split in the same Task** — do not land the change and defer the refactor.
+Split along meaningful responsibility boundaries. Generated and vendored files
+are excluded.
