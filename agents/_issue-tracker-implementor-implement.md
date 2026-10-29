@@ -30,7 +30,9 @@ Absolute path for this file (Read this exact path):
    unmerged, and that state raises attention and stops before record-commit.
    Other tasks still hand off with no unmerged paths.
 3. **Self-check.** Choose the checks that would fail if this change were
-   wrong, and run them. Unit-suite runs follow `codingStandards` § Unit
+   wrong, and run them. Preserve check failures through output pipelines
+   (`set -o pipefail` in Bash). Require a successful exit and no reported
+   failures. Unit-suite runs follow `codingStandards` § Unit
    suite. Self-check may write whatever automated tests validation needs
    (unit, e2e, and lint-script). For build,
    runtime, and browser checks, **Read**
@@ -89,7 +91,8 @@ Absolute path for this file (Read this exact path):
 8. Post one summary comment:
    `issue task comment <id> --role implementor --body "..."`. It lists each
    finding you fixed (reviewer, finding) and each finding you declined
-   (reviewer, finding, reason). For a `noDiff` Task, it says what was done,
+   (reviewer, finding, reason). Report the final verification commands and
+   their results. For a `noDiff` Task, it says what was done,
    what was found, and why no source-controlled change is the right outcome.
 9. **Resolve linked threads.** Run `issue task get <id> openLinkedThreadRoots`.
    Each stdout line is the root id of a review thread that is open and linked
