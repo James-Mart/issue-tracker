@@ -61,6 +61,21 @@ export function loadRoleModelPin(
   return requireModelPin(fileName, frontmatter.model);
 }
 
+export function loadRoleReadOnly(
+  name: string,
+  agentsDir: string = defaultAgentsDir(),
+): boolean {
+  const { fileName, frontmatter } = readRoleFile(name, agentsDir);
+  return requireReadOnlyFlag(fileName, frontmatter.readonly);
+}
+
+function requireReadOnlyFlag(fileName: string, value: unknown): boolean {
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error(`${fileName}: readonly must be a boolean`);
+  }
+  return value === true;
+}
+
 /**
  * Whether the role writes into a Story worktree and so must hold it alone
  * (`worktree: exclusive`). Read-only roles such as reviewers omit it.
@@ -99,6 +114,7 @@ export function validateRoleBodies(
       throw new Error(`${entry}: missing name`);
     }
     requireModelPin(entry, model);
+    requireReadOnlyFlag(entry, parsed.frontmatter.readonly);
     if (worktree !== undefined && worktree !== "exclusive") {
       throw new Error(`${entry}: worktree must be "exclusive" when set`);
     }

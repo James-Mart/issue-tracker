@@ -32,7 +32,7 @@ import {
 import { readIssueOrThrow } from "./issues.js";
 import { EventPipeline } from "./event-pipeline.js";
 import { formatEffectiveModel } from "./model-selection.js";
-import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { loadRoleBody, loadRoleModelPin, loadRoleReadOnly } from "./role-bodies.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
@@ -571,6 +571,7 @@ export function createDelegateCustomTools(
         const agentsDir = options.agentsDir;
 
         const model = loadRoleModelPin(role, agentsDir);
+        const readOnly = loadRoleReadOnly(role, agentsDir);
         // Fresh spawn injects the role body; resume skips it — the agent already
         // carries those instructions from the first turn.
         const fullPrompt =
@@ -656,6 +657,7 @@ export function createDelegateCustomTools(
                   // agent to carry it: the app names the model on every turn,
                   // and a resumed local agent has no selection of its own.
                   model,
+                  ...(readOnly ? { readOnly } : {}),
                   customTools: nestedCustomTools,
                   ...(options.conversationId !== undefined
                     ? { conversationId: options.conversationId }
@@ -686,6 +688,7 @@ export function createDelegateCustomTools(
             handle = await options.sdk.createAgent({
               cwd: options.cwd,
               model,
+              ...(readOnly ? { readOnly } : {}),
               agentId,
               storeDir: nestedStoreDir,
               customTools: nestedCustomTools,

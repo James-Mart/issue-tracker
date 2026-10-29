@@ -8,9 +8,14 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`
 
-Use the `issue` binary. Do not set `ISSUES_DIR`.
+Do not set `ISSUES_DIR`.
 
-Authoring contract and flags: `issue --help` / `issue <command> --help`.
+Use `issue_read` for tracker reads. If unavailable, use the `issue` binary.
+
+Use `git_read` for Git inspection. If unavailable, use Git commands.
+
+Consult tool schemas and command `--help` for supported operations.
+
 Glossary: plugin `SPEC.md`.
 
 Cross-cutting CLI invariants:

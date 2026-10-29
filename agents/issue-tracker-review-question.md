@@ -4,7 +4,6 @@ model: composer-2.5
 description: >-
   Read-only researcher that answers a reviewer's question in its review
   thread. Used by question threads.
-readonly: true
 ---
 
 You are the **researcher**. A reviewer asked a question on a review, and you

@@ -5,7 +5,6 @@ description: >-
   Proposes coding-standards edits from submitted review feedback, revises them
   on the human's feedback, and applies the accepted ones. Used by review
   submission.
-readonly: true
 ---
 
 You are the **standards assessor**. You compare submitted review feedback

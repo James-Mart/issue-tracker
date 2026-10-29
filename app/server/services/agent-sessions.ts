@@ -69,6 +69,7 @@ import {
   REVIEW_QUESTION_ROLE,
 } from "./researcher-runs.js";
 import { runCostRecorder } from "./run-cost-recorder.js";
+import { loadRoleReadOnly } from "./role-bodies.js";
 export type { NormalizedStep };
 
 export interface ActiveRun {
@@ -276,6 +277,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const meta = readConversationMeta(conversationId);
     const cwd = conversationWorkingDirectory(meta);
     const model = parseModelKey(meta.model);
+    const readOnly = meta.role !== undefined && loadRoleReadOnly(meta.role);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
       mkdirSync(storeDir, { recursive: true });
@@ -300,6 +302,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         handle = await sdk.resumeAgent(meta.agentId, storeDir, {
           cwd,
           model,
+          ...(readOnly ? { readOnly } : {}),
           customTools,
           conversationId,
         });
@@ -307,6 +310,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         handle = await sdk.createAgent({
           cwd,
           model,
+          ...(readOnly ? { readOnly } : {}),
           storeDir,
           customTools,
           conversationId,
@@ -327,6 +331,7 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
       handle = await sdk.createAgent({
         cwd,
         model,
+        ...(readOnly ? { readOnly } : {}),
         storeDir,
         customTools,
         conversationId,

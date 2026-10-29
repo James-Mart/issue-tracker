@@ -41,6 +41,7 @@ import {
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 import { toModelSelection, type ModelKey } from "./model-selection.js";
+import { createAgentReadTools } from "./agent-read-tools.js";
 
 export { CursorAgentError };
 
@@ -54,11 +55,8 @@ export interface AgentSdk {
   /** Models available to the authenticated key. */
   listModels(): Promise<SDKModel[]>;
   /**
-   * Start a fresh local agent. `local` is always
-   * `{ cwd, settingSources: ["user", "project", "plugins"] }` — consumers never
-   * re-specify the local runtime or which config layers load. `"plugins"` is
-   * required so plugin-packaged skills/agents (e.g. this issue-tracker plugin)
-   * register on the Task tool the same way IDE chats do.
+   * Start a fresh local agent. The boundary owns the local runtime and config
+   * layers, including the restricted capability profile for read-only roles.
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
   /**
@@ -95,6 +93,7 @@ export interface CreateAgentOptions {
   conversationId?: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
+  readOnly?: boolean;
   /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
   tools?: NonNullable<AgentOptions["tools"]>;
   disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
@@ -110,6 +109,7 @@ export interface ResumeAgentOptions {
   conversationId?: string;
   agents?: Record<string, AgentDefinition>;
   customTools?: Record<string, SDKCustomTool>;
+  readOnly?: boolean;
   /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
   tools?: NonNullable<AgentOptions["tools"]>;
   disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
@@ -225,6 +225,12 @@ const DISALLOWED_BUILTIN_TOOLS: NonNullable<AgentOptions["disallowedTools"]> = [
   "task",
 ];
 
+const READ_ONLY_TOOLS: NonNullable<AgentOptions["tools"]> = [
+  "read", "grep", "glob", "ls",
+  // The broad "mcp" group also enables resource downloads to disk and auth.
+  "get_mcp_tools_tool_call", "mcp_tool_call",
+];
+
 const require = createRequire(import.meta.url);
 const PLAYWRIGHT_MCP_CLI = join(
   dirname(require.resolve("@playwright/mcp/package.json")),
@@ -313,6 +319,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     storeDir?: string;
     agents?: Record<string, AgentDefinition>;
     customTools?: Record<string, SDKCustomTool>;
+    readOnly?: boolean;
     tools?: NonNullable<AgentOptions["tools"]>;
     disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
     conversationId?: string;
@@ -321,23 +328,29 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     /** Create always passes `agentId`, even when omitted. Resume and prewarm do not. */
     includeAgentId: boolean;
   }): AgentOptions {
+    const customTools = input.readOnly ? createAgentReadTools() : input.customTools;
+    const local = input.storeDir !== undefined
+      ? localRuntime(input.cwd, input.storeDir, customTools)
+      : localWorkspace(input.cwd, customTools);
+    // Ambient config must not add other MCP servers or hooks alongside our
+    // two read-only callback tools.
+    if (input.readOnly) local.settingSources = [];
     return {
       apiKey: deps.apiKey,
       ...(input.model !== undefined
         ? { model: toModelSelection(input.model) }
         : {}),
       ...(input.includeAgentId ? { agentId: input.agentId } : {}),
-      ...(input.includeAgents ? { agents: input.agents } : {}),
-      ...(input.tools !== undefined ? { tools: input.tools } : {}),
+      ...(input.includeAgents ? { agents: input.readOnly ? {} : input.agents } : {}),
+      ...(input.readOnly
+        ? { tools: [...READ_ONLY_TOOLS] }
+        : input.tools !== undefined ? { tools: input.tools } : {}),
       disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
-      mcpServers:
+      mcpServers: input.readOnly ? {} :
         input.conversationId !== undefined
           ? conversationPlaywrightMcpServers(input.conversationId)
           : PLAYWRIGHT_MCP_SERVERS,
-      local:
-        input.storeDir !== undefined
-          ? localRuntime(input.cwd, input.storeDir, input.customTools)
-          : localWorkspace(input.cwd, input.customTools),
+      local,
     };
   }
 

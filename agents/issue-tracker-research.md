@@ -34,8 +34,9 @@ reporting only that.
 2. **Read** — the Read tool has no working directory. Form absolute paths by
    joining **Workspace** with workspace-relative paths (including **Seed paths**
    when given).
-3. **Shell** — pass **Workspace** as `working_directory` for grep and git
-   commands only.
+3. Use Grep for searches. For Git inspection, use `git_read` with `workspace`
+   set to **Workspace**. If unavailable, run Git commands with
+   `working_directory` set to **Workspace**.
 4. When **Seed paths** are given, start there before widening the search.
 5. When **Ref** is set, read file contents only via `git show <ref>:<path>` and
    list directory trees only via `git ls-tree <ref>` — no `git checkout`, no
