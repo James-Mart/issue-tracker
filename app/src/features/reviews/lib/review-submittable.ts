@@ -12,28 +12,43 @@ export type SubmittableThread = Pick<
 >;
 
 /**
- * A new Submit carries this thread when it is included and it is an open,
- * unlinked review thread that no earlier submission still claims.
- *
  * A submission claims the thread ids it froze at Submit. A `done` submission
  * releases a thread once that thread is open again — unresolved after the
  * submission became done — and the submission stays `done`. A thread left
  * open under `incomplete`, `failed`, or `tasking` stays with that submission.
  * A submission's summary comment is never feedback for a later Submit.
  */
+function claimedBySubmission(
+  rootId: string,
+  submissions: readonly SubmissionClaim[],
+): boolean {
+  return submissions.some(
+    (submission) =>
+      submission.summaryCommentId === rootId ||
+      (submission.threadIds.includes(rootId) && submission.status !== "done"),
+  );
+}
+
+/**
+ * An open, unlinked review thread that no unfinished submission claims.
+ * Inclusion is separate: a thread can be eligible and still held back.
+ */
+export function isEligible(
+  thread: SubmittableThread,
+  submissions: readonly SubmissionClaim[],
+): boolean {
+  return (
+    readyToTaskFrom(thread.kind, thread.state, thread.linkedTaskId) &&
+    !claimedBySubmission(thread.rootId, submissions)
+  );
+}
+
+/** A new Submit carries this thread when it is eligible and included. */
 export function isSubmittable(
   thread: SubmittableThread,
   submissions: readonly SubmissionClaim[],
 ): boolean {
-  if (!readyToTaskFrom(thread.kind, thread.state, thread.linkedTaskId)) {
-    return false;
-  }
-  if (!thread.included) return false;
-  return !submissions.some(
-    (submission) =>
-      submission.summaryCommentId === thread.rootId ||
-      (submission.threadIds.includes(thread.rootId) && submission.status !== "done"),
-  );
+  return isEligible(thread, submissions) && thread.included;
 }
 
 export function submittableRootIds(
@@ -53,21 +68,36 @@ type CommentCarrier = {
   included: boolean;
 };
 
-/** Comment threads whose root id passes `isSubmittable`. */
+function toSubmittable(thread: CommentCarrier): SubmittableThread {
+  return {
+    rootId: thread.root.id,
+    kind: thread.kind,
+    state: thread.state,
+    linkedTaskId: thread.linkedTaskId,
+    included: thread.included,
+  };
+}
+
+/** Eligible threads split by whether the next submission takes them. */
+export function partitionSubmissionCommentThreads<T extends CommentCarrier>(
+  threads: readonly T[],
+  submissions: readonly SubmissionClaim[],
+): { included: T[]; notIncluded: T[] } {
+  const included: T[] = [];
+  const notIncluded: T[] = [];
+  for (const thread of threads) {
+    const view = toSubmittable(thread);
+    if (!isEligible(view, submissions)) continue;
+    if (view.included) included.push(thread);
+    else notIncluded.push(thread);
+  }
+  return { included, notIncluded };
+}
+
+/** Comment threads the next submission takes. */
 export function submittableCommentThreads<T extends CommentCarrier>(
   threads: readonly T[],
   submissions: readonly SubmissionClaim[],
 ): T[] {
-  return threads.filter((thread) =>
-    isSubmittable(
-      {
-        rootId: thread.root.id,
-        kind: thread.kind,
-        state: thread.state,
-        linkedTaskId: thread.linkedTaskId,
-        included: thread.included,
-      },
-      submissions,
-    ),
-  );
+  return partitionSubmissionCommentThreads(threads, submissions).included;
 }

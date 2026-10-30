@@ -8,7 +8,7 @@ import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useReviewCommentThreads } from "../hooks/use-review-comments";
 import { issuePath } from "@/features/issues/lib/links";
 import { shortSha } from "@/lib/utils/short-sha";
-import { submittableCommentThreads } from "../lib/review-submittable";
+import { partitionSubmissionCommentThreads } from "../lib/review-submittable";
 import {
   acknowledgedSubmissions,
   reviewSubmitHeader,
@@ -106,10 +106,11 @@ export function ReviewHeaderBody({
 }) {
   const hasCodingStandards = useProjectHasCodingStandards(projectId);
   const { threads, loaded } = useReviewCommentThreads(review?.id ?? "");
-  const readyThreads = loaded
-    ? submittableCommentThreads(threads, review?.submissions ?? [])
+  const submissions = review?.submissions ?? [];
+  const submissionThreads = loaded
+    ? partitionSubmissionCommentThreads(threads, submissions)
     : undefined;
-  const readyCount = readyThreads?.length;
+  const readyCount = submissionThreads?.included.length;
   const [pendingThreadIds, setPendingThreadIds] = useState<string[] | undefined>();
   const [retryingIds, setRetryingIds] = useState<readonly string[] | undefined>();
   const header = review
@@ -135,9 +136,9 @@ export function ReviewHeaderBody({
             projectId={projectId}
             review={review}
             header={header}
-            readyThreads={readyThreads}
+            submissionThreads={submissionThreads}
             onAcknowledge={() =>
-              setPendingThreadIds(readyThreads?.map((thread) => thread.root.id))
+              setPendingThreadIds(submissionThreads?.included.map((thread) => thread.root.id))
             }
             onAcknowledgeEnd={() => setPendingThreadIds(undefined)}
             onRetryStart={setRetryingIds}

@@ -5,12 +5,14 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReviewSubmissionView, ReviewView } from "@server/schemas";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { NO_THREADS_INCLUDED } from "../lib/review-submission-ui";
 import { StoryReviewHeader } from "./story-review-header";
 
 const state = vi.hoisted(() => ({
   threads: [] as CommentThread[],
   submit: vi.fn(),
   retry: vi.fn(),
+  postEvent: vi.fn(),
   /** undefined while the project query has not settled. */
   codingStandards: true as boolean | undefined,
 }));
@@ -50,6 +52,14 @@ vi.mock("./review-runtime-panel", () => ({
   ReviewRuntimePanel: () => null,
 }));
 
+vi.mock("@/features/issues/api/mutations", () => ({
+  usePostThreadEvent: () => ({
+    mutate: state.postEvent,
+    isPending: false,
+    variables: undefined,
+  }),
+}));
+
 vi.mock("../api/mutations", () => ({
   useArchiveReview: () => ({ mutate: vi.fn(), isPending: false }),
   useReopenReview: () => ({ mutate: vi.fn(), isPending: false }),
@@ -78,17 +88,21 @@ function review(overrides: Partial<ReviewView> = {}): ReviewView {
 }
 
 function readyThread(): CommentThread {
+  return commentThread("thread-1", "Please fix this.", true);
+}
+
+function commentThread(id: string, body: string, included: boolean): CommentThread {
   return {
     kind: "review",
     state: "open",
     readyToTask: true,
-    included: true,
+    included,
     replies: [],
     root: {
-      id: "thread-1",
+      id,
       at: "2026-09-29T00:00:00.000Z",
       role: "human",
-      body: "Please fix this.",
+      body,
     },
   };
 }
@@ -122,10 +136,21 @@ function mount(ui: ReactNode) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  rerender(ui);
+  return container;
+}
+
+function rerender(ui: ReactNode) {
   act(() => {
     root!.render(<MemoryRouter>{ui}</MemoryRouter>);
   });
-  return container;
+}
+
+function listHas(listId: string, threadId: string): boolean {
+  return (
+    document.body.querySelector(`[data-testid="${listId}"] [data-thread-id="${threadId}"]`) !=
+    null
+  );
 }
 
 function click(element: Element | null | undefined) {
@@ -153,6 +178,7 @@ beforeEach(() => {
   state.codingStandards = true;
   state.submit.mockReset();
   state.retry.mockReset();
+  state.postEvent.mockReset();
 });
 
 afterEach(async () => {
@@ -253,5 +279,99 @@ describe("StoryReviewHeader submit", () => {
     expect(container.querySelector('[data-testid="review-tasking-error"]')?.textContent).toContain(
       "Tasking agent stopped — could not append Tasks for 3 threads.",
     );
+  });
+
+  it("moves a thread between the included list and the not-included section", () => {
+    state.threads = [
+      commentThread("thread-1", "Ship the note.", true),
+      commentThread("thread-2", "Held back.", false),
+    ];
+    let revision = 0;
+    // Equal props would skip the header render, so the title changes with the threads.
+    const header = () => (
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle={`Story review workbench ${revision}`}
+        review={review()}
+        merged={false}
+      />
+    );
+    const container = mount(header());
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');
+    expect(button?.textContent).toBe("Submit review (1)");
+    click(button);
+
+    expect(document.body.textContent).toContain("Threads to submit (1)");
+    expect(listHas("submit-review-threads", "thread-1")).toBe(true);
+    const withheld = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="submit-review-not-included"]',
+    );
+    expect(withheld?.textContent).toContain("1 not included");
+    expect(withheld?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.body.textContent).not.toContain("Held back.");
+    click(withheld);
+    expect(document.body.textContent).toContain("Held back.");
+    expect(listHas("submit-review-not-included-threads", "thread-2")).toBe(true);
+
+    click(
+      document.body.querySelector(
+        '[data-thread-id="thread-1"] [data-testid="thread-inclusion-toggle"]',
+      ),
+    );
+    expect(state.postEvent).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      event: "excluded",
+    });
+
+    state.threads = [
+      commentThread("thread-1", "Ship the note.", false),
+      commentThread("thread-2", "Held back.", false),
+    ];
+    revision += 1;
+    rerender(header());
+    const submit = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');
+    expect(submit?.textContent).toBe("Submit review (0)");
+    expect(submit?.disabled).toBe(true);
+    expect(document.body.querySelector('[data-testid="submit-review-dialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Threads to submit (0)");
+    expect(document.body.textContent).toContain(NO_THREADS_INCLUDED);
+    expect(
+      document.body.querySelector('[data-testid="submit-review-not-included"]')?.textContent,
+    ).toContain("2 not included");
+    const confirm = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="submit-review-confirm"]',
+    );
+    expect(confirm?.disabled).toBe(true);
+    expect(listHas("submit-review-not-included-threads", "thread-1")).toBe(true);
+    expect(listHas("submit-review-not-included-threads", "thread-2")).toBe(true);
+
+    click(
+      document.body.querySelector(
+        '[data-thread-id="thread-2"] [data-testid="thread-inclusion-toggle"]',
+      ),
+    );
+    expect(state.postEvent).toHaveBeenCalledWith({
+      threadId: "thread-2",
+      event: "included",
+    });
+    state.threads = [
+      commentThread("thread-1", "Ship the note.", false),
+      commentThread("thread-2", "Held back.", true),
+    ];
+    revision += 1;
+    rerender(header());
+    expect(container.querySelector('[data-testid="submit-review"]')?.textContent).toBe(
+      "Submit review (1)",
+    );
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[data-testid="submit-review-confirm"]')
+        ?.disabled,
+    ).toBe(false);
+    expect(listHas("submit-review-threads", "thread-2")).toBe(true);
+    expect(listHas("submit-review-not-included-threads", "thread-1")).toBe(true);
+    expect(
+      document.body.querySelector('[data-testid="submit-review-not-included"]')?.textContent,
+    ).toContain("1 not included");
   });
 });
