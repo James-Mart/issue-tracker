@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef } from "react";
-import { Check, RotateCcw } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Check, ChevronRight, RotateCcw } from "lucide-react";
 import { ShellFaultDetail, ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { usePostComment } from "@/features/issues/api/mutations";
@@ -33,6 +33,12 @@ import {
   type ConversationFilterCounts,
   type ConversationFilterKey,
 } from "../lib/review-conversation-filter";
+import {
+  conversationRunCopy,
+  conversationRunHoldsThread,
+  conversationRunKey,
+  foldTimelineRuns,
+} from "../lib/review-conversation-runs";
 import {
   conversationTimelineItems,
   reviewSubmittedLabel,
@@ -148,6 +154,44 @@ function ConversationFilterBar({
   );
 }
 
+function ConversationFoldedRun({
+  run,
+  expanded,
+  onToggle,
+}: {
+  run: {
+    resolvedCount: number;
+    dismissedCount: number;
+    firstAt: string;
+    lastAt: string;
+  };
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { counts, when } = conversationRunCopy(run);
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      data-testid="conversation-folded-run"
+      onClick={onToggle}
+      className="flex w-full items-start gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-11"
+    >
+      <ChevronRight
+        className={cn(
+          "mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground motion-safe:transition-transform",
+          expanded && "rotate-90",
+        )}
+        aria-hidden
+      />
+      <span className="min-w-0">
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">{counts}</span>
+        <span className="text-muted-foreground">{` · ${when}`}</span>
+      </span>
+    </button>
+  );
+}
+
 function ConversationTimeline({
   items,
   reviewId,
@@ -159,40 +203,72 @@ function ConversationTimeline({
   onOpenInDiff: (threadId: string, commitSha: string) => void;
   focusThreadId: string | null;
 }) {
+  const folded = foldTimelineRuns(items);
+  const [openChoice, setOpenChoice] = useState<Record<string, boolean>>({});
   let lastDay = "";
+
+  const dayMarker = (at: string) => {
+    const key = commentDayKey(at);
+    const show = key !== lastDay;
+    lastDay = key;
+    return show ? <Marker>{commentDayLabel(at)}</Marker> : null;
+  };
+
+  const threadRow = (
+    item: Extract<ConversationTimelineItem<CommentThreadData>, { kind: "thread" }>,
+  ) => {
+    const thread = item.thread;
+    const anchor = thread.root.anchor;
+    return (
+      <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
+        {dayMarker(item.at)}
+        <ReviewThread
+          thread={thread}
+          reviewId={reviewId}
+          showAnchorContext
+          collapse="resolved"
+          highlighted={thread.root.id === focusThreadId}
+          onSeeInDiff={
+            anchor
+              ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
+              : undefined
+          }
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      {items.map((item) => {
-        const key = commentDayKey(item.at);
-        const showMarker = key !== lastDay;
-        lastDay = key;
+      {folded.map((item) => {
+        if (item.kind === "run") {
+          const key = conversationRunKey(item);
+          const expanded = openChoice[key] ?? conversationRunHoldsThread(item, focusThreadId);
+          return (
+            <div key={key} className="flex min-w-0 flex-col gap-3">
+              <div className="flex min-w-0 flex-col">
+                {expanded ? null : dayMarker(item.firstAt)}
+                <ConversationFoldedRun
+                  run={item}
+                  expanded={expanded}
+                  onToggle={() =>
+                    setOpenChoice((current) => ({ ...current, [key]: !expanded }))
+                  }
+                />
+              </div>
+              {expanded ? item.threads.map((entry) => threadRow(entry)) : null}
+            </div>
+          );
+        }
         if (item.kind === "submitted") {
           return (
             <div key={`submission:${item.submission.id}`} className="flex min-w-0 flex-col">
-              {showMarker ? <Marker>{commentDayLabel(item.at)}</Marker> : null}
+              {dayMarker(item.at)}
               <ReviewSubmittedEvent submission={item.submission} />
             </div>
           );
         }
-        const thread = item.thread;
-        const anchor = thread.root.anchor;
-        return (
-          <div key={`thread:${thread.root.id}`} className="flex min-w-0 flex-col">
-            {showMarker ? <Marker>{commentDayLabel(thread.root.at)}</Marker> : null}
-            <ReviewThread
-              thread={thread}
-              reviewId={reviewId}
-              showAnchorContext
-              collapse="resolved"
-              highlighted={thread.root.id === focusThreadId}
-              onSeeInDiff={
-                anchor
-                  ? () => onOpenInDiff(thread.root.id, anchor.commitSha)
-                  : undefined
-              }
-            />
-          </div>
-        );
+        return threadRow(item);
       })}
     </div>
   );
