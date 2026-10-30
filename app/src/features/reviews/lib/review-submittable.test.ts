@@ -10,6 +10,7 @@ function thread(overrides: Partial<SubmittableThread> = {}): SubmittableThread {
     rootId: "thread-1",
     kind: "review",
     state: "open",
+    included: true,
     ...overrides,
   };
 }

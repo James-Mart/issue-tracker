@@ -1,7 +1,9 @@
 import { readyToTaskFrom } from "../../src/features/issues/lib/ready-to-task.js";
+import { includedWhenUnset } from "../../src/features/issues/lib/thread-inclusion.js";
 import {
   commentEditSchema,
   formatZodError,
+  isInclusionThreadEvent,
   parseComment,
   threadEventSchema,
   type Comment,
@@ -16,7 +18,7 @@ import {
 
 type ThreadStateEventName = Exclude<
   ThreadEventName,
-  "linked" | "researcher-session" | "converted"
+  "linked" | "researcher-session" | "converted" | "included" | "excluded"
 >;
 
 const THREAD_EVENT_STATE = {
@@ -101,14 +103,18 @@ export function formatThreadLine(thread: ThreadView): string {
   const kind = thread.kind === "question" ? " question" : "";
   const linked =
     thread.linkedTaskId !== undefined ? ` linked=${thread.linkedTaskId}` : "";
-  return `${thread.rootId} ${thread.state}${kind}${linked}`;
+  let inclusion = "";
+  if (thread.readyToTask) {
+    inclusion = thread.included ? " included" : " not included";
+  }
+  return `${thread.rootId} ${thread.state}${kind}${linked}${inclusion}`;
 }
 
 export function formatThreadsForView(threads: ThreadView[]): string[] {
   return threads.map(formatThreadLine);
 }
 
-/** Last resolution and link events win. Unknown thread ids become problems. */
+/** Last resolution, link, and inclusion events win. Unknown thread ids become problems. */
 export function deriveThreadViews(
   issueId: string,
   messages: Comment[],
@@ -123,6 +129,7 @@ export function deriveThreadViews(
   const linkedTaskId = new Map<string, string>();
   const researcherConversationId = new Map<string, string>();
   const converted = new Map<string, NonNullable<ThreadView["converted"]>>();
+  const includedByEvent = new Map<string, boolean>();
   for (const event of events) {
     if (!roots.has(event.threadId)) {
       problems.push({
@@ -141,6 +148,10 @@ export function deriveThreadViews(
     }
     if (event.event === "converted") {
       converted.set(event.threadId, { by: event.by, at: event.at });
+      continue;
+    }
+    if (isInclusionThreadEvent(event.event)) {
+      includedByEvent.set(event.threadId, event.event === "included");
       continue;
     }
     state.set(event.threadId, threadStateForEvent(event.event));
@@ -171,6 +182,7 @@ export function deriveThreadViews(
           : {}),
         ...(conversion ? { converted: conversion } : {}),
         readyToTask: readyToTaskFrom(kind, threadState, linked),
+        included: includedByEvent.get(root.id) ?? includedWhenUnset(root.source),
       };
     });
   return { threads, problems };

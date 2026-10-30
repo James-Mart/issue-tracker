@@ -8,12 +8,12 @@ export type SubmissionClaim = Pick<
 
 export type SubmittableThread = Pick<
   ThreadView,
-  "rootId" | "kind" | "state" | "linkedTaskId"
+  "rootId" | "kind" | "state" | "linkedTaskId" | "included"
 >;
 
 /**
- * A new Submit carries this thread when it is an open, unlinked review thread
- * that no earlier submission still claims.
+ * A new Submit carries this thread when it is included and it is an open,
+ * unlinked review thread that no earlier submission still claims.
  *
  * A submission claims the thread ids it froze at Submit. A `done` submission
  * releases a thread once that thread is open again — unresolved after the
@@ -28,6 +28,7 @@ export function isSubmittable(
   if (!readyToTaskFrom(thread.kind, thread.state, thread.linkedTaskId)) {
     return false;
   }
+  if (!thread.included) return false;
   return !submissions.some(
     (submission) =>
       submission.summaryCommentId === thread.rootId ||
@@ -49,6 +50,7 @@ type CommentCarrier = {
   kind: ThreadView["kind"];
   state: ThreadView["state"];
   linkedTaskId?: string;
+  included: boolean;
 };
 
 /** Comment threads whose root id passes `isSubmittable`. */
@@ -63,6 +65,7 @@ export function submittableCommentThreads<T extends CommentCarrier>(
         kind: thread.kind,
         state: thread.state,
         linkedTaskId: thread.linkedTaskId,
+        included: thread.included,
       },
       submissions,
     ),

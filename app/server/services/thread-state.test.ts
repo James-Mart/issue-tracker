@@ -36,12 +36,14 @@ describe("deriveThreadViews task links", () => {
         state: "open",
         linkedTaskId: "task-a",
         readyToTask: false,
+        included: true,
       },
       {
         rootId: "b",
         kind: "review",
         state: "open",
         readyToTask: true,
+        included: true,
       },
     ]);
   });

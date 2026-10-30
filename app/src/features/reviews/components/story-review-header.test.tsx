@@ -82,6 +82,7 @@ function readyThread(): CommentThread {
     kind: "review",
     state: "open",
     readyToTask: true,
+    included: true,
     replies: [],
     root: {
       id: "thread-1",

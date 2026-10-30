@@ -15,6 +15,7 @@ const question: CommentThreadData = {
   kind: "question",
   state: "open",
   readyToTask: false,
+  included: true,
   root: {
     id: "q-root",
     at: "2026-09-29T13:40:00.000Z",

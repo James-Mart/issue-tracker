@@ -273,7 +273,7 @@ export async function newSubmissionFields(
   };
 }
 
-/** Record a tasking submission of every ready thread. The route starts the tasker. */
+/** Record a tasking submission of every submittable thread. The route starts the tasker. */
 export async function submitReviewAsTasks(
   projectId: string,
   reviewId: string,

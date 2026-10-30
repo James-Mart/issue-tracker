@@ -118,9 +118,9 @@ function feedbackThreads(
 }
 
 /**
- * Queue a project-level Idea for auto-plan with every ready thread as its
- * feedback, record a done submission naming it, and resolve each thread with
- * a reply naming it.
+ * Queue a project-level Idea for auto-plan with every submittable thread as
+ * its feedback, record a done submission naming it, and resolve each thread
+ * it took with a reply naming it.
  */
 export async function submitReviewAsIdea(
   projectId: string,

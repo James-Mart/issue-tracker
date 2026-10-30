@@ -8,6 +8,7 @@ import type {
 } from "@server/schemas";
 import { isLineAnchor } from "./comment-anchor";
 import type { ThreadMessage } from "./comment-outbox";
+import { includedWhenUnset } from "./thread-inclusion";
 
 export const REVIEW_COMPOSER_LABEL =
   "Add a comment or ask a question about this change";
@@ -22,6 +23,7 @@ export type CommentThread = {
   researcherRun?: ResearcherRun;
   converted?: ThreadView["converted"];
   readyToTask: boolean;
+  included: boolean;
 };
 
 export function isQuestionThread(thread: { kind: ThreadView["kind"] }): boolean {
@@ -85,6 +87,7 @@ function outboxThread(root: ThreadMessage, replies: ThreadMessage[]): CommentThr
       ? { researcherRun: { status: "running" as const, startedAt: root.at } }
       : {}),
     readyToTask: false,
+    included: includedWhenUnset(root.source),
   };
 }
 
@@ -124,6 +127,7 @@ export function groupCommentThreads(
         ...(researcherRun ? { researcherRun } : {}),
         ...(converted ? { converted } : {}),
         readyToTask: view?.readyToTask ?? !isQuestionThread({ kind }),
+        included: view?.included ?? includedWhenUnset(root.source),
       };
     });
 }
