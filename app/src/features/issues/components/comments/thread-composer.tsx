@@ -1,17 +1,17 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { CommentInput } from "@server/schemas";
+import { ReviewComposer } from "@/features/reviews/components/review-composer";
 import {
-  ReviewComposer,
-  ReviewComposerDiscardDialog,
-} from "@/features/reviews/components/review-composer";
-import { replyDraftKey } from "@/features/reviews/lib/review-draft-key";
+  quoteDraftKey,
+  replyDraftKey,
+} from "@/features/reviews/lib/review-draft-key";
 import {
-  clearReviewDraft,
   replaceReviewDraft,
   reviewDraft,
   reviewDraftHasText,
 } from "@/features/reviews/lib/review-draft-storage";
 import {
+  quoteBlockquote,
   quoteCommentInput,
   quoteComposerLabel,
   type QuoteSource,
@@ -22,19 +22,10 @@ export type ThreadComposerIntent =
   | { mode: "reply"; threadId: string }
   | ({ mode: "quote" } & QuoteSource);
 
-type Slot = {
-  intent: ThreadComposerIntent;
-  pending: ThreadComposerIntent | null;
+type OpenThreadComposers = {
+  reply: boolean;
+  quote: QuoteSource | null;
 };
-
-export function sameThreadIntent(
-  a: ThreadComposerIntent,
-  b: ThreadComposerIntent,
-): boolean {
-  if (a.mode !== b.mode || a.threadId !== b.threadId) return false;
-  if (a.mode === "quote" && b.mode === "quote") return a.commentId === b.commentId;
-  return true;
-}
 
 export function threadComposerCommentInput(
   intent: ThreadComposerIntent,
@@ -44,115 +35,87 @@ export function threadComposerCommentInput(
   return { role: "human", body, replyTo: intent.threadId };
 }
 
-function seedThreadDraft(
-  issueId: string,
-  intent: ThreadComposerIntent,
-  replacing: boolean,
-): void {
-  const key = replyDraftKey(issueId, intent.threadId);
-  if (intent.mode === "quote") {
-    replaceReviewDraft(key, intent.body);
-    return;
-  }
-  if (replacing) replaceReviewDraft(key, "");
+function seedQuoteDraft(issueId: string, source: QuoteSource): void {
+  const key = quoteDraftKey(issueId, source.commentId);
+  // A non-empty draft is this comment's unsent text. Leave it.
+  if (reviewDraftHasText(reviewDraft(key))) return;
+  replaceReviewDraft(key, quoteBlockquote(source.body));
 }
 
-/** One reply/quote composer per thread. Switching a non-empty draft waits on discard. */
+/** Reply and quote composers for one issue. A quote draft is keyed by the quoted comment. */
 export function useThreadComposers(issueId: string) {
-  const [slots, setSlots] = useState<Record<string, Slot>>({});
+  const [slots, setSlots] = useState<Record<string, OpenThreadComposers>>({});
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
 
   const request = useCallback(
     (next: ThreadComposerIntent) => {
-      const current = slots[next.threadId];
-      if (current && sameThreadIntent(current.intent, next)) {
-        if (!current.pending) return;
+      if (next.mode === "reply") {
         setSlots((prev) => {
-          const slot = prev[next.threadId];
-          if (!slot) return prev;
-          return { ...prev, [next.threadId]: { ...slot, pending: null } };
+          const current = prev[next.threadId];
+          if (current?.reply) return prev;
+          return {
+            ...prev,
+            [next.threadId]: { reply: true, quote: current?.quote ?? null },
+          };
         });
         return;
       }
-      const key = replyDraftKey(issueId, next.threadId);
-      if (!current || !reviewDraftHasText(reviewDraft(key))) {
-        seedThreadDraft(issueId, next, current != null);
-        setSlots((prev) => ({
-          ...prev,
-          [next.threadId]: { intent: next, pending: null },
-        }));
-        return;
-      }
+      const open = slotsRef.current[next.threadId]?.quote;
+      if (open?.commentId !== next.commentId) seedQuoteDraft(issueId, next);
       setSlots((prev) => {
-        const slot = prev[next.threadId];
-        if (!slot) return prev;
-        return { ...prev, [next.threadId]: { ...slot, pending: next } };
+        const current = prev[next.threadId];
+        if (current?.quote?.commentId === next.commentId) return prev;
+        return {
+          ...prev,
+          [next.threadId]: { reply: current?.reply ?? false, quote: next },
+        };
       });
     },
-    [issueId, slots],
+    [issueId],
   );
 
-  const close = useCallback((threadId: string) => {
+  const close = useCallback((threadId: string, mode: "reply" | "quote") => {
     setSlots((prev) => {
-      if (!prev[threadId]) return prev;
-      const next = { ...prev };
-      delete next[threadId];
-      return next;
+      const current = prev[threadId];
+      if (!current) return prev;
+      const next: OpenThreadComposers =
+        mode === "reply"
+          ? { ...current, reply: false }
+          : { ...current, quote: null };
+      if (!next.reply && next.quote == null) {
+        const rest = { ...prev };
+        delete rest[threadId];
+        return rest;
+      }
+      return { ...prev, [threadId]: next };
     });
   }, []);
 
-  const keep = useCallback((threadId: string) => {
-    setSlots((prev) => {
-      const slot = prev[threadId];
-      if (!slot?.pending) return prev;
-      return { ...prev, [threadId]: { ...slot, pending: null } };
-    });
-  }, []);
-
-  const discard = useCallback(
-    (threadId: string) => {
-      const slot = slots[threadId];
-      if (!slot?.pending) return;
-      clearReviewDraft(replyDraftKey(issueId, threadId));
-      seedThreadDraft(issueId, slot.pending, true);
-      setSlots((prev) => ({
-        ...prev,
-        [threadId]: { intent: slot.pending!, pending: null },
-      }));
-    },
-    [issueId, slots],
-  );
-
-  const pendingThreadId =
-    Object.keys(slots).find((threadId) => slots[threadId]?.pending) ?? null;
-
-  return { slots, request, close, keep, discard, pendingThreadId };
+  return { slots, request, close };
 }
 
 export function ThreadComposerFields({
   issueId,
-  intent,
+  threadId,
   onSubmit,
   onCancel,
 }: {
   issueId: string;
-  intent: ThreadComposerIntent;
+  threadId: string;
   onSubmit: (body: string) => void;
   onCancel: () => void;
 }) {
-  const quote = intent.mode === "quote";
-  const label = quote ? quoteComposerLabel(intent.anchor) : undefined;
   return (
     <div
-      data-testid={quote ? "comment-quote-composer" : "comment-log-reply-composer"}
-      data-thread-id={intent.threadId}
-      data-comment-id={quote ? intent.commentId : undefined}
+      data-testid="comment-log-reply-composer"
+      data-thread-id={threadId}
+      className="min-w-0"
     >
-      {label ? <QuoteComposerLabel label={label} className="mb-2" /> : null}
       <ReviewComposer
-        draftKey={replyDraftKey(issueId, intent.threadId)}
-        placeholder={quote ? "Add a comment" : "Reply"}
+        draftKey={replyDraftKey(issueId, threadId)}
+        placeholder="Reply"
         submitLabel="Send"
-        autoFocus={quote}
         onSubmit={onSubmit}
         onCancel={onCancel}
       />
@@ -160,24 +123,43 @@ export function ThreadComposerFields({
   );
 }
 
-export function ThreadComposerDiscard({
-  threadId,
-  onKeep,
-  onDiscard,
+/** New-thread composer card, placed under the quoted thread rather than inside it. */
+export function QuoteThreadComposer({
+  issueId,
+  source,
+  onSubmit,
+  onCancel,
 }: {
-  threadId: string | null;
-  onKeep: (threadId: string) => void;
-  onDiscard: (threadId: string) => void;
+  issueId: string;
+  source: QuoteSource;
+  onSubmit: (body: string) => void;
+  onCancel: () => void;
 }) {
   return (
-    <ReviewComposerDiscardDialog
-      open={threadId != null}
-      onKeep={() => {
-        if (threadId) onKeep(threadId);
-      }}
-      onDiscard={() => {
-        if (threadId) onDiscard(threadId);
-      }}
-    />
+    <div
+      data-testid="comment-quote-card"
+      className="mt-3 flex min-w-0 flex-col rounded-md border border-border bg-card px-3 py-2"
+    >
+      <div
+        data-testid="comment-quote-composer"
+        data-thread-id={source.threadId}
+        data-comment-id={source.commentId}
+        className="min-w-0"
+      >
+        <QuoteComposerLabel
+          label={quoteComposerLabel(source.anchor, source.outdated === true)}
+          className="mb-2"
+        />
+        <ReviewComposer
+          draftKey={quoteDraftKey(issueId, source.commentId)}
+          placeholder="Add a comment"
+          submitLabel="Send"
+          caretAtEnd
+          baseline={quoteBlockquote(source.body)}
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+        />
+      </div>
+    </div>
   );
 }

@@ -184,6 +184,11 @@ type ReviewComposerFields = {
    */
   baseline?: string;
   autoFocus?: boolean;
+  /**
+   * Place the caret at the end after focus. A quote opens on the blank
+   * line under its blockquote.
+   */
+  caretAtEnd?: boolean;
   /** Hover hint on the field. Defaults to the send hint. */
   fieldHint?: string;
 };
@@ -209,11 +214,13 @@ export function ReviewComposer({
   onQuestion,
   baseline,
   autoFocus = false,
+  caretAtEnd = false,
   fieldHint = COMPOSER_HINT,
 }: ReviewComposerProps) {
   const [draft, setDraft] = useReviewDraft(draftKey);
   const [confirming, setConfirming] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const caretPlacedRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
@@ -291,6 +298,16 @@ export function ReviewComposer({
   useLayoutEffect(() => {
     applyReviewComposerHeight(fieldRef.current);
   }, [draft, fieldCovered]);
+
+  useLayoutEffect(() => {
+    if (!caretAtEnd || caretPlacedRef.current || fieldCovered) return;
+    const el = fieldRef.current;
+    if (!el) return;
+    caretPlacedRef.current = true;
+    const end = el.value.length;
+    el.focus();
+    el.setSelectionRange(end, end);
+  }, [caretAtEnd, draft, fieldCovered]);
 
   useLayoutEffect(() => {
     const caret = pendingCaretRef.current;
@@ -416,7 +433,7 @@ export function ReviewComposer({
             title={fieldHint}
             aria-label={placeholder}
             autoFocus={autoFocus}
-            className="max-h-[16.125rem] min-h-[4.875rem] w-full resize-none leading-5"
+            className="max-h-[16.125rem] min-h-[4.875rem] w-full min-w-0 resize-none leading-5"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button

@@ -119,8 +119,36 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function threadCard(container: ParentNode, threadId: string): HTMLElement {
+  const card = container.querySelector(`[data-thread-root="${threadId}"]`);
+  if (!(card instanceof HTMLElement)) throw new Error(`no thread ${threadId}`);
+  return card;
+}
+
+function openReply(card: HTMLElement, text: string): HTMLTextAreaElement {
+  click(
+    [...card.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Reply"),
+    ) ?? null,
+  );
+  const field = card.querySelector(
+    '[data-testid="comment-log-reply-composer"] textarea',
+  );
+  if (!(field instanceof HTMLTextAreaElement)) throw new Error("no reply field");
+  setTextarea(field, text);
+  return field;
+}
+
+function quoteFieldIn(container: ParentNode): HTMLTextAreaElement {
+  const field = container.querySelector(
+    '[data-testid="comment-quote-composer"] textarea',
+  );
+  if (!(field instanceof HTMLTextAreaElement)) throw new Error("no quote field");
+  return field;
+}
+
 describe("ReviewConversationTab", () => {
-  it("asks before a quote replaces an unsent reply, and keeps the reply when asked", () => {
+  it("opens a new-thread card below the thread and leaves the reply draft", () => {
     state.threads = [
       thread({
         root: {
@@ -135,47 +163,50 @@ describe("ReviewConversationTab", () => {
             commitSha: SHA,
           },
         },
+        replies: [
+          {
+            id: "reply-1",
+            at: "2026-09-28T16:45:00.000Z",
+            role: "human",
+            body: "One line.\nTwo lines.",
+          },
+        ],
       }),
     ];
     const container = mount();
-    const card = container.querySelector('[data-thread-root="note"]');
-    click(
-      [...(card?.querySelectorAll("button") ?? [])].find((button) =>
-        button.textContent?.includes("Reply"),
-      ) ?? null,
-    );
-    const replyField = card?.querySelector(
-      '[data-testid="comment-log-reply-composer"] textarea',
-    ) as HTMLTextAreaElement;
-    setTextarea(replyField, "Not yet.");
-    click(card?.querySelector('[data-testid="comment-quote"]') ?? null);
-    const dialog = document.body.querySelector(
-      '[data-testid="review-composer-discard-dialog"]',
-    );
-    expect(dialog?.textContent).toContain("Discard this draft?");
-    click(
-      [...(dialog?.querySelectorAll("button") ?? [])].find((button) =>
-        button.textContent?.includes("Keep editing"),
-      ) ?? null,
-    );
-    expect(
-      (
-        card?.querySelector(
-          '[data-testid="comment-log-reply-composer"] textarea',
-        ) as HTMLTextAreaElement | null
-      )?.value,
-    ).toBe("Not yet.");
-    expect(card?.querySelector('[data-testid="comment-quote-composer"]')).toBeNull();
+    const card = threadCard(container, "note");
+    const replyField = openReply(card, "Not yet.");
+    const quoteButtons = card.querySelectorAll('[data-testid="comment-quote"]');
+    click(quoteButtons[1] ?? null);
 
-    click(card?.querySelector('[data-testid="comment-quote"]') ?? null);
-    click(document.body.querySelector('[data-testid="review-composer-discard"]'));
-    const quoteField = card?.querySelector(
-      '[data-testid="comment-quote-composer"] textarea',
-    ) as HTMLTextAreaElement | null;
-    expect(quoteField?.value).toBe("Name the refusal.");
     expect(
-      card?.querySelector('[data-testid="comment-quote-label"]')?.textContent,
+      document.body.querySelector('[data-testid="review-composer-discard-dialog"]'),
+    ).toBeNull();
+    expect(replyField.value).toBe("Not yet.");
+    expect(
+      replyField.closest("[data-draft-key]")?.getAttribute("data-draft-key"),
+    ).toBe("review:story-1-review:reply:note");
+
+    const quoteCard = container.querySelector('[data-testid="comment-quote-card"]');
+    expect(quoteCard).not.toBeNull();
+    expect(card.contains(quoteCard)).toBe(false);
+    expect(card.nextElementSibling).toBe(quoteCard);
+    expect(
+      quoteCard?.querySelector('[data-testid="comment-quote-label"]')?.textContent,
     ).toBe("New thread on src/header.tsx · line 12");
+    const quoteField = quoteFieldIn(container);
+    expect(quoteField.value).toBe("> One line.\n> Two lines.\n\n");
+    expect(quoteField.selectionStart).toBe(quoteField.value.length);
+    expect(quoteField.selectionEnd).toBe(quoteField.value.length);
+    expect(document.activeElement).toBe(quoteField);
+    expect(
+      quoteField.closest("[data-draft-key]")?.getAttribute("data-draft-key"),
+    ).toBe("review:story-1-review:quote:reply-1");
+    expect(
+      container.querySelector('[data-testid="comment-quote-composer"]')?.getAttribute(
+        "data-comment-id",
+      ),
+    ).toBe("reply-1");
   });
 
   it("posts a general comment from the bottom composer and clears it at once", async () => {

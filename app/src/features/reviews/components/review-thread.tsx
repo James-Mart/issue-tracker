@@ -11,10 +11,11 @@ import {
   useOptionalDiffComposer,
 } from "@/features/issues/components/comments/diff-thread-composer";
 import {
-  ThreadComposerDiscard,
+  QuoteThreadComposer,
   ThreadComposerFields,
   threadComposerCommentInput,
   useThreadComposers,
+  type ThreadComposerIntent,
 } from "@/features/issues/components/comments/thread-composer";
 import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
 import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
@@ -52,19 +53,18 @@ export function ReviewThread({
     transcripts && researcherConversationId
       ? () => transcripts.openResearcher(thread.root.id, researcherConversationId)
       : undefined;
-  const slot = composers.slots[thread.root.id];
   const threadId = thread.root.id;
+  const open = composers.slots[threadId];
 
-  const sendLocal = (body: string) => {
-    if (!slot) return;
-    post(threadComposerCommentInput(slot.intent, body));
-    composers.close(threadId);
+  const submitComposer = (intent: ThreadComposerIntent, body: string) => {
+    post(threadComposerCommentInput(intent, body));
+    composers.close(threadId, intent.mode);
   };
 
   const diffReply = diff?.open?.kind === "reply" && diff.open.threadId === threadId;
   const diffQuote =
     diff?.open?.kind === "quote" && diff.open.threadId === threadId ? diff.open : null;
-  const localQuote = !diff && slot?.intent.mode === "quote" ? slot.intent : null;
+  const localQuote = !diff ? (open?.quote ?? null) : null;
 
   return (
     <>
@@ -86,35 +86,31 @@ export function ReviewThread({
               }
         }
         onQuote={(comment) => {
-          const source = quoteSource(threadId, comment, thread.root.anchor);
+          const source = quoteSource(
+            threadId,
+            comment,
+            thread.root.anchor,
+            thread.root.outdated === true,
+          );
           if (diff) diff.openQuote(quoteDiffComposer(source));
           else composers.request({ mode: "quote", ...source });
         }}
         replySlot={
           diffReply ? (
             <DiffThreadComposer target={{ kind: "reply", threadId }} />
-          ) : !diff && slot?.intent.mode === "reply" ? (
+          ) : !diff && open?.reply ? (
             <ThreadComposerFields
               issueId={reviewId}
-              intent={slot.intent}
-              onSubmit={sendLocal}
-              onCancel={() => composers.close(threadId)}
+              threadId={threadId}
+              onSubmit={(body) =>
+                submitComposer({ mode: "reply", threadId }, body)
+              }
+              onCancel={() => composers.close(threadId, "reply")}
             />
           ) : undefined
         }
-        quoteSlot={
-          diffQuote ? (
-            <DiffThreadComposer target={diffQuote} />
-          ) : localQuote ? (
-            <ThreadComposerFields
-              issueId={reviewId}
-              intent={localQuote}
-              onSubmit={sendLocal}
-              onCancel={() => composers.close(threadId)}
-            />
-          ) : undefined
-        }
-        quoteCommentId={diffQuote?.commentId ?? localQuote?.commentId}
+        quoteSlot={diffQuote ? <DiffThreadComposer target={diffQuote} /> : undefined}
+        quoteCommentId={diffQuote?.commentId}
         resolvePending={events.isPending}
         onEdit={async (commentId, body) => {
           await edit.mutateAsync({ commentId, body });
@@ -124,13 +120,17 @@ export function ReviewThread({
         )}
         onOpenResearcher={openResearcher}
       />
-      {diff ? null : (
-        <ThreadComposerDiscard
-          threadId={composers.pendingThreadId}
-          onKeep={composers.keep}
-          onDiscard={composers.discard}
+      {localQuote ? (
+        <QuoteThreadComposer
+          key={localQuote.commentId}
+          issueId={reviewId}
+          source={localQuote}
+          onSubmit={(body) =>
+            submitComposer({ mode: "quote", ...localQuote }, body)
+          }
+          onCancel={() => composers.close(threadId, "quote")}
         />
-      )}
+      ) : null}
     </>
   );
 }

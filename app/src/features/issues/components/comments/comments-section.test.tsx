@@ -116,13 +116,39 @@ function task(): IssueDetail {
 }
 
 function mount(): HTMLDivElement {
+  return mountIssue(task());
+}
+
+function story(): Extract<IssueDetail, { kind: "story" }> {
+  return {
+    id: "handoff",
+    kind: "story",
+    title: "Human handoff",
+    partOf: "runtime-validation-loop",
+    order: 0,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+    archived: false,
+    description: "Story body",
+    version: "1",
+    labels: [],
+    needsAttention: false,
+    attentionReason: null,
+    branchName: "human-handoff",
+    merged: false,
+    reviewedTasks: [],
+    review: "awaiting-human",
+  };
+}
+
+function mountIssue(issue: IssueDetail): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => {
     root.render(
       <MemoryRouter>
-        <IssueCommentsSection issue={task()} />
+        <IssueCommentsSection issue={issue} />
       </MemoryRouter>,
     );
   });
@@ -192,6 +218,61 @@ describe("IssueCommentsSection", () => {
         '[data-testid="comment-log-reply-composer"][data-thread-id="unanchored-root"]',
       ),
     ).toBeNull();
+  });
+
+  it("opens a new-thread card below a story thread and posts a root with the copied anchor", () => {
+    commentsState.messages = [anchoredRoot];
+    const container = mountIssue(story());
+    const card = container.querySelector('[data-thread-root="anchored-root"]');
+    if (!(card instanceof HTMLElement)) throw new Error("no thread");
+
+    act(() => {
+      [...card.querySelectorAll("button")]
+        .find((button) => button.textContent?.includes("Reply"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const reply = card.querySelector(
+      '[data-testid="comment-log-reply-composer"] textarea',
+    );
+    if (!(reply instanceof HTMLTextAreaElement)) throw new Error("no reply");
+    setDraft(reply, "Leave this reply.");
+
+    act(() => {
+      card
+        .querySelector('[data-testid="comment-quote"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const quoteCard = container.querySelector('[data-testid="comment-quote-card"]');
+    expect(quoteCard).not.toBeNull();
+    expect(card.contains(quoteCard)).toBe(false);
+    expect(card.nextElementSibling).toBe(quoteCard);
+    expect(
+      quoteCard?.querySelector('[data-testid="comment-quote-label"]')?.textContent,
+    ).toBe("New thread on app/server/services/diff-fetch.ts · line 94");
+    const quoteField = quoteCard?.querySelector("textarea");
+    if (!(quoteField instanceof HTMLTextAreaElement)) throw new Error("no quote");
+    expect(quoteField.value).toBe(
+      "> Scope drafts per thread so Diff and Overview stay isolated.\n\n",
+    );
+    expect(reply.value).toBe("Leave this reply.");
+
+    act(() => {
+      quoteCard
+        ?.querySelector('[aria-label="Send"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(postComment).toHaveBeenCalledWith({
+      role: "human",
+      body: "> Scope drafts per thread so Diff and Overview stay isolated.",
+      anchor: anchoredRoot.anchor,
+    });
+    expect(
+      (postComment.mock.calls[0]?.[0] as { replyTo?: unknown }).replyTo,
+    ).toBeUndefined();
+    expect(container.querySelector('[data-testid="comment-quote-card"]')).toBeNull();
+    expect(reply.value).toBe("Leave this reply.");
   });
 });
 
