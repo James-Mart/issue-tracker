@@ -17,6 +17,7 @@ export function CommentAnchorMeta({
   onSeeInDiff,
   showLocation = true,
   badges,
+  actions,
 }: {
   anchor: NonNullable<CommentMessage["anchor"]>;
   outdated: boolean;
@@ -24,6 +25,8 @@ export function CommentAnchorMeta({
   showLocation?: boolean;
   /** Status chips (question, dismissed) in this header row, beside outdated. */
   badges?: ReactNode;
+  /** Right end of the header (submission inclusion). */
+  actions?: ReactNode;
 }) {
   const lineAnchor = isLineAnchor(anchor);
   return (
@@ -61,19 +64,24 @@ export function CommentAnchorMeta({
         </Badge>
       ) : null}
       {badges}
-      {onSeeInDiff ? (
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
-          className="ml-auto shrink-0"
-          title={SEE_IN_DIFF_LABEL}
-          aria-label={SEE_IN_DIFF_LABEL}
-          data-testid="see-in-diff"
-          onClick={onSeeInDiff}
-        >
-          <FileDiff className="h-3.5 w-3.5" aria-hidden />
-        </Button>
+      {onSeeInDiff || actions ? (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {onSeeInDiff ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="shrink-0"
+              title={SEE_IN_DIFF_LABEL}
+              aria-label={SEE_IN_DIFF_LABEL}
+              data-testid="see-in-diff"
+              onClick={onSeeInDiff}
+            >
+              <FileDiff className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          ) : null}
+          {actions}
+        </div>
       ) : null}
     </header>
   );

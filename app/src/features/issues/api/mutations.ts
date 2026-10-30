@@ -14,21 +14,22 @@ import {
   type CreateChannelSessionBody,
   type CreateChannelSessionResult,
 } from "./channel-sessions";
-import type {
-  ChannelSessionListItem,
-  Comment,
-  CommentInput,
-  CommentMessage,
-  CommentsResponse,
-  ConversationChannel,
-  CreateInput,
-  IssueDetail,
-  IssuePatch,
-  IssueRecord,
-  IssuesResponse,
-  MergeStoryBody,
-  ThreadEventRequest,
-  ThreadView,
+import {
+  type ChannelSessionListItem,
+  type Comment,
+  type CommentInput,
+  type CommentMessage,
+  type CommentsResponse,
+  type ConversationChannel,
+  type CreateInput,
+  type IssueDetail,
+  type IssuePatch,
+  type IssueRecord,
+  type IssuesResponse,
+  type MergeStoryBody,
+  type ThreadEventRequest,
+  type ThreadView,
+  isInclusionThreadEvent,
 } from "@server/schemas";
 import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
@@ -129,14 +130,38 @@ export function usePostThreadEvent(issueId: string) {
       threadId: string;
       event: ThreadEventRequest["event"];
       body?: string;
-    }
+    },
+    { previous?: CommentsResponse }
   >({
     mutationFn: ({ threadId, event, body }) =>
       request(`/api/issues/${issueId}/threads/${threadId}/events`, {
         method: "POST",
         body: body === undefined ? { event } : { event, body },
       }),
-    onError: (err) => toast.error(messageOf(err)),
+    onMutate: async ({ threadId, event }) => {
+      if (!isInclusionThreadEvent(event)) return {};
+      // The header Submit count is read from this cache, so the flip shows
+      // before the comments refetch returns.
+      await qc.cancelQueries({ queryKey: issuesKeys.comments(issueId) });
+      const previous = qc.getQueryData<CommentsResponse>(issuesKeys.comments(issueId));
+      const included = event === "included";
+      qc.setQueryData<CommentsResponse>(issuesKeys.comments(issueId), (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          threads: current.threads.map((thread) =>
+            thread.rootId === threadId ? { ...thread, included } : thread,
+          ),
+        };
+      });
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(issuesKeys.comments(issueId), context.previous);
+      }
+      toast.error(messageOf(err));
+    },
     onSettled: () =>
       qc.invalidateQueries({ queryKey: issuesKeys.comments(issueId) }),
   });

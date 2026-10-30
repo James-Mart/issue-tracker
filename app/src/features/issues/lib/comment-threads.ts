@@ -1,10 +1,11 @@
-import type {
-  CommentMessage,
-  CommentThreadView,
-  Problem,
-  ResearcherRun,
-  ThreadEventRequest,
-  ThreadView,
+import {
+  type CommentMessage,
+  type CommentThreadView,
+  type Problem,
+  type ResearcherRun,
+  type ThreadEventRequest,
+  type ThreadView,
+  isInclusionThreadEvent,
 } from "@server/schemas";
 import { isLineAnchor } from "./comment-anchor";
 import type { ThreadMessage } from "./comment-outbox";
@@ -64,6 +65,30 @@ export function threadStateActions(
   return {
     onResolve: () => post("resolved"),
     onUnresolve: () => post("unresolved"),
+  };
+}
+
+/** What `CommentThread` renders for an open, unlinked review thread. */
+export type ThreadInclusionControl = {
+  included: boolean;
+  pending: boolean;
+  onToggle: () => void;
+};
+
+/** Inclusion control for an open, unlinked review thread. Absent otherwise. */
+export function threadInclusionControl(
+  thread: CommentThread,
+  post: (event: ThreadEventRequest["event"]) => void,
+  pending: { isPending: boolean; event?: ThreadEventRequest["event"] },
+): ThreadInclusionControl | undefined {
+  if (!thread.readyToTask) return undefined;
+  return {
+    included: thread.included,
+    pending:
+      pending.isPending &&
+      pending.event !== undefined &&
+      isInclusionThreadEvent(pending.event),
+    onToggle: () => post(thread.included ? "excluded" : "included"),
   };
 }
 
