@@ -17,7 +17,11 @@ import {
   useThreadComposers,
   type ThreadComposerIntent,
 } from "@/features/issues/components/comments/thread-composer";
-import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
+import {
+  isPlainNote,
+  threadInclusionControl,
+  threadStateActions,
+} from "@/features/issues/lib/comment-threads";
 import {
   quoteComposerAmongThreads,
   quoteComposerForThread,
@@ -117,6 +121,11 @@ export function ReviewThread({
         }}
         {...threadStateActions(thread, (event) =>
           events.mutate({ threadId, event }),
+        )}
+        inclusion={threadInclusionControl(
+          thread,
+          (event) => events.mutate({ threadId, event }),
+          { isPending: events.isPending, event: events.variables?.event },
         )}
         onOpenResearcher={openResearcher}
       />

@@ -9,6 +9,7 @@ import {
   formatAnchorLineLabel,
   isQuestionThread,
   type CommentThread as CommentThreadData,
+  type ThreadInclusionControl,
 } from "../../lib/comment-threads";
 import type { ThreadMessage } from "../../lib/comment-outbox";
 import { commentCountLabel } from "../../lib/comments";
@@ -23,6 +24,7 @@ import {
   useCommentEditOffer,
 } from "./comment-edit";
 import { AuthorActionRow, QuoteButton } from "./quote-button";
+import { ThreadInclusionToggle } from "./thread-inclusion-toggle";
 import { CommentSendingMark } from "./comment-delivery";
 import {
   CommentBotIcon,
@@ -54,6 +56,7 @@ export function CommentThread({
   resolvePending = false,
   onEdit,
   onQuote,
+  inclusion,
   quoteSlot,
   quoteCommentId,
   reveal = false,
@@ -83,6 +86,11 @@ export function CommentThread({
   onEdit?: (commentId: string, body: string) => Promise<void>;
   /** Quote on each stored comment, and on a collapsed bar. */
   onQuote?: (comment: ThreadMessage) => void;
+  /**
+   * When set, sits at the right of the anchor header, or beside Quote on an
+   * inline root and on a collapsed Outdated bar.
+   */
+  inclusion?: ThreadInclusionControl;
   /** Composer open beside `quoteCommentId`, or under the bar while collapsed. */
   quoteSlot?: ReactNode;
   quoteCommentId?: string;
@@ -124,6 +132,14 @@ export function CommentThread({
     showQuestionBadge,
     dismissed,
   });
+  const inclusionHost = inclusionToggleHost({ showAnchorHeader, collapsed });
+  const inclusionToggle = inclusion ? (
+    <ThreadInclusionToggle
+      included={inclusion.included}
+      pending={inclusion.pending}
+      onToggle={inclusion.onToggle}
+    />
+  ) : null;
 
   return (
     <article
@@ -155,6 +171,7 @@ export function CommentThread({
               />
             ) : null
           }
+          actions={inclusionHost === "anchor" ? inclusionToggle : null}
         />
       ) : null}
       {thread.linkedTaskId && !question && (!collapsed || showAnchorHeader) ? (
@@ -180,6 +197,7 @@ export function CommentThread({
                 />
               ) : null
             }
+            inclusion={inclusionHost === "root" ? inclusionToggle : null}
           />
           {thread.replies.map((comment) => (
             <ThreadComment
@@ -260,6 +278,7 @@ export function CommentThread({
           onUnresolve={onUnresolve}
           onReopen={onReopen}
           onQuote={quote && !expanded ? () => quote(thread.root) : undefined}
+          inclusion={inclusionHost === "bar" ? inclusionToggle : null}
         />
       ) : null}
       {collapsed && quoteSlot ? <div className="pt-2">{quoteSlot}</div> : null}
@@ -369,6 +388,7 @@ function CollapsedThreadBar({
   onUnresolve,
   onReopen,
   onQuote,
+  inclusion,
 }: {
   count: number;
   lineLabel?: string;
@@ -382,6 +402,7 @@ function CollapsedThreadBar({
   onUnresolve?: () => void;
   onReopen?: () => void;
   onQuote?: () => void;
+  inclusion?: ReactNode;
 }) {
   const toggleLabel = expanded ? "Collapse thread" : "Expand thread";
   return (
@@ -441,6 +462,7 @@ function CollapsedThreadBar({
           </Button>
         ) : null}
         {onQuote ? <QuoteButton onClick={onQuote} compact={false} /> : null}
+        {inclusion}
         <Button
           type="button"
           variant="ghost"
@@ -490,6 +512,18 @@ function ThreadStatusBadges({
   );
 }
 
+function inclusionToggleHost({
+  showAnchorHeader,
+  collapsed,
+}: {
+  showAnchorHeader: boolean;
+  collapsed: boolean;
+}): "anchor" | "root" | "bar" {
+  if (showAnchorHeader) return "anchor";
+  if (collapsed) return "bar";
+  return "root";
+}
+
 function statusBadgePlacement({
   showAnchorHeader,
   collapsed,
@@ -520,6 +554,7 @@ function ThreadComment({
   onQuote,
   quoteSlot,
   badges,
+  inclusion,
 }: {
   comment: ThreadMessage;
   issueId?: string;
@@ -527,6 +562,8 @@ function ThreadComment({
   onQuote?: (comment: ThreadMessage) => void;
   quoteSlot?: ReactNode;
   badges?: ReactNode;
+  /** Right end of this comment's meta line. The root of an inline thread. */
+  inclusion?: ReactNode;
 }) {
   const { author, roleBadge } = commentHeaderLabels(comment.role, comment.name);
   return (
@@ -557,7 +594,12 @@ function ThreadComment({
             </>
           }
           status={<CommentSendingMark message={comment} />}
-          actions={<CommentAuthorActions onQuote={onQuote ? () => onQuote(comment) : undefined} />}
+          actions={
+            <CommentAuthorActions
+              onQuote={onQuote ? () => onQuote(comment) : undefined}
+              trailing={inclusion}
+            />
+          }
         />
         <CommentEditBody />
         {quoteSlot}
@@ -566,13 +608,20 @@ function ThreadComment({
   );
 }
 
-function CommentAuthorActions({ onQuote }: { onQuote?: () => void }) {
+function CommentAuthorActions({
+  onQuote,
+  trailing,
+}: {
+  onQuote?: () => void;
+  trailing?: ReactNode;
+}) {
   const showEdit = useCommentEditOffer();
-  if (!showEdit && !onQuote) return null;
+  if (!showEdit && !onQuote && !trailing) return null;
   return (
     <AuthorActionRow>
       {showEdit ? <CommentEditAction /> : null}
       {onQuote ? <QuoteButton onClick={onQuote} /> : null}
+      {trailing}
     </AuthorActionRow>
   );
 }

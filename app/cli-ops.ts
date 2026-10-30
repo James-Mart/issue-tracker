@@ -23,7 +23,10 @@ import {
 import { editComment } from "./server/services/comment-edit.js";
 import { enrichCommentsForRead } from "./server/services/researcher-runs.js";
 import { formatThreadsForView } from "./server/services/thread-state.js";
-import { appendThreadEvent } from "./server/services/thread-events.js";
+import {
+  appendThreadEvent,
+  setThreadInclusion,
+} from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
 import {
   appendComment,
@@ -404,6 +407,7 @@ type CommentCliOptions = {
   replyTo?: string;
   resolve?: boolean;
   linkTask?: string;
+  include?: string;
   kind?: string;
   edit?: string;
 };
@@ -515,12 +519,16 @@ function applyCommentOptions(cmd: Command): Command {
       "record that a Task addresses that review thread; requires --reply-to",
     )
     .option(
+      "--include <on|off>",
+      "set whether that open review thread goes out with the next submission; requires --reply-to and posts no body; exclusive with --body, --resolve, --link-task, and anchor flags",
+    )
+    .option(
       "--kind <question>",
       "start a question thread; new review thread root only",
     )
     .option(
       "--edit <commentId>",
-      "replace that comment's body (exclusive with anchor, --reply-to, --kind, --resolve, and --link-task)",
+      "replace that comment's body (exclusive with anchor, --reply-to, --kind, --resolve, --link-task, and --include)",
     );
 }
 
@@ -543,7 +551,7 @@ function assertQuestionKind(opts: CommentCliOptions): void {
   if (opts.kind !== "question") {
     throw new Error("--kind must be question");
   }
-  if (opts.replyTo || opts.resolve || opts.linkTask) {
+  if (opts.replyTo || opts.resolve || opts.linkTask || opts.include !== undefined) {
     throw new Error("--kind question applies only to a new thread root");
   }
 }
@@ -558,10 +566,11 @@ function editCommentFromCli(
     opts.kind !== undefined ||
     opts.resolve ||
     opts.linkTask !== undefined ||
+    opts.include !== undefined ||
     anchorFlagsPresent(opts)
   ) {
     throw new Error(
-      "--edit cannot be combined with anchor, --reply-to, --kind, --resolve, or --link-task",
+      "--edit cannot be combined with anchor, --reply-to, --kind, --resolve, --link-task, or --include",
     );
   }
   if (!opts.body) throw new Error("--body is required");
@@ -574,6 +583,24 @@ async function printComment(
 ): Promise<Comment | undefined> {
   if (opts.edit !== undefined) return editCommentFromCli(id, opts.edit, opts);
   assertQuestionKind(opts);
+  if (opts.include !== undefined) {
+    if (opts.body !== undefined) {
+      throw new Error("--include cannot be combined with --body");
+    }
+    if (opts.resolve) {
+      throw new Error("--include cannot be combined with --resolve");
+    }
+    if (opts.linkTask !== undefined) {
+      throw new Error("--include cannot be combined with --link-task");
+    }
+    assertNoAnchorForThreadAction(opts, "--include");
+    if (!opts.replyTo) {
+      throw new Error("--include requires --reply-to");
+    }
+    const included = coerceEnum(opts.include, "include", ["on", "off"]);
+    await setThreadInclusion(id, opts.replyTo, included === "on", cliAuthor(opts));
+    return undefined;
+  }
   if (opts.linkTask) {
     assertNoAnchorForThreadAction(opts, "--link-task");
     if (!opts.replyTo) {

@@ -36,7 +36,8 @@ function seed(): void {
 async function load() {
   const submit = await import("./review-submit.js");
   const issues = await import("./issues.js");
-  return { ...submit, ...issues };
+  const threads = await import("./thread-events.js");
+  return { ...submit, ...issues, ...threads };
 }
 
 function readDescription(id: string): string {
@@ -111,6 +112,37 @@ describe("submit review as a new idea", () => {
       expect(reply).toMatchObject({
         role: REVIEW_SUBMIT_ROLE,
         body: `Handled in follow-up idea [${idea.id}](issue:${idea.id}).`,
+      });
+    }
+  });
+
+  it("resolves only included threads and leaves the rest open", async () => {
+    seed();
+    const { submitReview, appendComment, readComments, setThreadInclusion } = await load();
+    const taken = await appendComment(REVIEW_ID, { role: "human", body: "Take this." });
+    const held = await appendComment(REVIEW_ID, { role: "human", body: "Hold this." });
+    const mirrored = await appendComment(REVIEW_ID, {
+      role: "human",
+      body: "From GitHub.",
+      source: {
+        kind: "github",
+        id: "IC_1",
+        url: "https://github.com/example/pull/1#discussion_r1",
+      },
+    });
+    await setThreadInclusion(REVIEW_ID, held.id, false, { role: "human" });
+
+    const view = await submitReview("p", REVIEW_ID, { destination: "idea" });
+    expect(view.submissions[0]).toMatchObject({ threadIds: [taken.id] });
+
+    const comments = readComments(REVIEW_ID);
+    expect(comments.threads.find((thread) => thread.rootId === taken.id)?.state).toBe(
+      "resolved",
+    );
+    for (const threadId of [held.id, mirrored.id]) {
+      expect(comments.threads.find((thread) => thread.rootId === threadId)).toMatchObject({
+        state: "open",
+        included: false,
       });
     }
   });

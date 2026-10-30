@@ -223,6 +223,18 @@ export type CommentMessage = Comment & {
   editable?: boolean;
 };
 
+export const INCLUSION_THREAD_EVENTS = ["included", "excluded"] as const;
+
+export function isInclusionThreadEvent(
+  event: string,
+): event is (typeof INCLUSION_THREAD_EVENTS)[number] {
+  return INCLUSION_THREAD_EVENTS.some((name) => name === event);
+}
+
+/** Inclusion changes the thread's submission flag and does not post a reply. */
+export const INCLUSION_EVENT_TAKES_NO_BODY =
+  "an inclusion event does not take a body";
+
 export const THREAD_EVENTS = [
   "resolved",
   "unresolved",
@@ -230,6 +242,7 @@ export const THREAD_EVENTS = [
   "dismissed",
   "reopened",
   "converted",
+  ...INCLUSION_THREAD_EVENTS,
   "researcher-session",
 ] as const;
 export const THREAD_UI_EVENTS = [
@@ -238,6 +251,7 @@ export const THREAD_UI_EVENTS = [
   "dismissed",
   "reopened",
   "converted",
+  ...INCLUSION_THREAD_EVENTS,
 ] as const;
 export const THREAD_STATES = ["open", "resolved", "dismissed"] as const;
 
@@ -308,7 +322,16 @@ export const threadEventRequestSchema = z
     body: z.string().optional(),
     name: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (isInclusionThreadEvent(value.event) && value.body !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: INCLUSION_EVENT_TAKES_NO_BODY,
+        path: ["body"],
+      });
+    }
+  });
 
 export type ThreadEventRequest = z.infer<typeof threadEventRequestSchema>;
 
@@ -326,6 +349,11 @@ export interface ThreadView {
     at: string;
   };
   readyToTask: boolean;
+  /**
+   * Latest `included` or `excluded` event, or the origin default when none is
+   * recorded. Meaningful for an open, unlinked review thread.
+   */
+  included: boolean;
 }
 
 /**

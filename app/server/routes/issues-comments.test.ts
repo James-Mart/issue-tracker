@@ -118,6 +118,7 @@ describe("comments HTTP API", () => {
       kind: "review",
       state: "resolved",
       readyToTask: false,
+      included: true,
     });
     expect(resolvedJson.event.event).toBe("resolved");
     expect(resolvedJson.event.by).toEqual({ role: "human" });
@@ -131,7 +132,13 @@ describe("comments HTTP API", () => {
     };
     expect(resolvedView.messages).toHaveLength(2);
     expect(resolvedView.threads).toEqual([
-      { rootId: threadId, kind: "review", state: "resolved", readyToTask: false },
+      {
+        rootId: threadId,
+        kind: "review",
+        state: "resolved",
+        readyToTask: false,
+        included: true,
+      },
     ]);
 
     const unresolved = await fetch(

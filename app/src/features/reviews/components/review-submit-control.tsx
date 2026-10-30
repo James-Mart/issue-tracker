@@ -122,7 +122,7 @@ export function ReviewSubmitActions({
   projectId,
   review,
   header,
-  readyThreads,
+  submissionThreads,
   onAcknowledge,
   onAcknowledgeEnd,
   onRetryStart,
@@ -132,8 +132,10 @@ export function ReviewSubmitActions({
   projectId: string;
   review: ReviewView;
   header: ReviewSubmitHeader;
-  /** Threads a Submit carries; undefined until comments load. */
-  readyThreads: readonly CommentThread[] | undefined;
+  /** Included and held-back threads; undefined until comments load. */
+  submissionThreads:
+    | { included: readonly CommentThread[]; notIncluded: readonly CommentThread[] }
+    | undefined;
   /** True when the Project has a coding-standards doc. Undefined while that is still loading. */
   hasCodingStandards: boolean | undefined;
   /** Tasking is acknowledged only for the Story destination. */
@@ -195,11 +197,13 @@ export function ReviewSubmitActions({
         />
         <ReviewStatusAction projectId={projectId} review={review} />
       </div>
-      {header.submit && readyThreads ? (
+      {header.submit && submissionThreads ? (
         <SubmitReviewDialog
           open={dialogOpen}
           storyId={review.story}
-          threads={readyThreads}
+          reviewId={review.id}
+          includedThreads={submissionThreads.included}
+          notIncludedThreads={submissionThreads.notIncluded}
           destination={destination}
           onDestinationChange={setDestination}
           summary={summary}

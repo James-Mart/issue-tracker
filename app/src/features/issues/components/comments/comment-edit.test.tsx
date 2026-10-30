@@ -21,6 +21,7 @@ function thread(): CommentThreadData {
     kind: "review",
     state: "open",
     readyToTask: true,
+    included: true,
     root: {
       id: "c1",
       at: "2026-09-28T16:43:00.000Z",

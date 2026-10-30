@@ -73,6 +73,13 @@ export function threadsToSubmitLabel(count: number): string {
   return `Threads to submit (${count})`;
 }
 
+export function notIncludedLabel(count: number): string {
+  return `${count} not included`;
+}
+
+export const NO_THREADS_INCLUDED =
+  "No threads included — turn on a send toggle below to submit feedback.";
+
 /** The timeline line for a done submission, to Tasks or to a follow-up Idea. */
 export function reviewSubmittedLabel(
   submission: Pick<Extract<ReviewSubmission, { status: "done" }>, "threadIds" | "taskIds" | "ideaId">,

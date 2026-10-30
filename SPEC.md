@@ -435,7 +435,9 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   ` ({type})` when the comment has a `type`. On a Story or review, `--comments` also
   appends `--- threads ---`: one line per thread root,
   `{rootId} open|resolved|dismissed`, plus ` question` when the thread is a
-  question, plus ` linked={taskId}` when that thread is linked to a Task. A
+  question, plus ` linked={taskId}` when that thread is linked to a Task,
+  plus ` included` or ` not included` when that thread is an open review
+  thread with no linked Task. A
   converted question is a review thread, so that line omits ` question`. After
   that thread's replies, `--comments` prints
   `  [{at}] {name} converted this question to a review comment`. See
@@ -447,8 +449,8 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 - **`comment`** — `issue comment <id> --role <role> --body <text>`
   (optional `--name`; optional anchor flags `--path`, `--side`, `--line`,
   optional `--start-line`, `--commit`; optional `--reply-to <commentId>`;
-  optional `--resolve`; optional `--kind question`; optional
-  `--edit <commentId>`).
+  optional `--resolve`; optional `--include on|off`; optional `--kind question`;
+  optional `--edit <commentId>`).
   Appends one message to `comments.jsonl` (the CLI verb is `comment`; the
   on-disk log is `comments.jsonl`); prints the server-stamped `id` on stdout;
   refuses a Project id. A line anchor is `--path`, `--side`, `--line`, and
@@ -458,11 +460,14 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
   `--reply-to` is mutually exclusive with
   anchor flags. `--resolve` replies and resolves that review thread in the
   same write; it requires `--reply-to` and `--body`, and there is no CLI
-  unresolve. `--kind question` starts a question thread on a new review thread
+  unresolve. `--include on|off` records `included` or `excluded` on that
+  thread without posting a body and prints nothing; it requires `--reply-to`
+  and is mutually exclusive with `--body`, `--resolve`, `--link-task`, and
+  anchor flags. `--kind question` starts a question thread on a new review thread
   root (a root with no `kind` is a review thread) and applies only to that
   new root, not a reply. `--edit` appends a `comment-edit` for that comment
   and is exclusive with anchor flags, `--reply-to`, `--kind`, `--resolve`,
-  and `--link-task`. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
+  `--link-task`, and `--include`. See [`comments.jsonl` message shape](#commentsjsonl-message-shape)
   and [Service layer](#service-layer).
 - **`merge`** — `issue merge <storyId> [--auto] [--match-head-commit <sha>]`;
   shells out to `gh pr merge --merge` with owner/repo/number from the Story's
@@ -1478,7 +1483,7 @@ state. Thread events are recorded only on a review issue's log. Members:
 | member | type | notes |
 | --- | --- | --- |
 | `threadId` | string | id of the thread **root** |
-| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"converted"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`, and `recovered: true` when that session replaced an archived or unreadable conversation. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread. `converted` is human-only and applies only to an open question thread; it turns that thread into a review thread without removing its comments |
+| `event` | `"resolved"` \| `"unresolved"` \| `"linked"` \| `"dismissed"` \| `"reopened"` \| `"converted"` \| `"included"` \| `"excluded"` \| `"researcher-session"` | `linked` carries `taskId`. `researcher-session` carries `conversationId`, and `recovered: true` when that session replaced an archived or unreadable conversation. `dismissed`, `reopened`, and `researcher-session` apply only to a question thread. `converted` is human-only and applies only to an open question thread; it turns that thread into a review thread without removing its comments. `included` and `excluded` record whether an open, unlinked review thread goes out with the next submission; the latest one wins, and the event carries no reply. With neither event, a root whose `source.kind` is `github` is not included and every other root is. Question, task-linked, and non-open threads refuse the event |
 | `by` | `{ role, name? }` | who recorded the event |
 | `at` | ISO string | server-stamped on append |
 
@@ -1510,7 +1515,7 @@ comment-edit, stamps `role` `human`, and returns the updated message.
 `issue comment <id> --edit <commentId> --body <text>` appends the same
 record using `--role` and optional `--name`, and prints the comment id.
 `--edit` is exclusive with anchor flags, `--reply-to`, and `--kind`, and
-also with `--resolve` and `--link-task`. A non-editable comment is refused
+also with `--resolve`, `--link-task`, and `--include`. A non-editable comment is refused
 with `cannot edit comment "<id>": <reason>`, where `<reason>` is
 `submitted`, `linked`, `question`, `researcher reply`, `note`,
 `resolved` (the thread is no longer open), or `github`. The HTTP status is `409`. An
@@ -1518,7 +1523,7 @@ unknown comment is `404`. The append changes `comments.jsonl`, so the
 issues watcher publishes a comments-scope event.
 
 `GET /api/issues/:id/comments` returns `messages` plus derived `threads`:
-`{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, researcherConversationId?, readyToTask, researcherRun?, converted? }`.
+`{ rootId, kind: "review" | "question", state: "open" | "resolved" | "dismissed", linkedTaskId?, researcherConversationId?, readyToTask, included, researcherRun?, converted? }`.
 Every message carries `editable: boolean` from the comment-edit rule above,
 and its `body` is the latest edit.
 `kind` is `review` when a `converted` event exists for that root; otherwise it
@@ -1528,7 +1533,16 @@ for that root (`resolved`, `unresolved` → open, `dismissed`, `reopened` →
 open), or `open` when there is none. `converted` does not change `state`.
 `readyToTask` is true only for an open review thread with no linked Task. A
 question thread is never ready to task; a converted thread is a review thread
-and follows that rule. `researcherConversationId` is the last
+and follows that rule. `included` is the latest `included` or `excluded`
+event, or, when neither has been recorded, `false` for a root whose
+`source.kind` is `github` and `true` for every other root. It is meaningful
+on an open review thread with no linked Task. A resolved thread keeps that
+value and shows it again when reopened. A thread is submittable when it is
+ready to task, included, and no unfinished submission claims it. Both
+submission destinations take only submittable threads. An Idea submission
+resolves each thread it took. A Story submission records those ids and leaves
+the threads open. A ready thread that is not included stays open and is not
+taken. `researcherConversationId` is the last
 `researcher-session` event's `conversationId`, omitted once the thread is
 converted. An event whose `threadId` is not a root is skipped into `problems`.
 
@@ -1682,8 +1696,10 @@ that is not withdrawn is rejected, submit moves the assessment straight to
 Humans record `resolved`, `unresolved`, `dismissed`, `reopened`, or
 `converted`, with an optional reply `body`, via
 `POST /api/issues/:reviewId/threads/:threadId/events` with
-`{ event, body?, name? }`. A `body` appends a reply in the same write. The
-route is review-only and stamps `by.role` as `human`. `dismissed`,
+`{ event, body?, name? }`. A `body` appends a reply in the same write.
+Humans record `included` or `excluded` on that same route with no `body`;
+the route calls `setThreadInclusion`. The route is review-only and stamps
+`by.role` as `human`. `dismissed`,
 `reopened`, and `converted` are human-only; there is no CLI for them. The
 thread keeps its question and answers. Surfaces show the conversion as a
 system event credited to the converting human
@@ -1768,7 +1784,13 @@ no consumer can persist a broken file.
   question thread, and `researcher-session` without `conversationId` or on a
   review thread.
   `POST /api/issues/:reviewId/threads/:threadId/events`
-  stamps `by.role` `human` and calls this path.
+  stamps `by.role` `human` and calls this path, except `included` and
+  `excluded`, which call `setThreadInclusion`.
+- `setThreadInclusion(reviewId, threadId, included, by)` — appends `included`
+  or `excluded` with no reply. Refuses a question thread, a thread with a
+  linked Task, and a thread that is not open. The thread-event route calls
+  this for `included` and `excluded`. `issue comment <reviewId> --reply-to
+  <threadId> --include on|off` calls it and posts no body.
 - `editComment(id, commentId, { body, role, name? })` — appends a
   `comment-edit` when that comment is editable (see
   [`comments.jsonl` message shape](#commentsjsonl-message-shape)).

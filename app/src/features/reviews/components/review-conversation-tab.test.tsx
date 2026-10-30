@@ -52,6 +52,7 @@ function thread(overrides: Partial<CommentThread> & Pick<CommentThread, "root">)
     kind: "review",
     state: "open",
     readyToTask: true,
+    included: true,
     replies: [],
     ...overrides,
   };

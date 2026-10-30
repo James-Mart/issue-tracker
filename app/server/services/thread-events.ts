@@ -1,4 +1,6 @@
 import {
+  INCLUSION_EVENT_TAKES_NO_BODY,
+  isInclusionThreadEvent,
   THREAD_EVENT_PAYLOADS,
   type Comment,
   type ThreadEvent,
@@ -35,6 +37,8 @@ export const REVIEW_EVENT_ON_QUESTION =
   "resolve and unresolve apply only to a review thread";
 export const RESEARCHER_ON_REVIEW =
   "a researcher session applies only to a question thread";
+export const INCLUSION_REQUIRES_OPEN_UNLINKED_REVIEW =
+  "inclusion applies only to an open, unlinked review thread";
 
 export type AppendThreadEventInput = {
   event: ThreadEventName;
@@ -78,6 +82,12 @@ export function findThreadRoot(messages: Comment[], threadId: string): Comment {
 }
 
 function assertActor(input: AppendThreadEventInput): void {
+  if (isInclusionThreadEvent(input.event)) {
+    if (input.body !== undefined) {
+      throw new IssueError("validation", INCLUSION_EVENT_TAKES_NO_BODY);
+    }
+    return;
+  }
   const payload = THREAD_EVENT_PAYLOADS.find(({ event }) => event === input.event);
   if (payload) {
     if (!input[payload.field]) {
@@ -116,7 +126,9 @@ function assertActor(input: AppendThreadEventInput): void {
  * review thread. Any other role may only resolve a review thread, and only
  * with a reply. `researcher-session` is server-recorded when a question
  * thread's researcher conversation starts. A converted thread keeps its
- * comments and follows the review rules. Threads with events live on a review.
+ * comments and follows the review rules. Callers record inclusion through
+ * `setThreadInclusion`, which appends `included` or `excluded` here.
+ * Threads with events live on a review.
  */
 export function appendThreadEvent(
   reviewId: string,
@@ -174,6 +186,9 @@ export function appendThreadEvent(
     if (input.event === "researcher-session" && kind !== "question") {
       throw new IssueError("validation", RESEARCHER_ON_REVIEW);
     }
+    if (isInclusionThreadEvent(input.event) && !prior.readyToTask) {
+      throw new IssueError("validation", INCLUSION_REQUIRES_OPEN_UNLINKED_REVIEW);
+    }
 
     const records: unknown[] = [];
     let reply: Comment | undefined;
@@ -223,5 +238,22 @@ export function appendThreadEvent(
       taskStatusById,
     ).threads.find((view) => view.rootId === threadId)!;
     return reply ? { event, reply, thread } : { event, thread };
+  });
+}
+
+/**
+ * Record whether an open, unlinked review thread goes out with the next
+ * submission. The latest `included` or `excluded` event wins. Question,
+ * task-linked, and non-open threads are refused.
+ */
+export function setThreadInclusion(
+  reviewId: string,
+  threadId: string,
+  included: boolean,
+  by: { role: string; name?: string },
+): Promise<AppendThreadEventResult> {
+  return appendThreadEvent(reviewId, threadId, {
+    event: included ? "included" : "excluded",
+    by,
   });
 }

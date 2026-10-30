@@ -9,6 +9,7 @@ import {
   formatZodError,
   type IssuePatch,
   mergeStoryBodySchema,
+  isInclusionThreadEvent,
   threadEventRequestSchema,
 } from "../schemas.js";
 import { exportDraftMarkdown } from "../middleware/export-draft-markdown.js";
@@ -43,7 +44,10 @@ import {
   remove,
 } from "../services/issues.js";
 import { patchIssue } from "../services/root-merge-settings.js";
-import { appendThreadEvent } from "../services/thread-events.js";
+import {
+  appendThreadEvent,
+  setThreadInclusion,
+} from "../services/thread-events.js";
 import {
   onQuestionComment,
   retryQuestionResearcher,
@@ -455,20 +459,23 @@ export function createIssuesRouter(
           formatZodError(parsed.error, "invalid thread event"),
         );
       }
-      const result = await appendThreadEvent(
-        req.params.id,
-        req.params.threadId,
-        {
-          event: parsed.data.event,
-          ...(parsed.data.body !== undefined ? { body: parsed.data.body } : {}),
-          by: {
-            role: "human",
-            ...(parsed.data.name !== undefined
-              ? { name: parsed.data.name }
-              : {}),
-          },
-        },
-      );
+      const by = {
+        role: "human" as const,
+        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      };
+      const setsInclusion = isInclusionThreadEvent(parsed.data.event);
+      const result = setsInclusion
+        ? await setThreadInclusion(
+            req.params.id,
+            req.params.threadId,
+            parsed.data.event === "included",
+            by,
+          )
+        : await appendThreadEvent(req.params.id, req.params.threadId, {
+            event: parsed.data.event,
+            ...(parsed.data.body !== undefined ? { body: parsed.data.body } : {}),
+            by,
+          });
       res.status(201).json(result);
     }),
   );
