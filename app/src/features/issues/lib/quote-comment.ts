@@ -1,4 +1,11 @@
 import type { CommentAnchor, CommentInput } from "@server/schemas";
+import { questionKindFields } from "@server/question-kind";
+import { quoteDraftKey } from "@/features/reviews/lib/review-draft-key";
+import {
+  replaceReviewDraft,
+  reviewDraft,
+  reviewDraftHasText,
+} from "@/features/reviews/lib/review-draft-storage";
 import { isLineAnchor } from "./comment-anchor";
 
 /** Caption for a quote composer. `outdated` applies only when an anchor was copied. */
@@ -37,9 +44,11 @@ export function copyCommentAnchor(anchor: CommentAnchor): CommentAnchor {
 export function quoteCommentInput(
   body: string,
   anchor: CommentAnchor | undefined,
+  kind?: "question",
 ): CommentInput {
-  if (!anchor) return { role: "human", body };
-  return { role: "human", body, anchor: copyCommentAnchor(anchor) };
+  const question = questionKindFields(kind);
+  if (!anchor) return { role: "human", body, ...question };
+  return { role: "human", body, ...question, anchor: copyCommentAnchor(anchor) };
 }
 
 export type QuoteSource = {
@@ -64,4 +73,11 @@ export function quoteSource(
     anchor,
     ...(outdated ? { outdated: true } : {}),
   };
+}
+
+/** Writes the blockquote only when this comment has no unsent draft yet. */
+export function seedQuoteDraft(issueId: string, source: QuoteSource): void {
+  const key = quoteDraftKey(issueId, source.commentId);
+  if (reviewDraftHasText(reviewDraft(key))) return;
+  replaceReviewDraft(key, quoteBlockquote(source.body));
 }

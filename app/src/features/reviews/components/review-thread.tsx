@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import {
   useEditComment,
@@ -18,7 +18,11 @@ import {
   type ThreadComposerIntent,
 } from "@/features/issues/components/comments/thread-composer";
 import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
-import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
+import {
+  quoteComposerAmongThreads,
+  quoteComposerForThread,
+  quoteDiffComposer,
+} from "@/features/issues/lib/diff-thread-anchor";
 import { quoteSource } from "@/features/issues/lib/quote-comment";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { useReviewTranscriptLinks } from "./review-transcript-link";
@@ -62,8 +66,6 @@ export function ReviewThread({
   };
 
   const diffReply = diff?.open?.kind === "reply" && diff.open.threadId === threadId;
-  const diffQuote =
-    diff?.open?.kind === "quote" && diff.open.threadId === threadId ? diff.open : null;
   const localQuote = !diff ? (open?.quote ?? null) : null;
 
   return (
@@ -109,8 +111,6 @@ export function ReviewThread({
             />
           ) : undefined
         }
-        quoteSlot={diffQuote ? <DiffThreadComposer target={diffQuote} /> : undefined}
-        quoteCommentId={diffQuote?.commentId}
         resolvePending={events.isPending}
         onEdit={async (commentId, body) => {
           await edit.mutateAsync({ commentId, body });
@@ -145,7 +145,10 @@ export function ReviewLineThreads({
   /** New-thread composer open on this line. */
   composer?: ReactNode;
 }) {
-  if (threads.length === 0 && composer == null) return null;
+  const diff = useOptionalDiffComposer();
+  const quote = quoteComposerAmongThreads(diff?.open ?? null, threads);
+  const slot = composer ?? (quote ? <DiffThreadComposer target={quote} /> : null);
+  if (threads.length === 0 && slot == null) return null;
   return (
     // Annotations slot into the diff's shadow tree and would inherit its monospace code font.
     <div
@@ -155,7 +158,7 @@ export function ReviewLineThreads({
       {threads.map((thread) => (
         <ReviewThread key={thread.root.id} thread={thread} reviewId={reviewId} inline />
       ))}
-      {composer}
+      {slot}
     </div>
   );
 }
@@ -168,6 +171,8 @@ export function ReviewOutdatedThreads({
   threads: CommentThreadData[];
   reviewId: string;
 }) {
+  const diff = useOptionalDiffComposer();
+  const open = diff?.open ?? null;
   if (threads.length === 0) return null;
   return (
     <section
@@ -176,16 +181,21 @@ export function ReviewOutdatedThreads({
       className="flex flex-col gap-2 border-t border-border px-3 py-2"
     >
       <p className={SETTINGS_HEADING_CLASS}>Outdated</p>
-      {threads.map((thread) => (
-        <ReviewThread
-          key={thread.root.id}
-          thread={thread}
-          reviewId={reviewId}
-          inline
-          showAnchorContext
-          collapse="outdated"
-        />
-      ))}
+      {threads.map((thread) => {
+        const quote = quoteComposerForThread(open, thread.root.id);
+        return (
+          <Fragment key={thread.root.id}>
+            <ReviewThread
+              thread={thread}
+              reviewId={reviewId}
+              inline
+              showAnchorContext
+              collapse="outdated"
+            />
+            {quote ? <DiffThreadComposer target={quote} /> : null}
+          </Fragment>
+        );
+      })}
     </section>
   );
 }

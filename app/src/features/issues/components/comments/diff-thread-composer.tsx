@@ -9,21 +9,21 @@ import {
 import { ReviewComposer, ReviewComposerDiscardDialog } from "@/features/reviews/components/review-composer";
 import {
   clearReviewDraft,
-  replaceReviewDraft,
   reviewDraft,
   reviewDraftHasText,
 } from "@/features/reviews/lib/review-draft-storage";
 import { usePostComment } from "../../api/mutations";
+import { isLineAnchor } from "../../lib/comment-anchor";
+import { formatAnchorLineLabel } from "../../lib/comment-threads";
 import {
   commentInputForComposer,
   composerDraftKey,
   isLineComposer,
   type NewDiffComposer,
-  type NewLineComposer,
   type OpenDiffComposer,
   type QuoteDiffComposer,
 } from "../../lib/diff-thread-anchor";
-import { quoteComposerLabel } from "../../lib/quote-comment";
+import { quoteBlockquote, quoteComposerLabel, seedQuoteDraft } from "../../lib/quote-comment";
 import { QuoteComposerLabel } from "./quote-button";
 
 type DiffComposerContextValue = {
@@ -59,20 +59,23 @@ export function DiffComposerProvider({
   const [pending, setPending] = useState<OpenDiffComposer | null>(null);
 
   const seed = useCallback(
-    (next: OpenDiffComposer, replacing: boolean) => {
-      if (next.kind !== "quote" && !(next.kind === "reply" && replacing)) return;
-      const key = composerDraftKey(issueId, next);
-      replaceReviewDraft(key, next.kind === "quote" ? next.body : "");
+    (next: OpenDiffComposer) => {
+      if (next.kind !== "quote") return;
+      seedQuoteDraft(issueId, next);
     },
     [issueId],
   );
 
   const apply = useCallback(
     (current: OpenDiffComposer | null, next: OpenDiffComposer) => {
-      if (current && composerDraftKey(issueId, current) !== composerDraftKey(issueId, next)) {
+      if (
+        current &&
+        !quoteKeepsReplyDraft(current, next) &&
+        composerDraftKey(issueId, current) !== composerDraftKey(issueId, next)
+      ) {
         clearReviewDraft(composerDraftKey(issueId, current));
       }
-      seed(next, current != null);
+      seed(next);
       setPending(null);
       setOpen(next);
     },
@@ -85,7 +88,11 @@ export function DiffComposerProvider({
         if (pending) setPending(null);
         return;
       }
-      if (!open || !reviewDraftHasText(reviewDraft(composerDraftKey(issueId, open)))) {
+      if (
+        !open ||
+        quoteKeepsReplyDraft(open, next) ||
+        !composerHoldsUnsentText(issueId, open)
+      ) {
         apply(open, next);
         return;
       }
@@ -157,6 +164,22 @@ export function DiffComposerProvider({
   );
 }
 
+/** Quote closes the reply composer and leaves that reply draft stored. */
+function quoteKeepsReplyDraft(
+  current: OpenDiffComposer | null,
+  next: OpenDiffComposer,
+): boolean {
+  return current?.kind === "reply" && next.kind === "quote";
+}
+
+/** A seeded blockquote is the quote baseline, not text the user would lose. */
+function composerHoldsUnsentText(issueId: string, open: OpenDiffComposer): boolean {
+  const draft = reviewDraft(composerDraftKey(issueId, open));
+  if (!reviewDraftHasText(draft)) return false;
+  if (open.kind === "quote" && draft === quoteBlockquote(open.body)) return false;
+  return true;
+}
+
 function sameDiffComposer(a: OpenDiffComposer, b: OpenDiffComposer): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "reply" && b.kind === "reply") return a.threadId === b.threadId;
@@ -188,31 +211,50 @@ export function useDiffComposer(): DiffComposerContextValue {
   return value;
 }
 
-function lineCaption(open: NewLineComposer): string {
-  if (open.startLine !== undefined) {
-    return `lines ${open.startLine}-${open.line}`;
-  }
-  return `line ${open.line}`;
+/** Current line quotes use the fresh-comment caption. Outdated and file quotes keep theirs. */
+function lineAnchorForCaption(
+  target: OpenDiffComposer,
+): { line: number; startLine?: number } | null {
+  if (target.kind === "new" && isLineComposer(target)) return target;
+  if (target.kind !== "quote" || target.outdated === true) return null;
+  const anchor = target.anchor;
+  if (!anchor || !isLineAnchor(anchor)) return null;
+  return anchor;
 }
 
-export function DiffThreadComposer({
-  target,
-}: {
-  target: OpenDiffComposer;
-}) {
+function diffComposerChrome(target: OpenDiffComposer): {
+  quoteLabel: string | null;
+  lineLabel: string | null;
+  placeholder: string;
+} {
+  const quote = target.kind === "quote" ? target : null;
+  const lineAnchor = lineAnchorForCaption(target);
+  const lineLabel = lineAnchor ? formatAnchorLineLabel(lineAnchor) : null;
+  const ranged =
+    lineAnchor != null &&
+    lineAnchor.startLine !== undefined &&
+    lineAnchor.startLine !== lineAnchor.line;
+  return {
+    quoteLabel:
+      quote && lineAnchor == null
+        ? quoteComposerLabel(quote.anchor, quote.outdated === true)
+        : null,
+    lineLabel,
+    placeholder:
+      target.kind === "reply"
+        ? "Reply"
+        : ranged && lineLabel
+          ? `Comment on ${lineLabel}`
+          : "Add a comment",
+  };
+}
+
+export function DiffThreadComposer({ target }: { target: OpenDiffComposer }) {
   const { issueId, send, close, allowQuestion } = useDiffComposer();
   const draftKey = composerDraftKey(issueId, target);
-  const askQuestion = allowQuestion && target.kind === "new";
+  const askQuestion = allowQuestion && (target.kind === "new" || target.kind === "quote");
   const quote = target.kind === "quote" ? target : null;
-  const quoteLabel = quote ? quoteComposerLabel(quote.anchor) : null;
-  const lineTarget = target.kind === "new" && isLineComposer(target) ? target : null;
-  const placeholder = quote
-    ? "Add a comment"
-    : target.kind !== "new"
-      ? "Reply"
-      : lineTarget?.startLine !== undefined
-        ? `Comment on ${lineCaption(lineTarget)}`
-        : "Add a comment";
+  const { quoteLabel, lineLabel, placeholder } = diffComposerChrome(target);
 
   return (
     <div
@@ -223,10 +265,8 @@ export function DiffThreadComposer({
     >
       {quoteLabel ? (
         <QuoteComposerLabel label={quoteLabel} />
-      ) : lineTarget ? (
-        <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-          {lineCaption(lineTarget)}
-        </p>
+      ) : lineLabel ? (
+        <p className="font-mono text-[11px] tabular-nums text-muted-foreground">{lineLabel}</p>
       ) : null}
       {target.kind === "new" && !askQuestion ? (
         <p className="text-sm text-foreground">Start a review thread</p>
@@ -235,6 +275,8 @@ export function DiffThreadComposer({
         draftKey={draftKey}
         placeholder={placeholder}
         submitLabel="Send"
+        caretAtEnd={quote != null}
+        baseline={quote ? quoteBlockquote(quote.body) : undefined}
         onSubmit={(body) => send(target, body)}
         onQuestion={askQuestion ? (body) => send(target, body, "question") : undefined}
         onCancel={close}

@@ -1,19 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import type { CommentInput } from "@server/schemas";
 import { ReviewComposer } from "@/features/reviews/components/review-composer";
-import {
-  quoteDraftKey,
-  replyDraftKey,
-} from "@/features/reviews/lib/review-draft-key";
-import {
-  replaceReviewDraft,
-  reviewDraft,
-  reviewDraftHasText,
-} from "@/features/reviews/lib/review-draft-storage";
+import { quoteDraftKey, replyDraftKey } from "@/features/reviews/lib/review-draft-key";
 import {
   quoteBlockquote,
   quoteCommentInput,
   quoteComposerLabel,
+  seedQuoteDraft,
   type QuoteSource,
 } from "../../lib/quote-comment";
 import { QuoteComposerLabel } from "./quote-button";
@@ -33,13 +26,6 @@ export function threadComposerCommentInput(
 ): CommentInput {
   if (intent.mode === "quote") return quoteCommentInput(body, intent.anchor);
   return { role: "human", body, replyTo: intent.threadId };
-}
-
-function seedQuoteDraft(issueId: string, source: QuoteSource): void {
-  const key = quoteDraftKey(issueId, source.commentId);
-  // A non-empty draft is this comment's unsent text. Leave it.
-  if (reviewDraftHasText(reviewDraft(key))) return;
-  replaceReviewDraft(key, quoteBlockquote(source.body));
 }
 
 /** Reply and quote composers for one issue. A quote draft is keyed by the quoted comment. */

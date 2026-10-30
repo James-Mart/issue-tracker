@@ -1,7 +1,11 @@
 import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs/react";
 import type { CommentInput } from "@server/schemas";
 import { questionKindFields } from "@server/question-kind";
-import { replyDraftKey, reviewDraftKey } from "@/features/reviews/lib/review-draft-key";
+import {
+  quoteDraftKey,
+  replyDraftKey,
+  reviewDraftKey,
+} from "@/features/reviews/lib/review-draft-key";
 import { quoteCommentInput, type QuoteSource } from "./quote-comment";
 
 export type AnchorSide = "old" | "new";
@@ -34,6 +38,27 @@ export function quoteDiffComposer(
   source: QuoteSource,
 ): QuoteDiffComposer {
   return { kind: "quote", ...source };
+}
+
+/** The open quote composer when it belongs to this thread, else null. */
+export function quoteComposerForThread(
+  open: OpenDiffComposer | null,
+  threadId: string,
+): QuoteDiffComposer | null {
+  if (open?.kind !== "quote" || open.threadId !== threadId) return null;
+  return open;
+}
+
+/** The open quote composer when its thread is in this list, else null. */
+export function quoteComposerAmongThreads(
+  open: OpenDiffComposer | null,
+  threads: readonly { root: { id: string } }[],
+): QuoteDiffComposer | null {
+  for (const thread of threads) {
+    const quote = quoteComposerForThread(open, thread.root.id);
+    if (quote) return quote;
+  }
+  return null;
 }
 
 export function isLineComposer(open: NewDiffComposer): open is NewLineComposer {
@@ -114,9 +139,8 @@ export function composerDraftKey(
   reviewId: string,
   open: OpenDiffComposer,
 ): string {
-  if (open.kind === "reply" || open.kind === "quote") {
-    return replyDraftKey(reviewId, open.threadId);
-  }
+  if (open.kind === "quote") return quoteDraftKey(reviewId, open.commentId);
+  if (open.kind === "reply") return replyDraftKey(reviewId, open.threadId);
   if (!isLineComposer(open)) {
     return reviewDraftKey(reviewId, `file:${open.path}`);
   }
@@ -136,9 +160,7 @@ export function commentInputForComposer(
   if (open.kind === "reply") {
     return { role: "human", body, replyTo: open.threadId };
   }
-  if (open.kind === "quote") {
-    return quoteCommentInput(body, open.anchor);
-  }
+  if (open.kind === "quote") return quoteCommentInput(body, open.anchor, kind);
   if (!isLineComposer(open)) {
     return {
       role: "human",
