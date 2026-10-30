@@ -5,7 +5,7 @@ export function commentDayKey(at: string): string {
   return Number.isNaN(date.getTime()) ? at : date.toDateString();
 }
 
-export function commentDayLabel(at: string): string {
+export function commentDayLabel(at: string, options?: { year?: boolean }): string {
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return at;
   const today = new Date();
@@ -13,11 +13,9 @@ export function commentDayLabel(at: string): string {
   yesterday.setDate(today.getDate() - 1);
   if (date.toDateString() === today.toDateString()) return "Today";
   if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const format: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (options?.year !== false) format.year = "numeric";
+  return date.toLocaleDateString([], format);
 }
 
 export function Marker({ children }: { children: ReactNode }) {
