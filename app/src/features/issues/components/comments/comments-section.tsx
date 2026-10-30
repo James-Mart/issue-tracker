@@ -35,7 +35,7 @@ import { SettingsCard } from "../detail-section";
 import { DeliverableMessage } from "./comment-delivery";
 import { CommentThread } from "./comment-thread";
 import {
-  ThreadComposerDiscard,
+  QuoteThreadComposer,
   ThreadComposerFields,
   threadComposerCommentInput,
   useThreadComposers,
@@ -105,7 +105,7 @@ function CommentList({
   issueId,
   attachmentsIssueId,
   replySlotFor,
-  quoteSlotFor,
+  quoteCardFor,
   onReply,
   onQuote,
   onEdit,
@@ -116,10 +116,7 @@ function CommentList({
   issueId: string;
   attachmentsIssueId?: string;
   replySlotFor: (threadId: string) => ReactNode;
-  quoteSlotFor: (thread: CommentThreadData) => {
-    commentId: string;
-    node: ReactNode;
-  } | undefined;
+  quoteCardFor: (thread: CommentThreadData) => ReactNode;
   onReply: (threadId: string) => void;
   onQuote?: (thread: CommentThreadData, commentId: string, body: string) => void;
   onEdit?: (commentId: string, body: string) => Promise<void>;
@@ -181,22 +178,18 @@ function CommentList({
   };
 
   const renderThread = (thread: CommentThreadData) => {
-    const quoteSlot = quoteSlotFor(thread);
-    if (isPlainNote(thread)) {
-      return (
-        <DeliverableMessage
-          message={thread.root}
-          attachmentsIssueId={attachmentsIssueId}
-          onQuote={
-            onQuote && thread.root.delivery === undefined
-              ? () => onQuote(thread, thread.root.id, thread.root.body)
-              : undefined
-          }
-          footer={quoteSlot?.commentId === thread.root.id ? quoteSlot.node : undefined}
-        />
-      );
-    }
-    return (
+    const quoteCard = quoteCardFor(thread);
+    const body = isPlainNote(thread) ? (
+      <DeliverableMessage
+        message={thread.root}
+        attachmentsIssueId={attachmentsIssueId}
+        onQuote={
+          onQuote && thread.root.delivery === undefined
+            ? () => onQuote(thread, thread.root.id, thread.root.body)
+            : undefined
+        }
+      />
+    ) : (
       <CommentThread
         thread={thread}
         issueId={issueId}
@@ -211,9 +204,13 @@ function CommentList({
           onQuote ? (comment) => onQuote(thread, comment.id, comment.body) : undefined
         }
         replySlot={replySlotFor(thread.root.id)}
-        quoteSlot={quoteSlot?.node}
-        quoteCommentId={quoteSlot?.commentId}
       />
+    );
+    return (
+      <>
+        {body}
+        {quoteCard}
+      </>
     );
   };
 
@@ -371,7 +368,7 @@ function CommentsPanel({
 
   const submitStoryComposer = (intent: ThreadComposerIntent, body: string) => {
     post(threadComposerCommentInput(intent, body));
-    composers.close(intent.threadId);
+    composers.close(intent.threadId, intent.mode);
   };
 
   const submitCommentEdit = async (commentId: string, body: string) => {
@@ -381,13 +378,14 @@ function CommentsPanel({
   const replySlotFor = (threadId: string) => {
     if (storyComposer) {
       const slot = composers.slots[threadId];
-      if (slot?.intent.mode !== "reply") return undefined;
+      if (!slot?.reply) return undefined;
+      const intent = { mode: "reply", threadId } as const;
       return (
         <ThreadComposerFields
           issueId={id}
-          intent={slot.intent}
-          onSubmit={(body) => submitStoryComposer(slot.intent, body)}
-          onCancel={() => composers.close(threadId)}
+          threadId={threadId}
+          onSubmit={(body) => submitStoryComposer(intent, body)}
+          onCancel={() => composers.close(threadId, "reply")}
         />
       );
     }
@@ -404,21 +402,19 @@ function CommentsPanel({
     );
   };
 
-  const quoteSlotFor = (thread: CommentThreadData) => {
+  const quoteCardFor = (thread: CommentThreadData) => {
     if (!storyComposer) return undefined;
-    const slot = composers.slots[thread.root.id];
-    if (slot?.intent.mode !== "quote") return undefined;
-    return {
-      commentId: slot.intent.commentId,
-      node: (
-        <ThreadComposerFields
-          issueId={id}
-          intent={slot.intent}
-          onSubmit={(body) => submitStoryComposer(slot.intent, body)}
-          onCancel={() => composers.close(thread.root.id)}
-        />
-      ),
-    };
+    const source = composers.slots[thread.root.id]?.quote;
+    if (!source) return undefined;
+    return (
+      <QuoteThreadComposer
+        key={source.commentId}
+        issueId={id}
+        source={source}
+        onSubmit={(body) => submitStoryComposer({ mode: "quote", ...source }, body)}
+        onCancel={() => composers.close(thread.root.id, "quote")}
+      />
+    );
   };
 
   return (
@@ -466,7 +462,7 @@ function CommentsPanel({
             issueId={id}
             attachmentsIssueId={attachmentsIssueId}
             replySlotFor={replySlotFor}
-            quoteSlotFor={quoteSlotFor}
+            quoteCardFor={quoteCardFor}
             onReply={(threadId) => {
               if (storyComposer) {
                 composers.request({ mode: "reply", threadId });
@@ -477,14 +473,15 @@ function CommentsPanel({
             onQuote={
               storyComposer
                 ? (thread, commentId, body) =>
-                    composers.request({
-                      mode: "quote",
-                      ...quoteSource(
-                        thread.root.id,
-                        { id: commentId, body },
-                        thread.root.anchor,
-                      ),
-                    })
+                composers.request({
+                  mode: "quote",
+                  ...quoteSource(
+                    thread.root.id,
+                    { id: commentId, body },
+                    thread.root.anchor,
+                    thread.root.outdated === true,
+                  ),
+                })
                 : undefined
             }
             onEdit={submitCommentEdit}
@@ -496,14 +493,6 @@ function CommentsPanel({
             }
           />
         )}
-
-        {storyComposer ? (
-          <ThreadComposerDiscard
-            threadId={composers.pendingThreadId}
-            onKeep={composers.keep}
-            onDiscard={composers.discard}
-          />
-        ) : null}
 
         {agentLive ? <Shimmer /> : null}
 

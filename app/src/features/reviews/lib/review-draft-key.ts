@@ -11,6 +11,10 @@ export function replyDraftKey(reviewId: string, threadId: string): string {
   return reviewDraftKey(reviewId, `reply:${threadId}`);
 }
 
+export function quoteDraftKey(issueId: string, quotedCommentId: string): string {
+  return reviewDraftKey(issueId, `quote:${quotedCommentId}`);
+}
+
 export function editDraftKey(reviewId: string, commentId: string): string {
   return reviewDraftKey(reviewId, `edit:${commentId}`);
 }

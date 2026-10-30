@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { CommentThread as CommentThreadData } from "@/features/issues/lib/comment-threads";
 import {
   useEditComment,
@@ -11,13 +11,18 @@ import {
   useOptionalDiffComposer,
 } from "@/features/issues/components/comments/diff-thread-composer";
 import {
-  ThreadComposerDiscard,
+  QuoteThreadComposer,
   ThreadComposerFields,
   threadComposerCommentInput,
   useThreadComposers,
+  type ThreadComposerIntent,
 } from "@/features/issues/components/comments/thread-composer";
 import { isPlainNote, threadStateActions } from "@/features/issues/lib/comment-threads";
-import { quoteDiffComposer } from "@/features/issues/lib/diff-thread-anchor";
+import {
+  quoteComposerAmongThreads,
+  quoteComposerForThread,
+  quoteDiffComposer,
+} from "@/features/issues/lib/diff-thread-anchor";
 import { quoteSource } from "@/features/issues/lib/quote-comment";
 import { SETTINGS_HEADING_CLASS } from "@/features/issues/components/detail-section";
 import { useReviewTranscriptLinks } from "./review-transcript-link";
@@ -52,19 +57,16 @@ export function ReviewThread({
     transcripts && researcherConversationId
       ? () => transcripts.openResearcher(thread.root.id, researcherConversationId)
       : undefined;
-  const slot = composers.slots[thread.root.id];
   const threadId = thread.root.id;
+  const open = composers.slots[threadId];
 
-  const sendLocal = (body: string) => {
-    if (!slot) return;
-    post(threadComposerCommentInput(slot.intent, body));
-    composers.close(threadId);
+  const submitComposer = (intent: ThreadComposerIntent, body: string) => {
+    post(threadComposerCommentInput(intent, body));
+    composers.close(threadId, intent.mode);
   };
 
   const diffReply = diff?.open?.kind === "reply" && diff.open.threadId === threadId;
-  const diffQuote =
-    diff?.open?.kind === "quote" && diff.open.threadId === threadId ? diff.open : null;
-  const localQuote = !diff && slot?.intent.mode === "quote" ? slot.intent : null;
+  const localQuote = !diff ? (open?.quote ?? null) : null;
 
   return (
     <>
@@ -86,35 +88,29 @@ export function ReviewThread({
               }
         }
         onQuote={(comment) => {
-          const source = quoteSource(threadId, comment, thread.root.anchor);
+          const source = quoteSource(
+            threadId,
+            comment,
+            thread.root.anchor,
+            thread.root.outdated === true,
+          );
           if (diff) diff.openQuote(quoteDiffComposer(source));
           else composers.request({ mode: "quote", ...source });
         }}
         replySlot={
           diffReply ? (
             <DiffThreadComposer target={{ kind: "reply", threadId }} />
-          ) : !diff && slot?.intent.mode === "reply" ? (
+          ) : !diff && open?.reply ? (
             <ThreadComposerFields
               issueId={reviewId}
-              intent={slot.intent}
-              onSubmit={sendLocal}
-              onCancel={() => composers.close(threadId)}
+              threadId={threadId}
+              onSubmit={(body) =>
+                submitComposer({ mode: "reply", threadId }, body)
+              }
+              onCancel={() => composers.close(threadId, "reply")}
             />
           ) : undefined
         }
-        quoteSlot={
-          diffQuote ? (
-            <DiffThreadComposer target={diffQuote} />
-          ) : localQuote ? (
-            <ThreadComposerFields
-              issueId={reviewId}
-              intent={localQuote}
-              onSubmit={sendLocal}
-              onCancel={() => composers.close(threadId)}
-            />
-          ) : undefined
-        }
-        quoteCommentId={diffQuote?.commentId ?? localQuote?.commentId}
         resolvePending={events.isPending}
         onEdit={async (commentId, body) => {
           await edit.mutateAsync({ commentId, body });
@@ -124,13 +120,17 @@ export function ReviewThread({
         )}
         onOpenResearcher={openResearcher}
       />
-      {diff ? null : (
-        <ThreadComposerDiscard
-          threadId={composers.pendingThreadId}
-          onKeep={composers.keep}
-          onDiscard={composers.discard}
+      {localQuote ? (
+        <QuoteThreadComposer
+          key={localQuote.commentId}
+          issueId={reviewId}
+          source={localQuote}
+          onSubmit={(body) =>
+            submitComposer({ mode: "quote", ...localQuote }, body)
+          }
+          onCancel={() => composers.close(threadId, "quote")}
         />
-      )}
+      ) : null}
     </>
   );
 }
@@ -145,7 +145,10 @@ export function ReviewLineThreads({
   /** New-thread composer open on this line. */
   composer?: ReactNode;
 }) {
-  if (threads.length === 0 && composer == null) return null;
+  const diff = useOptionalDiffComposer();
+  const quote = quoteComposerAmongThreads(diff?.open ?? null, threads);
+  const slot = composer ?? (quote ? <DiffThreadComposer target={quote} /> : null);
+  if (threads.length === 0 && slot == null) return null;
   return (
     // Annotations slot into the diff's shadow tree and would inherit its monospace code font.
     <div
@@ -155,7 +158,7 @@ export function ReviewLineThreads({
       {threads.map((thread) => (
         <ReviewThread key={thread.root.id} thread={thread} reviewId={reviewId} inline />
       ))}
-      {composer}
+      {slot}
     </div>
   );
 }
@@ -168,6 +171,8 @@ export function ReviewOutdatedThreads({
   threads: CommentThreadData[];
   reviewId: string;
 }) {
+  const diff = useOptionalDiffComposer();
+  const open = diff?.open ?? null;
   if (threads.length === 0) return null;
   return (
     <section
@@ -176,16 +181,21 @@ export function ReviewOutdatedThreads({
       className="flex flex-col gap-2 border-t border-border px-3 py-2"
     >
       <p className={SETTINGS_HEADING_CLASS}>Outdated</p>
-      {threads.map((thread) => (
-        <ReviewThread
-          key={thread.root.id}
-          thread={thread}
-          reviewId={reviewId}
-          inline
-          showAnchorContext
-          collapse="outdated"
-        />
-      ))}
+      {threads.map((thread) => {
+        const quote = quoteComposerForThread(open, thread.root.id);
+        return (
+          <Fragment key={thread.root.id}>
+            <ReviewThread
+              thread={thread}
+              reviewId={reviewId}
+              inline
+              showAnchorContext
+              collapse="outdated"
+            />
+            {quote ? <DiffThreadComposer target={quote} /> : null}
+          </Fragment>
+        );
+      })}
     </section>
   );
 }
