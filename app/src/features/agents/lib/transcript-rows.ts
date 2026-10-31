@@ -1,5 +1,5 @@
 import type { NestedStep, TranscriptEvent } from "@server/schemas";
-import { isSubAgentToolCall, type CollapsedDelegation } from "./subagent";
+import { isSubAgentToolCall } from "./subagent";
 
 /** Info-line payload when an event renders as a labeled row in the thread body. */
 export type TranscriptInfoLine = {
@@ -19,7 +19,7 @@ export type TranscriptRenderSegment =
 export type OrdinaryNestedToolCall = Extract<NestedStep, { kind: "tool_call" }>;
 
 export type NestedTranscriptRenderSegment =
-  | { kind: "row"; step: NestedStep }
+  | { kind: "row"; step: NestedStep; index: number }
   | { kind: "tool_use_group"; steps: OrdinaryNestedToolCall[] };
 
 export type ToolUseGroupStatus = OrdinaryToolCallEvent["status"];
@@ -120,23 +120,23 @@ export function groupOrdinaryToolCalls(
   return segments;
 }
 
-/** True when a nested tool_call row renders as TranscriptToolCall, not CollapsedDelegationRow. */
+/** True when a nested tool_call row renders as TranscriptToolCall, not SubagentCard. */
 function isOrdinaryNestedToolCall(
   step: NestedStep,
-  collapsedByCallId: ReadonlyMap<string, CollapsedDelegation>,
+  nestedRunCallIds: { has(callId: string): boolean },
 ): step is OrdinaryNestedToolCall {
-  return step.kind === "tool_call" && !collapsedByCallId.has(step.callId);
+  return step.kind === "tool_call" && !nestedRunCallIds.has(step.callId);
 }
 
 /**
  * Fold consecutive ordinary nested tool_call steps into Tool use groups.
- * Thinking, text, step markers, CollapsedDelegationRow, and any other visible
+ * Thinking, text, step markers, SubagentCard, and any other visible
  * non-ordinary-tool step break a group. Liveness is omitted without splitting.
  * A lone ordinary nested tool still becomes a one-item group.
  */
 export function groupOrdinaryNestedToolCalls(
   steps: readonly NestedStep[],
-  collapsedByCallId: ReadonlyMap<string, CollapsedDelegation>,
+  nestedRunCallIds: { has(callId: string): boolean },
 ): NestedTranscriptRenderSegment[] {
   const segments: NestedTranscriptRenderSegment[] = [];
   let group: OrdinaryNestedToolCall[] = [];
@@ -147,14 +147,15 @@ export function groupOrdinaryNestedToolCalls(
     group = [];
   };
 
-  for (const step of steps) {
-    if (isOrdinaryNestedToolCall(step, collapsedByCallId)) {
+  for (let index = 0; index < steps.length; index++) {
+    const step = steps[index]!;
+    if (isOrdinaryNestedToolCall(step, nestedRunCallIds)) {
       group.push(step);
       continue;
     }
     if (step.kind === "liveness") continue;
     flushGroup();
-    segments.push({ kind: "row", step });
+    segments.push({ kind: "row", step, index });
   }
   flushGroup();
   return segments;
