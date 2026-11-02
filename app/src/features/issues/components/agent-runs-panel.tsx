@@ -163,7 +163,7 @@ function AgentRunTranscript({
     );
   }
 
-  const segments = groupOrdinaryNestedToolCalls(steps, new Map());
+  const segments = groupOrdinaryNestedToolCalls(steps, new Set());
 
   return (
     <div
@@ -182,8 +182,7 @@ function AgentRunTranscript({
             />
           );
         }
-        const { step } = segment;
-        const index = steps.indexOf(step);
+        const { step, index } = segment;
         return (
           <div key={nestedStepKey(step, index)}>
             <AgentRunStepRow

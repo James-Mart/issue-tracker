@@ -1,22 +1,12 @@
 import type { NestedStep, TranscriptEvent } from "@server/schemas";
+import { extractTaskHints } from "@server/services/task-hints";
 import {
   findOpenThinkingIndex,
   isBlankThinkingText,
   isNestedThinkingInterrupt,
 } from "./thinking-coalesce";
 
-/** Collapsed summary for a nested run deeper than one level of nesting. */
-export type CollapsedDelegation = {
-  delegationId: string;
-  /** Tool call that started this deeper run (matches a depth-1 `tool_call` step). */
-  parentCallId: string;
-  role?: string;
-  model?: string;
-  status: Extract<TranscriptEvent, { type: "tool_call" }>["status"];
-  elapsedMs?: number;
-};
-
-/** View-model for one parent Task/Agent tool_call plus its nested thread. */
+/** View-model for one delegated run: the tool call that spawned it plus its thread. */
 export type SubAgent = {
   callId: string;
   name?: string;
@@ -30,8 +20,12 @@ export type SubAgent = {
   result?: unknown;
   resumeAgentId?: string;
   steps: NestedStep[];
-  /** Depth-2+ runs, one row each, keyed by `delegationId`. */
-  collapsedDelegations: CollapsedDelegation[];
+  /**
+   * Runs this one delegated, in first-frame order. Each `callId` is the
+   * `tool_call` step in `steps` that spawned it, unless that step has not
+   * arrived yet.
+   */
+  nestedRuns: SubAgent[];
 };
 
 const SUBAGENT_TOOL_NAMES = new Set(["agent", "task"]);
@@ -152,17 +146,15 @@ function normalizeModel(model: string): string {
  * Only string scalars (and `subagentType.name` / `subagentType.kind`) are
  * accepted; anything else is ignored.
  */
-function parseSubAgentArgs(args: unknown): Pick<
-  SubAgent,
-  "name" | "description" | "prompt"
-> {
-  const a = unwrapDelegateArgs(args);
-  if (!a) return {};
-  const description = optionalString(a.description);
-  const prompt = optionalString(a.prompt);
+function parseSubAgentArgs(
+  args: Record<string, unknown> | undefined,
+): Pick<SubAgent, "name" | "description" | "prompt"> {
+  if (!args) return {};
+  const description = optionalString(args.description);
+  const prompt = optionalString(args.prompt);
 
-  let name = optionalString(a.name);
-  const subagentType = a.subagentType;
+  let name = optionalString(args.name);
+  const subagentType = args.subagentType;
   if (subagentType && typeof subagentType === "object") {
     const st = subagentType as Record<string, unknown>;
     name = optionalString(st.name) ?? optionalString(st.kind) ?? name;
@@ -175,111 +167,139 @@ function parseSubAgentArgs(args: unknown): Pick<
   };
 }
 
-/** Role label for a deeper run: `delegate` args.role, else Task/Agent name. */
-function roleFromToolArgs(args: unknown): string | undefined {
-  const a = unwrapDelegateArgs(args);
-  if (!a) return undefined;
-  return optionalString(a.role) ?? parseSubAgentArgs(args).name;
+/** `subagent_update` frames folded for one nested run. */
+type RunFrames = {
+  /** Tool call that spawned the run. */
+  parentCallId: string;
+  delegationId?: string;
+  model?: string;
+  elapsedMs?: number;
+  steps: NestedStep[];
+};
+
+type RunIndex = {
+  /** Every run, by {@link runKey}. */
+  runs: Map<string, RunFrames>;
+  /** Runs a nested run delegated, by that run's `delegationId`, in first-frame order. */
+  childRuns: Map<string, RunFrames[]>;
+};
+
+/** Spawning call ids are only unique within the run that made the call. */
+function runKey(parentDelegationId: string | undefined, parentCallId: string) {
+  return `${parentDelegationId ?? ""}\n${parentCallId}`;
 }
 
-/** Latest model and elapsed time from depth-1 `subagent_update` frames. */
-function deriveRootDelegationMeta(
-  events: TranscriptEvent[],
-  rootCallId: string,
-): Pick<SubAgent, "model" | "elapsedMs"> {
-  let model: string | undefined;
-  let elapsedMs: number | undefined;
+function indexRuns(events: TranscriptEvent[]): RunIndex {
+  const runs = new Map<string, RunFrames>();
+  const childRuns = new Map<string, RunFrames[]>();
   for (const event of events) {
     if (event.type !== "subagent_update") continue;
-    if (event.parentCallId !== rootCallId) continue;
-    if (event.parentDelegationId) continue;
-    if (event.model) model = normalizeModel(event.model);
-    if (event.step.kind === "liveness") {
-      elapsedMs = event.step.elapsedMs;
+    const { parentCallId, parentDelegationId } = event;
+    const key = runKey(parentDelegationId, parentCallId);
+    let run = runs.get(key);
+    if (!run) {
+      run = { parentCallId, steps: [] };
+      runs.set(key, run);
+      if (parentDelegationId) {
+        const siblings = childRuns.get(parentDelegationId);
+        if (siblings) siblings.push(run);
+        else childRuns.set(parentDelegationId, [run]);
+      }
     }
+    run.steps = applyNestedStep(run.steps, event.step);
+    if (event.delegationId) run.delegationId = event.delegationId;
+    if (event.model) run.model = normalizeModel(event.model);
+    if (event.step.kind === "liveness") run.elapsedMs = event.step.elapsedMs;
   }
+  return { runs, childRuns };
+}
+
+/** The tool call that spawned a run, at the top level or as a nested step. */
+type RunSpawn = Pick<
+  Extract<TranscriptEvent, { type: "tool_call" }>,
+  "callId" | "status" | "args" | "result" | "resultAgentId"
+>;
+
+function toSubAgent(
+  spawn: RunSpawn,
+  run: RunFrames | undefined,
+  index: RunIndex,
+): SubAgent {
+  const steps = run?.steps ?? [];
+  const children = run?.delegationId
+    ? (index.childRuns.get(run.delegationId) ?? [])
+    : [];
+  let nestedRuns: SubAgent[] = [];
+  if (children.length > 0) {
+    const spawnByCallId = new Map<
+      string,
+      Extract<NestedStep, { kind: "tool_call" }>
+    >();
+    for (const step of steps) {
+      if (step.kind === "tool_call") spawnByCallId.set(step.callId, step);
+    }
+    nestedRuns = children.map((child) =>
+      toSubAgent(
+        runSpawnFromToolCall(
+          child.parentCallId,
+          spawnByCallId.get(child.parentCallId),
+        ),
+        child,
+        index,
+      ),
+    );
+  }
+  const unwrapped = unwrapDelegateArgs(spawn.args);
+  const fields = parseSubAgentArgs(unwrapped);
+  const role = optionalString(unwrapped?.role) ?? fields.name;
   return {
-    ...(model ? { model } : {}),
-    ...(elapsedMs !== undefined ? { elapsedMs } : {}),
+    callId: spawn.callId,
+    ...fields,
+    ...(role ? { role } : {}),
+    ...(run?.model ? { model: run.model } : {}),
+    ...(run?.elapsedMs !== undefined ? { elapsedMs: run.elapsedMs } : {}),
+    status: spawn.status,
+    ...(spawn.result !== undefined ? { result: spawn.result } : {}),
+    ...(spawn.resultAgentId ? { resumeAgentId: spawn.resultAgentId } : {}),
+    steps,
+    nestedRuns,
   };
 }
 
 /**
- * Collapse depth-2+ `subagent_update` frames (those with `parentDelegationId`
- * equal to this card's root `delegationId`) into one summary row per run.
+ * Spawn for a run from its `tool_call`, at the top level or as a nested step.
+ * A deeper run's first frames can land before that step does; until then it
+ * is still running. Resume hints are the event's `resultAgentId` when the
+ * pipeline already lifted them, otherwise the same fields on `result`.
  */
-function deriveCollapsedDelegations(
-  events: TranscriptEvent[],
-  rootCallId: string,
-  steps: NestedStep[],
-): CollapsedDelegation[] {
-  let rootDelegationId: string | undefined;
-  for (const event of events) {
-    if (event.type !== "subagent_update") continue;
-    if (event.parentCallId !== rootCallId) continue;
-    if (event.parentDelegationId) continue;
-    if (event.delegationId) {
-      rootDelegationId = event.delegationId;
-      break;
-    }
-  }
-  if (!rootDelegationId) return [];
-
-  const toolByCallId = new Map<
-    string,
-    Extract<NestedStep, { kind: "tool_call" }>
-  >();
-  for (const step of steps) {
-    if (step.kind === "tool_call") toolByCallId.set(step.callId, step);
-  }
-
-  const order: string[] = [];
-  const latest = new Map<
-    string,
-    {
-      parentCallId: string;
-      model?: string;
-      elapsedMs?: number;
-    }
-  >();
-
-  for (const event of events) {
-    if (event.type !== "subagent_update") continue;
-    if (event.parentDelegationId !== rootDelegationId) continue;
-    if (!event.delegationId) continue;
-    const { delegationId } = event;
-    if (!latest.has(delegationId)) {
-      order.push(delegationId);
-      latest.set(delegationId, { parentCallId: event.parentCallId });
-    }
-    const row = latest.get(delegationId)!;
-    row.parentCallId = event.parentCallId;
-    if (event.model) row.model = event.model;
-    if (event.step.kind === "liveness") {
-      row.elapsedMs = event.step.elapsedMs;
-    }
-  }
-
-  return order.map((delegationId) => {
-    const row = latest.get(delegationId)!;
-    const tool = toolByCallId.get(row.parentCallId);
-    const role = roleFromToolArgs(tool?.args);
-    return {
-      delegationId,
-      parentCallId: row.parentCallId,
-      ...(role ? { role } : {}),
-      ...(row.model ? { model: row.model } : {}),
-      status: tool?.status ?? "running",
-      ...(row.elapsedMs !== undefined ? { elapsedMs: row.elapsedMs } : {}),
-    };
-  });
+function runSpawnFromToolCall(
+  callId: string,
+  tool:
+    | {
+        status: RunSpawn["status"];
+        args?: unknown;
+        result?: unknown;
+        resultAgentId?: string;
+      }
+    | undefined,
+): RunSpawn {
+  if (!tool) return { callId, status: "running" };
+  const hints = extractTaskHints(tool.result);
+  return {
+    callId,
+    status: tool.status,
+    ...(tool.args !== undefined ? { args: tool.args } : {}),
+    ...(tool.result !== undefined ? { result: tool.result } : {}),
+    ...hints,
+    ...(tool.resultAgentId ? { resultAgentId: tool.resultAgentId } : {}),
+  };
 }
 
 /**
  * Derive {@link SubAgent} view-models from a conversation transcript (replayed
  * finalized events and/or live incremental frames). Equivalent `steps` from
- * either source thanks to {@link applyNestedStep}. Depth-1 steps stay expanded;
- * deeper runs collapse into {@link SubAgent.collapsedDelegations}.
+ * either source thanks to {@link applyNestedStep}. Every depth nests the runs
+ * it delegated in {@link SubAgent.nestedRuns}.
  */
 export function deriveSubAgents(events: TranscriptEvent[]): SubAgent[] {
   const latest = new Map<
@@ -294,35 +314,14 @@ export function deriveSubAgents(events: TranscriptEvent[]): SubAgent[] {
     latest.set(event.callId, event);
   }
 
-  return order.map((callId) => {
-    const toolCall = latest.get(callId)!;
-    let steps: NestedStep[] = [];
-    for (const event of events) {
-      if (
-        event.type === "subagent_update" &&
-        event.parentCallId === callId &&
-        // Depth-1 only: deeper runs carry parentDelegationId and collapse.
-        !event.parentDelegationId
-      ) {
-        steps = applyNestedStep(steps, event.step);
-      }
-    }
-    const fields = parseSubAgentArgs(toolCall.args);
-    const role = roleFromToolArgs(toolCall.args);
-    return {
-      callId,
-      ...fields,
-      ...(role ? { role } : {}),
-      ...deriveRootDelegationMeta(events, callId),
-      status: toolCall.status,
-      ...(toolCall.result !== undefined ? { result: toolCall.result } : {}),
-      ...(toolCall.resultAgentId
-        ? { resumeAgentId: toolCall.resultAgentId }
-        : {}),
-      steps,
-      collapsedDelegations: deriveCollapsedDelegations(events, callId, steps),
-    };
-  });
+  const index = indexRuns(events);
+  return order.map((callId) =>
+    toSubAgent(
+      runSpawnFromToolCall(callId, latest.get(callId)),
+      index.runs.get(runKey(undefined, callId)),
+      index,
+    ),
+  );
 }
 
 /** Look up a single {@link SubAgent} by parent Task `callId`. */
