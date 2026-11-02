@@ -56,8 +56,15 @@ Absolute path for this file (Read this exact path):
    checks do not waive a failed look.
    A completed look with a visible product problem is fixed in this implement
    pass — it is not a reason to skip the look.
-   The self-check is done when every check you chose passes and, on a
-   UI-related Task, the look passed.
+   Scan the output of each compile this self-check already ran for
+   compiler warnings: the runtime `build` command, and any other compile
+   the task already required. When this self-check ran no compile, there
+   is no build output to scan. A compiler warning is a diagnostic from
+   the Rust, C, C++, or TypeScript compiler. Judge whether this change
+   introduced each warning the scan found. Main is not compiled for that
+   judgment. A warning already present stays allowed.
+   The self-check is done when every check you chose passes, no warning
+   judged introduced remains, and, on a UI-related Task, the look passed.
 4. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly with
    `issue task set <id> noDiff true`, then go to step 8.
