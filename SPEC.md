@@ -86,6 +86,11 @@ Every issue has a `kind`, one of:
   Story tip, the package must still **build**, and the Task stays a
   **testable** cut of one capability (not a horizontal layer such as
   types-only, wire-up-later, or a half-migration that does not compile).
+  Anyone looking for warnings scans the output of each compile the
+  implementor already ran for compiler warnings. The implementor judges
+  that scan. **Read**
+  `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-implement.md`
+  and follow the compiler-warning scan in its self-check.
 
   When committing automated tests, **Read**
   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
