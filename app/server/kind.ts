@@ -122,6 +122,7 @@ export function channelForIssue(
 ): ConversationChannel | undefined {
   switch (issue.kind) {
     case "idea":
+    case "outline":
       return "planning";
     case "epic":
       return "implementing";

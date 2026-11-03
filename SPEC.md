@@ -1097,6 +1097,14 @@ it. Idle or archived sessions do not hold the lock.
 
 **Launcher.** At the start of each launcher pass (before the per-Project work-root drain from [Work queue](#work-queue)), the server drains Ideas carrying `planQueuedAt` across all Projects, oldest first, with no cap. It starts each through `createIssueChannelSession` with channel `planning`, model = the Idea's `stakeholder`, and the title and first prompt that `app/src/features/issues/lib/planning-launch.ts` builds for a stakeholder. It then clears `planQueuedAt`. On failure it clears the field and posts `issue idea comment <id> --role launcher --body "Auto-plan failed to start: <message>"` through the service layer. The Idea stays `captured`, so the human can start it from the button.
 
+### Outline planning channel
+
+An Outline offers the `planning` channel. Issue detail shows it as a Planning tab, the same tab an Idea uses. The tab lists sessions on that channel. It does not start them.
+
+`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner or decomposer session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
+
+A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
+
 ### Work queue
 
 `workQueuedAt` (ISO string, optional) on an Epic or a project-level Story records when the work root joined the queue. `workQueuePosition` (positive integer, optional) is its place among that Project's queued roots. `workParkedAt` (ISO string, optional) is set while the root is parked. All three are system writers: `apply` preserves them, and kind `set` does not accept them. `issue epic|story get <id> workQueuedAt`, `issue epic|story get <id> workQueuePosition`, and `issue epic|story get <id> workParkedAt` read them. Roots that already carry `workQueuedAt` and lack `workQueuePosition` receive positions in `workQueuedAt` order, id as the tie-break, per Project, after any position already stored.

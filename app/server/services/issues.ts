@@ -292,6 +292,16 @@ export function readReviewOrThrow(id: string): ReviewIssue {
   return issue;
 }
 
+export function readOutlineOrThrow(
+  id: string,
+): Extract<Issue, { kind: "outline" }> {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "outline") {
+    throw new IssueError("validation", `issue "${id}" is not an outline`);
+  }
+  return issue;
+}
+
 export function requireKindCapability(
   id: string,
   capability: RefuseableCapability,
