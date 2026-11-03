@@ -304,9 +304,9 @@ These are computed by `derive()` and never written to disk (see
   [Derived state](#derived-state)).
 - **Story status** — `not-started` / `in-progress` / `pr-open` / `merged`.
 - **Epic status** — `todo` / `in-progress` / `done` (rollup of its Stories).
-- **Idea status** — `captured` / `planning` / `planned` / `awaiting-approval` /
-  `awaiting-direction` (planning phase from sessions, live runs,
-  `approvalPending`, and stored `sourceIdea` edges); also
+- **Idea status** — `captured` / `planning` / `outlined` / `planned` /
+  `awaiting-approval` / `awaiting-direction` (planning phase from sessions,
+  live runs, `approvalPending`, and stored `sourceIdea` / outline edges); also
   `issue idea get … ideaStatus`. Tree chip `status=<value>`.
 - **planRoots** — derived reverse of `sourceIdea`: the ids of Epics, root
   project-level Stories, and Stories holding Tasks whose stored `sourceIdea`
@@ -2519,8 +2519,10 @@ so cannot drift:
   computation; the next request after it settles reads git again. Not
   attached by `list()` or the pure `derive()` pass.
 - **Idea status** — ranked highest first: `planning` when a planning-session
-  run is live; `planned` when an Epic or root project-level Story in the same
-  Project stores `sourceIdea` pointing at the Idea; `awaiting-approval` when
+  run is live; `outlined` when an outline in the same Project stores
+  `sourceIdea` pointing at the Idea; `planned` when an Epic or root
+  project-level Story in the same Project stores `sourceIdea` pointing at the
+  Idea and no such outline exists; `awaiting-approval` when
   `approvalPending` is true; `awaiting-direction` when a session ran and stopped
   without a plan root and no gate is pending; `captured` when no planning
   session has run. Computed by `planningStatusById()` (I/O over planning

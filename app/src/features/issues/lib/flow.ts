@@ -1,6 +1,11 @@
 import { hasAttention } from "@server/kind";
 import { bySequence, epicsBlockedBy, isProjectBoardChild } from "@server/order";
-import type { DerivedState, IssueRecord } from "@server/schemas";
+import {
+  ideaHasPlanOutput,
+  ideaStatusNeedsAttention,
+  type DerivedState,
+  type IssueRecord,
+} from "@server/schemas";
 import { type BoardKindFilter } from "./board-kind-filter";
 import { issuesById, projectIdOf } from "./build-tree";
 import {
@@ -208,7 +213,7 @@ export function flowFiltersActive(filters: FlowFilters): boolean {
 
 /**
  * Epic, project-level Story, or Idea. Tasks and Epic-child Stories stay out.
- * A `planned` Idea is a row only while unarchived; its plan root is already a row.
+ * An Idea with plan output is a row only while unarchived; its artifact is already a row.
  */
 function isFlowTopLevelRow(
   issue: IssueRecord,
@@ -224,7 +229,7 @@ function isFlowTopLevelRow(
   if (byId.get(issue.partOf)?.kind !== "project") return false;
   if (issue.kind === "idea") {
     if (
-      derived[issue.id]?.ideaStatus === "planned" &&
+      ideaHasPlanOutput(derived[issue.id]?.ideaStatus) &&
       issue.archived
     ) {
       return false;
@@ -236,12 +241,7 @@ function isFlowTopLevelRow(
 /** Attention for Flow: stored flag on Epics/Stories, stall only on planning. */
 export function flowItemNeedsAttention(item: FlowItem): boolean {
   if (item.issue.kind === "idea") {
-    const status = item.state?.ideaStatus;
-    return (
-      status === "awaiting-approval" ||
-      status === "awaiting-direction" ||
-      status === "planned"
-    );
+    return ideaStatusNeedsAttention(item.state?.ideaStatus);
   }
   return storedAttentionIssue(item) !== undefined;
 }

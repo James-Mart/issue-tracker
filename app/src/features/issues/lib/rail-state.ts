@@ -1,5 +1,5 @@
 import { hasAttention } from "@server/kind";
-import type { DerivedState, IssueRecord } from "@server/schemas";
+import { ideaStatusNeedsAttention, type DerivedState, type IssueRecord } from "@server/schemas";
 import { isInFlight, isIssueComplete, isReadyToLandFromIndexes } from "./derived";
 import type { TreeRowIndexes } from "./tree-row-indexes";
 
@@ -28,12 +28,7 @@ export function issueRailNodeState(
   indexes: TreeRowIndexes,
 ): RailNodeState {
   if (hasAttention(issue) && issue.needsAttention) return "needs-attention";
-  if (
-    issue.kind === "idea" &&
-    (state?.ideaStatus === "awaiting-approval" ||
-      state?.ideaStatus === "awaiting-direction" ||
-      state?.ideaStatus === "planned")
-  ) {
+  if (issue.kind === "idea" && ideaStatusNeedsAttention(state?.ideaStatus)) {
     return "needs-attention";
   }
   if (state?.blocked) return "blocked";

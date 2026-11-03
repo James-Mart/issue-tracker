@@ -797,6 +797,7 @@ export const EPIC_STATUSES = ["todo", "in-progress", "done"] as const;
 export const IDEA_STATUSES = [
   "captured",
   "planning",
+  "outlined",
   "planned",
   "awaiting-approval",
   "awaiting-direction",
@@ -804,6 +805,26 @@ export const IDEA_STATUSES = [
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 export type EpicStatus = (typeof EPIC_STATUSES)[number];
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
+
+export const IDEA_PLAN_OUTPUT_STATUSES = [
+  "outlined",
+  "planned",
+] as const satisfies readonly IdeaStatus[];
+
+export function ideaHasPlanOutput(status: IdeaStatus | undefined): boolean {
+  return (
+    status !== undefined &&
+    (IDEA_PLAN_OUTPUT_STATUSES as readonly IdeaStatus[]).includes(status)
+  );
+}
+
+export function ideaStatusNeedsAttention(status: IdeaStatus | undefined): boolean {
+  return (
+    status === "awaiting-approval" ||
+    status === "awaiting-direction" ||
+    ideaHasPlanOutput(status)
+  );
+}
 
 export interface DerivedWorktree {
   path?: string;

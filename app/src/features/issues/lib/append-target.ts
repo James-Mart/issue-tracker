@@ -1,5 +1,6 @@
 import { articleForKind, KIND_LABEL } from "@server/kind";
 import type { DerivedState, IssueKind, IssueRecord } from "@server/schemas";
+import { ideaHasPlanOutput } from "@server/schemas";
 import { projectIdOf } from "./build-tree";
 
 export const APPEND_TARGET_EMPTY_LABEL = "None — new Story";
@@ -40,7 +41,7 @@ export function appendPlanningCalloutVisible(
   appendTo: string | null | undefined,
   derived: Pick<DerivedState, "ideaStatus" | "planRoots"> | undefined,
 ): boolean {
-  if (derived?.ideaStatus === "planned") return false;
+  if (ideaHasPlanOutput(derived?.ideaStatus)) return false;
   if (appendTo && (derived?.planRoots?.length ?? 0) > 0) return false;
   return true;
 }
@@ -53,7 +54,7 @@ export function appendTargetFieldIsReadOnly(
   targetMerged: boolean,
 ): boolean {
   if (targetMerged) return false;
-  if (derived?.ideaStatus === "planned") return true;
+  if (ideaHasPlanOutput(derived?.ideaStatus)) return true;
   if (appendTo && (derived?.planRoots?.length ?? 0) > 0) return true;
   return false;
 }
