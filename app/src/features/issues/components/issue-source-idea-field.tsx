@@ -20,7 +20,7 @@ export function IssueSourceIdeaField({
     sourceIdeaId ? [sourceIdeaId] : [],
     issue,
   );
-  const { byId, missingIds, accept, reject } = supplement;
+  const { byId } = supplement;
 
   if (!sourceIdeaId) return null;
 
@@ -28,24 +28,41 @@ export function IssueSourceIdeaField({
     return null;
   }
 
-  const idea = byId.get(sourceIdeaId);
-  const title = idea?.title ?? sourceIdeaId;
-
   return (
     <MetaRow
       label={FIELD_LABELS.sourceIdea}
       value={
-        <>
-          <IssueLinkResolution
-            missingIds={missingIds}
-            accept={accept}
-            reject={reject}
-          />
-          <IssueLink id={sourceIdeaId} supplement={supplement}>
-            {title}
-          </IssueLink>
-        </>
+        <SourceIdeaAnchor
+          sourceIdeaId={sourceIdeaId}
+          supplement={supplement}
+        />
       }
     />
+  );
+}
+
+/** The linked Idea title for a stored `sourceIdea`, once the caller has the supplement. */
+export function SourceIdeaAnchor({
+  sourceIdeaId,
+  supplement,
+  className,
+}: {
+  sourceIdeaId: string;
+  supplement: ReturnType<typeof useSupplementedById>;
+  className?: string;
+}) {
+  const { byId, missingIds, accept, reject } = supplement;
+  const title = byId.get(sourceIdeaId)?.title ?? sourceIdeaId;
+  return (
+    <>
+      <IssueLinkResolution
+        missingIds={missingIds}
+        accept={accept}
+        reject={reject}
+      />
+      <IssueLink id={sourceIdeaId} supplement={supplement} className={className}>
+        {title}
+      </IssueLink>
+    </>
   );
 }

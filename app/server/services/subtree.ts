@@ -121,7 +121,7 @@ export function nearestImplementingWorkRootId(
 }
 
 /**
- * Project id that contains an Epic/Idea/Review (via `partOf`), a Story (directly via
+ * Project id that contains an Epic/Idea/Review/Outline (via `partOf`), a Story (directly via
  * Project or via Epic), a Task (via its Story/Epic chain), or undefined when
  * the chain is broken.
  */
@@ -129,7 +129,12 @@ export function projectContaining(
   issue: Issue,
   byId: Map<string, Issue>,
 ): string | undefined {
-  if (issue.kind === "epic" || issue.kind === "idea" || issue.kind === "review") {
+  if (
+    issue.kind === "epic" ||
+    issue.kind === "idea" ||
+    issue.kind === "review" ||
+    issue.kind === "outline"
+  ) {
     return issue.partOf;
   }
   if (issue.kind === "story") {

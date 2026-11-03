@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import {
+  readCliFileArg,
   resolveDescription,
   withCreateDescriptionOptions,
   type CreateDescriptionOpts,
@@ -79,6 +80,28 @@ export function registerKindAdd(
       .description("start a review of a Story, or print the review it already has")
       .action((opts: { story: string }) =>
         run(async () => (await startStoryReview(opts.story)).review),
+      );
+    return;
+  }
+  if (kind === "outline") {
+    kindCmd
+      .command("add")
+      .description("create an outline under a project; the body is version 1")
+      .requiredOption("--in <projectId>", "parent project id")
+      .requiredOption("--title <title>", "outline title")
+      .requiredOption(
+        "--description-file <path>",
+        "read the outline body from a file (use - for stdin)",
+      )
+      .action((opts: { in: string; title: string; descriptionFile: string }) =>
+        run(() =>
+          create({
+            kind: "outline",
+            title: opts.title,
+            partOf: opts.in,
+            description: readCliFileArg(opts.descriptionFile),
+          }),
+        ),
       );
     return;
   }

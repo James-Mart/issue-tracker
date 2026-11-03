@@ -4,7 +4,7 @@ import { join } from "path";
 import { issuesDir } from "../config.js";
 import type { Issue, IssueDetail, IssueRecord } from "../schemas.js";
 
-function descriptionPath(id: string): string {
+export function descriptionPath(id: string): string {
   return join(issuesDir, id, "description.md");
 }
 

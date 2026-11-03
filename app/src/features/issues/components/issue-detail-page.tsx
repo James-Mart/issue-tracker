@@ -59,6 +59,7 @@ import { StoryWorktreeCard } from "./story-worktree-card";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
+import { OutlineBodyCard } from "./outline-body-card";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
@@ -163,7 +164,11 @@ function IssueOverviewPanel({
         />
       ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
-      <IssueDescriptionField issue={issue} upload={upload} />
+      {issue.kind === "outline" ? (
+        <OutlineBodyCard key={issue.id} issue={issue} />
+      ) : (
+        <IssueDescriptionField issue={issue} upload={upload} />
+      )}
       <IssueCommentsSection issue={issue} />
     </div>
   );
@@ -224,6 +229,7 @@ function IssueDetailBody({
         exportTab={exportTab}
         exportDraftReaderOpen={exportDraftReaderOpen}
         onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
+        showTabBar={issue.kind === "outline"}
         overview={
           <IssueOverviewPanel
             issue={issue}

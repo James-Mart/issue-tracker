@@ -5,7 +5,7 @@ export type IssueBackEntry =
   | { kind: "structure"; projectId: string }
   | { kind: "pipeline"; to: string }
   | { kind: "agents" }
-  | { kind: "issue"; projectId: string; issueId: string };
+  | { kind: "issue"; projectId: string; issueId: string; search?: string };
 
 export type IssueBackLocationState = {
   issueBackStack?: IssueBackEntry[];
@@ -83,6 +83,7 @@ export function nextIssueBackStack(
         kind: "issue" as const,
         projectId: onScreen.projectId,
         issueId: onScreen.issueId,
+        ...(search ? { search } : {}),
       }
     : originEntryFromLocation(pathname, search);
   if (!entry) return undefined;
@@ -109,6 +110,6 @@ export function issueBackTo(entry: IssueBackEntry): string {
     case "agents":
       return "/agents";
     case "issue":
-      return issuePath(entry.projectId, entry.issueId);
+      return `${issuePath(entry.projectId, entry.issueId)}${entry.search ?? ""}`;
   }
 }

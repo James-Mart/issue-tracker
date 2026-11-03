@@ -7,6 +7,7 @@ export const KIND_LABEL: Record<IssueKind, string> = {
   story: "Story",
   task: "Task",
   review: "Review",
+  outline: "Outline",
 };
 
 /** Per-kind field/affordance flags. Prefer these over ad-hoc `in` / kind checks. */
@@ -81,6 +82,17 @@ export const KIND_CAPABILITIES = {
     comment: true,
     worktree: true,
   },
+  outline: {
+    partOf: true,
+    detailPartOf: false,
+    archived: true,
+    assignee: false,
+    attention: false,
+    attachments: false,
+    comments: false,
+    comment: false,
+    worktree: false,
+  },
 } as const satisfies Record<
   IssueKind,
   {
@@ -146,7 +158,7 @@ export type AttentionIssue = Extract<
 >;
 export type ArchivableIssue = Extract<
   Issue,
-  { kind: "epic" | "idea" | "story" | "task" | "review" }
+  { kind: "epic" | "idea" | "story" | "task" | "review" | "outline" }
 >;
 export type AssigneeIssue = Extract<Issue, { kind: "task" }>;
 
@@ -170,7 +182,7 @@ export function kindHas(kind: IssueKind, capability: KindCapability): boolean {
 }
 
 export function articleForKind(kind: IssueKind): "a" | "an" {
-  return kind === "epic" || kind === "idea" ? "an" : "a";
+  return kind === "epic" || kind === "idea" || kind === "outline" ? "an" : "a";
 }
 
 function capabilitySubject(capability: RefuseableCapability): string {

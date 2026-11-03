@@ -21,8 +21,8 @@ export function visibleIssues<T extends Issue>(
 }
 
 /**
- * Planning outlines: the structure lens, the cockpit, and the default
- * `issue tree`. Review issues stay on the code review lens.
+ * Structure-lens issues for the cockpit and the default `issue tree`
+ * (every visible issue except reviews). Not the `outline` issue kind.
  */
 export function outlineIssues<T extends Issue>(
   issues: T[],

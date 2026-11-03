@@ -14,6 +14,7 @@ import { CommentsAnchor } from "./comments/comments-anchor";
 import { IssueBadges } from "./issue-badges";
 import { IssueDetailStatusChips } from "./issue-detail-status-chips";
 import { IssueTitleField } from "./issue-title-field";
+import { OutlineSourceIdeaLink } from "./outline-source-idea-link";
 import { ProjectLabelChips } from "./project-label-chips";
 
 function CopyIssueIdButton({ id }: { id: string }) {
@@ -86,6 +87,9 @@ export function IssueDetailHeader({
           </span>
           <CommentsAnchor issue={issue} />
         </div>
+        {issue.kind === "outline" ? (
+          <OutlineSourceIdeaLink issue={issue} />
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <IssueDetailStatusChips issue={issue} />
           <ProjectLabelChips issue={issue} catalog={catalog} />

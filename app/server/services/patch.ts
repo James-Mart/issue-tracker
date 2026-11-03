@@ -48,6 +48,9 @@ export function validateSystemWrittenPatch(patch: IssuePatch): void {
       "planQueuedAt is system-written; clear it to dequeue",
     );
   }
+  if (patch.bodyVersion !== undefined) {
+    throw new IssueError("validation", "bodyVersion is system-written");
+  }
 }
 
 export function validateSourceIdeaPatch(
