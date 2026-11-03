@@ -29,6 +29,10 @@ export const issuesKeys = {
   change: (issueId: string) => [...issuesKeys.all, "change", issueId] as const,
   changeFile: (issueId: string, sha: string, path: string) =>
     [...issuesKeys.change(issueId), "file", sha, path] as const,
+  outlineBody: (issueId: string, version: number) =>
+    [...issuesKeys.all, "outlineBody", issueId, version] as const,
+  outlineDiff: (issueId: string, from: number, to: number) =>
+    [...issuesKeys.all, "outlineDiff", issueId, from, to] as const,
 };
 
 export const healthKeys = {

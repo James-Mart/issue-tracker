@@ -188,19 +188,13 @@ export function checkIntegrity(issues: Issue[]): Problem[] {
           problems,
         );
       }
-      if (issue.sourceIdea) {
-        checkReferentInSameContainer(
-          issue,
-          issue.sourceIdea,
-          "idea",
-          "sourceIdea",
-          "Project",
-          byId,
-          problems,
-        );
-      }
     }
-    if (issue.kind === "story" && issue.sourceIdea) {
+    if (
+      (issue.kind === "epic" ||
+        issue.kind === "story" ||
+        issue.kind === "outline") &&
+      issue.sourceIdea
+    ) {
       checkReferentInSameContainer(
         issue,
         issue.sourceIdea,

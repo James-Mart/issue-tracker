@@ -59,7 +59,7 @@ function isChannelTab(
 /**
  * Page-level tab bar below the persistent header. Overview always; optional
  * channel from `channelForIssue`; Project keeps supporting-doc preview tabs.
- * With Overview alone, no bar renders.
+ * With Overview alone, no bar renders unless `showTabBar` is set.
  */
 export function IssueDetailTabs({
   issue,
@@ -69,6 +69,7 @@ export function IssueDetailTabs({
   exportTab = false,
   exportDraftReaderOpen = false,
   onExportDraftReaderOpenChange,
+  showTabBar = false,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -78,6 +79,8 @@ export function IssueDetailTabs({
   exportTab?: boolean | "loading";
   exportDraftReaderOpen?: boolean;
   onExportDraftReaderOpenChange?: (open: boolean) => void;
+  /** Keep the tab bar when Overview is the only tab. */
+  showTabBar?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const includeExport = exportTabIncluded(exportTab, searchParams.get("tab"));
@@ -149,7 +152,7 @@ export function IssueDetailTabs({
   const agentsTabs = tabs.filter(isAgentsTab);
   const diffTabs = tabs.filter(isDiffTab);
   const docTabs = tabs.filter(isDocTab);
-  const showBar = tabs.length > 1;
+  const showBar = tabs.length > 1 || showTabBar;
   const overviewSelected = active === "overview";
 
   if (!showBar) {

@@ -12,6 +12,8 @@ import type {
   IssueChange,
   IssueDetail,
   IssuesResponse,
+  OutlineBodyResponse,
+  OutlineDiffResponse,
   ProjectWorktreesResponse,
 } from "@server/schemas";
 import type { PlanningWorkRoot } from "@server/services/planning-work-root";
@@ -312,6 +314,46 @@ export async function fetchIssueChangeFile(
     issueChangeFileUrl(issueId, sha, path),
   );
   return contents;
+}
+
+export function useOutlineBodyQuery(
+  id: string,
+  version: number,
+  enabled = true,
+): UseQueryResult<OutlineBodyResponse, Error> {
+  return useQuery({
+    queryKey: issuesKeys.outlineBody(id, version),
+    queryFn: () =>
+      request<OutlineBodyResponse>(
+        `/api/issues/${encodeURIComponent(id)}/outline/body?${new URLSearchParams({ version: String(version) })}`,
+      ),
+    enabled: enabled && Boolean(id) && version >= 1,
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+      count < 2,
+  });
+}
+
+export function useOutlineDiffQuery(
+  id: string,
+  from: number,
+  to: number,
+): UseQueryResult<OutlineDiffResponse, Error> {
+  const params = new URLSearchParams({
+    from: String(from),
+    to: String(to),
+  });
+  return useQuery({
+    queryKey: issuesKeys.outlineDiff(id, from, to),
+    queryFn: () =>
+      request<OutlineDiffResponse>(
+        `/api/issues/${encodeURIComponent(id)}/outline/diff?${params}`,
+      ),
+    enabled: Boolean(id) && from >= 1 && to >= 1,
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&
+      count < 2,
+  });
 }
 
 export function useIssueChangeFileQuery(

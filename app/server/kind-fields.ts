@@ -153,6 +153,7 @@ export const OUTLINE_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
   partOf: { type: "string" },
+  sourceIdea: { type: "string" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -321,6 +322,7 @@ export const OUTLINE_GET_FIELDS = {
   partOf: STORED,
   archived: STORED,
   version: { source: "stored", storeAs: "bodyVersion" },
+  sourceIdea: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

@@ -137,8 +137,9 @@ Five relationships, each with a distinct, non-overlapping role:
   makes the Epic-level dependency graph a DAG.
 - **sourceIdea** — *provenance*: the only edge from work back to a capture item.
   An optional reference to one Idea **in the same Project**, carried by Epics,
-  root project-level Stories (the plan root the Idea produced), and Tasks
-  (the append path — each appended Task records its source Idea). Not on
+  root project-level Stories (the plan root the Idea produced), Tasks
+  (the append path — each appended Task records its source Idea), and Outlines
+  (the feature description planning produced from that Idea). Not on
   Epic-child or stacked Stories. Ideas never carry `sourceIdea`, so the edge
   cannot form a cycle; provenance for nested Stories and non-appended Tasks
   comes from the containment chain.
@@ -610,6 +611,13 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   of body `<from>` against body `<to>` (`--- version/<from>`,
   `+++ version/<to>`). Identical bodies print nothing and exit 0. A version
   out of range, or a non-integer, is an error.
+- **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
+  returns `{ version, body }`. `<n>` is a positive integer through
+  `bodyVersion`. The latest body is `description.md`; an older body is
+  snapshot `<n>`. `GET /api/issues/:id/outline/diff?from=<n>&to=<m>` returns
+  `{ from, to, diff }` where `diff` is the same unified diff as
+  `issue outline diff` (empty when the bodies match). A non-outline id, a
+  missing or non-integer version, or a version past `bodyVersion` is an error.
 - **`version`** (outline get) — `issue outline get <id> version` prints the
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
@@ -692,7 +700,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `mergeBase`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `description` |
-| outline | `title`, `archived`, `partOf`, `description` |
+| outline | `title`, `archived`, `partOf`, `sourceIdea`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
 and refuses a sha already present on that Task. Whole-series replace uses
@@ -1329,6 +1337,7 @@ Outline — the common-to-every-kind fields plus:
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
 | `bodyVersion` | positive integer | latest saved body; starts at 1; system-written; CLI [`get`](#kind-scoped-get--set) name is `version` |
+| `sourceIdea` | string? | optional; names one Idea in the same Project this outline was planned from (see [Relationships](#relationships)) |
 
 No assignee, needs-attention, stored status, worktree, comments, or
 attachments. Not a board child: `issue tree` does not render it; `issue list outline`
@@ -2325,6 +2334,7 @@ preserves everything else from the existing same-kind issue.
 | `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `mergedAt`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `mergedAt` is system-written on the `merged` false→true flip (optional caller timestamp); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via `setRootMergeSettings` (kind [`set`](#kind-scoped-get--set) field `mergeBase`, or PATCH); null / `""` / `--clear` clears it; `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
+| `sourceIdea` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set), or `sourceIdea` on create); names the Idea planning produced this outline from |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
 | `needsAttention`/`attentionReason` (Epic / Story / Task) | imperative write (kind [`set`](#kind-scoped-get--set); `attentionReason` only via `needsAttention` + `--reason`); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |

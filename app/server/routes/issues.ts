@@ -70,6 +70,11 @@ import { APPEND_TO_MERGED_ERROR } from "../services/patch.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { readIssueChange, readIssueChangeFile } from "../services/change.js";
+import {
+  outlineVersionBody,
+  outlineVersionDiff,
+  parseOutlineVersion,
+} from "../services/outline-body.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import {
   applyArchivedListQuery,
@@ -108,6 +113,33 @@ function projectIdForIssue(issueId: string): string {
   return ancestorChain(issueId, issues)[0]!.id;
 }
 
+function outlineServiceError(error: unknown): never {
+  if (error instanceof IssueError) throw error;
+  throw new IssueError(
+    "validation",
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+function outlineVersionQuery(raw: unknown, name: string): number {
+  if (typeof raw !== "string" || raw === "") {
+    throw new IssueError("validation", `${name} is required`);
+  }
+  try {
+    return parseOutlineVersion(raw);
+  } catch (error) {
+    outlineServiceError(error);
+  }
+}
+
+function requireOutline(id: string) {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "outline") {
+    throw new IssueError("validation", `issue "${id}" is not an outline`);
+  }
+  return issue;
+}
+
 export function createIssuesRouter(
   sessions: AgentSessions = agentSessions,
 ): Router {
@@ -126,6 +158,37 @@ export function createIssuesRouter(
     "/:id",
     asyncRoute((req, res) => {
       res.json(read(req.params.id));
+    }),
+  );
+
+  router.get(
+    "/:id/outline/body",
+    asyncRoute((req, res) => {
+      const issue = requireOutline(req.params.id);
+      const version = outlineVersionQuery(req.query.version, "version");
+      let body: string;
+      try {
+        body = outlineVersionBody(issue.id, issue.bodyVersion, version);
+      } catch (error) {
+        outlineServiceError(error);
+      }
+      res.json({ version, body });
+    }),
+  );
+
+  router.get(
+    "/:id/outline/diff",
+    asyncRoute((req, res) => {
+      const issue = requireOutline(req.params.id);
+      const from = outlineVersionQuery(req.query.from, "from");
+      const to = outlineVersionQuery(req.query.to, "to");
+      let diff: string;
+      try {
+        diff = outlineVersionDiff(issue.id, issue.bodyVersion, from, to);
+      } catch (error) {
+        outlineServiceError(error);
+      }
+      res.json({ from, to, diff });
     }),
   );
 

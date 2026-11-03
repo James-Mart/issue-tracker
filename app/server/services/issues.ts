@@ -446,7 +446,10 @@ export function create(
       if (input.stackedOn) draft.stackedOn = input.stackedOn;
     }
     if (input.kind === "task") draft.status = "todo";
-    if (input.kind === "outline") draft.bodyVersion = 1;
+    if (input.kind === "outline") {
+      draft.bodyVersion = 1;
+      if (input.sourceIdea) draft.sourceIdea = input.sourceIdea;
+    }
     if (input.kind === "project") {
       if (input.workspace) {
         validateWorkspacePath(input.workspace);
@@ -894,7 +897,7 @@ export function linkableTaskStatuses(
 // descendant `partOf` it) and repairs every surviving foreign reference into it:
 // a branch stacked on a deleted branch is spliced to the deleted branch's own
 // fork point, deleted ids are dropped from any Epic's `blockedBy`, and
-// `sourceIdea` is cleared on surviving Epics, root Stories, and Tasks. The
+// `sourceIdea` is cleared on surviving Epics, root Stories, Tasks, and Outlines. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 // `appendTo` is cleared on surviving Ideas when the target Story is deleted.

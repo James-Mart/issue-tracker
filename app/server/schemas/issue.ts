@@ -609,13 +609,14 @@ export const taskSchema = z.object({
 
 // A versioned feature description under a Project. `bodyVersion` is the latest
 // saved body. CLI `get version` reads it. Distinct from the content-hash
-// `version` on `read()`.
+// `version` on `read()`. `sourceIdea` names the Idea planning produced this from.
 export const outlineSchema = z.object({
   id: nonEmpty,
   kind: z.literal("outline"),
   partOf: nonEmpty,
   title: nonEmpty,
   bodyVersion: z.number().int().positive(),
+  sourceIdea: z.string().optional(),
   ...archivableFields,
   ...orderField,
   ...timestamps,
@@ -702,6 +703,7 @@ export type CreateInput = Pick<IssueFields, "title"> &
       | "executionGate"
       | "approvalPending"
       | "codeApprovalRequired"
+      | "sourceIdea"
     >
   > & {
     kind: IssueKind;
@@ -713,6 +715,19 @@ export type IssueRecord = Issue;
 export type IssueDetail = IssueRecord & {
   description: string;
   version: string;
+};
+
+/** `GET /api/issues/:id/outline/body?version=`. */
+export type OutlineBodyResponse = {
+  version: number;
+  body: string;
+};
+
+/** `GET /api/issues/:id/outline/diff?from=&to=`. `diff` is a unified diff. */
+export type OutlineDiffResponse = {
+  from: number;
+  to: number;
+  diff: string;
 };
 
 export const changeCommitSchema = z.object({

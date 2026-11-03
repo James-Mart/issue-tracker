@@ -70,6 +70,20 @@ export function readOutlineBody(id: string, version: number, latest: number): st
 }
 
 /**
+ * Body of saved version `version`. The latest body is `latestBody` when the
+ * caller already has it, otherwise `description.md`. An older version is its snapshot.
+ */
+export function outlineVersionBody(
+  id: string,
+  bodyVersion: number,
+  version: number,
+  latestBody?: string,
+): string {
+  if (version === bodyVersion) return latestBody ?? readDescription(id);
+  return readOutlineBody(id, version, bodyVersion);
+}
+
+/**
  * Body and version number for `issue outline view`. The latest body is
  * `description.md`; older versions are snapshots.
  */
@@ -83,13 +97,25 @@ export function outlineBodyForView(
     return { body: latestBody, shownVersion: bodyVersion };
   }
   const shownVersion = parseOutlineVersion(versionRaw);
-  if (shownVersion === bodyVersion) {
-    return { body: latestBody, shownVersion };
-  }
   return {
-    body: readOutlineBody(id, shownVersion, bodyVersion),
+    body: outlineVersionBody(id, bodyVersion, shownVersion, latestBody),
     shownVersion,
   };
+}
+
+/** Unified diff of two saved versions, using the same body each version shows. */
+export function outlineVersionDiff(
+  id: string,
+  bodyVersion: number,
+  from: number,
+  to: number,
+): string {
+  return diffOutlineBodies(
+    from,
+    outlineVersionBody(id, bodyVersion, from),
+    to,
+    outlineVersionBody(id, bodyVersion, to),
+  );
 }
 
 /** Unified diff of outline body `fromVersion` against `toVersion`. */

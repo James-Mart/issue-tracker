@@ -1,9 +1,8 @@
 import type { Command } from "commander";
 import { assertKind } from "./cli-kind.js";
 import {
-  diffOutlineBodies,
+  outlineVersionDiff,
   parseOutlineVersion,
-  readOutlineBody,
 } from "./server/services/outline-body.js";
 
 type Run = (action: () => unknown) => Promise<void>;
@@ -33,9 +32,9 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
         const outline = assertKind("outline", id);
         const from = parseOutlineVersion(fromRaw);
         const to = parseOutlineVersion(toRaw);
-        const fromBody = readOutlineBody(id, from, outline.bodyVersion);
-        const toBody = readOutlineBody(id, to, outline.bodyVersion);
-        process.stdout.write(diffOutlineBodies(from, fromBody, to, toBody));
+        process.stdout.write(
+          outlineVersionDiff(id, outline.bodyVersion, from, to),
+        );
       }),
     );
 }
