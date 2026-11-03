@@ -45,6 +45,17 @@ function planNotFinalOf(
   return !idea.archived;
 }
 
+function stampOlderThanLatest(
+  issue: Epic | Story | Task,
+  byId: Map<string, Issue>,
+): boolean {
+  const stamp = issue.sourceOutline;
+  if (!stamp) return false;
+  const outline = byId.get(stamp.outline);
+  if (outline?.kind !== "outline") return false;
+  return stamp.version < outline.bodyVersion;
+}
+
 export function derive(issues: Issue[]): DeriveResult {
   const problems = checkIntegrity(issues);
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
@@ -129,6 +140,7 @@ export function derive(issues: Issue[]): DeriveResult {
       storyStatus,
       reviewCurrent: reviewCurrentOf(story),
       planNotFinal: planNotFinalOf(story, byId),
+      behind: stampOlderThanLatest(story, byId) && !story.merged,
       ...(mergeBase !== undefined ? { mergeBase } : {}),
       ...(mergeSettingsLock ? { mergeSettingsLock } : {}),
     };
@@ -142,8 +154,10 @@ export function derive(issues: Issue[]): DeriveResult {
     const earlierDone = siblings
       .slice(0, siblings.indexOf(task))
       .every((t) => t.status === "done");
+    const storyIsMerged = story?.kind === "story" && story.merged;
     state[task.id] = {
       blocked: task.status === "todo" && !(hasStory && earlierDone),
+      behind: stampOlderThanLatest(task, byId) && !storyIsMerged,
     };
   }
 
@@ -169,6 +183,7 @@ export function derive(issues: Issue[]): DeriveResult {
       blocked: false,
       epicStatus,
       planNotFinal: planNotFinalOf(epic, byId),
+      behind: stampOlderThanLatest(epic, byId) && epicStatus !== "done",
       ...(mergeSettingsLock ? { mergeSettingsLock } : {}),
     };
   }

@@ -10,19 +10,19 @@ import {
   issueBackNavigateState,
 } from "../lib/issue-back";
 import { issuePath } from "../lib/links";
+import { linkedWorkLabels } from "../lib/outline-links";
 import {
   outlineVersionLabel,
   outlinesForProject,
   PROJECT_OUTLINES_EMPTY_DETAIL,
   PROJECT_OUTLINES_EMPTY_TITLE,
-  PROJECT_OUTLINES_LINKED_ROOTS_LABEL,
   type OutlineRecord,
 } from "../lib/project-outlines";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { SETTINGS_HEADING_CLASS } from "./detail-section";
 
 const ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-1 shell:grid-cols-[minmax(0,1fr)_5.5rem_7.5rem_1rem] shell:gap-x-4";
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-1 shell:grid-cols-[minmax(0,1fr)_5.5rem_max-content_1rem] shell:gap-x-4";
 
 /**
  * Project detail catalog: every outline under the Project, newest version
@@ -31,10 +31,15 @@ const ROW_GRID =
 export function ProjectOutlinesTab({ projectId }: { projectId: string }) {
   const showArchived = useIssueUiStore((state) => state.showArchived);
   const query = useIssuesIncludingArchived(showArchived);
+  const listed = query.data;
   const outlines = useMemo(() => {
-    if (!query.data) return [];
-    return outlinesForProject(query.data.issues, projectId, showArchived);
-  }, [projectId, query.data, showArchived]);
+    if (!listed) return [];
+    return outlinesForProject(listed.issues, projectId, showArchived);
+  }, [projectId, listed, showArchived]);
+  const linkedLabels = useMemo(() => {
+    if (!listed) return new Map<string, string>();
+    return linkedWorkLabels(listed.issues, showArchived);
+  }, [listed, showArchived]);
   const location = useLocation();
   const linkState = issueBackNavigateState(
     location.pathname,
@@ -50,7 +55,7 @@ export function ProjectOutlinesTab({ projectId }: { projectId: string }) {
         hint="Reload the page or try again in a moment."
       />
     );
-  } else if (!query.data) {
+  } else if (!listed) {
     body = <ShellLoadingState label="Loading outlines…" />;
   } else if (outlines.length === 0) {
     body = (
@@ -83,6 +88,7 @@ export function ProjectOutlinesTab({ projectId }: { projectId: string }) {
                 outline={outline}
                 projectId={projectId}
                 linkState={linkState}
+                linked={linkedLabels.get(outline.id) ?? "0 roots"}
               />
             </li>
           ))}
@@ -98,13 +104,14 @@ function OutlineCatalogRow({
   outline,
   projectId,
   linkState,
+  linked,
 }: {
   outline: OutlineRecord;
   projectId: string;
   linkState: ReturnType<typeof issueBackNavigateState>;
+  linked: string;
 }) {
   const version = outlineVersionLabel(outline.bodyVersion);
-  const linked = PROJECT_OUTLINES_LINKED_ROOTS_LABEL;
   return (
     <Link
       to={issuePath(projectId, outline.id)}
@@ -124,7 +131,7 @@ function OutlineCatalogRow({
       <span className="hidden text-right font-mono text-xs tabular-nums text-muted-foreground shell:block">
         {version}
       </span>
-      <span className="hidden text-right font-mono text-xs tabular-nums text-muted-foreground shell:block">
+      <span className="hidden whitespace-nowrap text-right font-mono text-xs tabular-nums text-muted-foreground shell:block">
         {linked}
       </span>
       <ChevronRight

@@ -153,6 +153,7 @@ function epicChips(epic: EpicRecord, derived: Record<string, DerivedState>): str
   const chips: string[] = [];
   if (d?.epicStatus) chips.push(`status=${d.epicStatus}`);
   if (d?.planNotFinal) chips.push("plan not final");
+  if (d?.behind) chips.push("behind");
   if (epic.retro) chips.push(`retro=${epic.retro}`);
   return [...chips, ...workQueuedChip(epic), ...labelsChip(epic), ...attentionChip(epic)];
 }
@@ -178,14 +179,17 @@ function storyChips(story: StoryRecord, derived: Record<string, DerivedState>): 
   if (story.merged) chips.push("merged");
   if (d?.blocked) chips.push("blocked");
   if (d?.planNotFinal) chips.push("plan not final");
+  if (d?.behind) chips.push("behind");
   return [...chips, ...workQueuedChip(story), ...labelsChip(story), ...attentionChip(story)];
 }
 
 function taskChips(task: TaskRecord, derived: Record<string, DerivedState>): string[] {
+  const d = derived[task.id];
   const chips = [`status=${task.status}`];
   const head = taskHeadCommit(task);
   if (head) chips.push(`sha=${head.slice(0, 7)}`);
-  if (derived[task.id]?.blocked) chips.push("blocked");
+  if (d?.blocked) chips.push("blocked");
+  if (d?.behind) chips.push("behind");
   return [...chips, ...attentionChip(task)];
 }
 

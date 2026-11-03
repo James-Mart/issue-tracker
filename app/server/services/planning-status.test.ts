@@ -95,6 +95,23 @@ describe("planningStatusById", () => {
     expect(statusOf()).toBe("planning");
   });
 
+  it("is outlined when an outline stores sourceIdea for the Idea", async () => {
+    seedProjectAndIdea();
+    writeIssue("feature-outline", {
+      kind: "outline",
+      title: "Feature outline",
+      partOf: "platform",
+      order: 1,
+      bodyVersion: 1,
+      sourceIdea: "capture",
+      archived: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { statusOf } = await load();
+    expect(statusOf()).toBe("outlined");
+  });
+
   it("is awaiting-approval when approvalPending is set and no run is live", async () => {
     seedProjectAndIdea();
     writeIssue("capture", {

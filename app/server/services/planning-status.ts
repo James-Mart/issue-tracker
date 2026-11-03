@@ -4,7 +4,7 @@ import {
   listConversations,
 } from "./conversations.js";
 import { isRunLive } from "./run-live.js";
-import { ideaIdsWithPlanRoot } from "./planning-work-root.js";
+import { ideaPlanningArtifactIds } from "./planning-work-root.js";
 
 function planningSessionsByIssueId(): Map<string, string[]> {
   const byIssueChannel = new Map<string, string[]>();
@@ -25,13 +25,16 @@ function planningSessionsByIssueId(): Map<string, string[]> {
   return planning;
 }
 
+type IdeaPlanningArtifact = "outline" | "planRoot";
+
 function statusForIdea(
   conversationIds: string[] | undefined,
-  hasPlanRoot: boolean,
+  artifact: IdeaPlanningArtifact | undefined,
   approvalPending: boolean,
 ): IdeaStatus {
   if (conversationIds?.some((id) => isRunLive(id))) return "planning";
-  if (hasPlanRoot) return "planned";
+  if (artifact === "outline") return "outlined";
+  if (artifact === "planRoot") return "planned";
   if (approvalPending) return "awaiting-approval";
   if (conversationIds?.some((id) => conversationHasTranscript(id))) {
     return "awaiting-direction";
@@ -42,13 +45,18 @@ function statusForIdea(
 /** Derived planning state for every Idea, resolved in one pass over the signals. */
 export function planningStatusById(issues: Issue[]): Record<string, IdeaStatus> {
   const sessionsByIdea = planningSessionsByIssueId();
-  const plannedIds = ideaIdsWithPlanRoot(issues);
+  const { outlined, planned } = ideaPlanningArtifactIds(issues);
   const byId: Record<string, IdeaStatus> = {};
   for (const issue of issues) {
     if (issue.kind !== "idea") continue;
+    const artifact: IdeaPlanningArtifact | undefined = outlined.has(issue.id)
+      ? "outline"
+      : planned.has(issue.id)
+        ? "planRoot"
+        : undefined;
     byId[issue.id] = statusForIdea(
       sessionsByIdea.get(issue.id),
-      plannedIds.has(issue.id),
+      artifact,
       issue.approvalPending === true,
     );
   }

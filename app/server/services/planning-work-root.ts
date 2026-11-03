@@ -7,6 +7,7 @@ export type PlanningWorkRoot = {
 };
 
 type PlanRootIssue = Extract<Issue, { kind: "epic" | "story" }>;
+type IdeaRecord = Extract<Issue, { kind: "idea" }>;
 
 function isPlanRootKind(issue: Issue): issue is PlanRootIssue {
   return issue.kind === "epic" || issue.kind === "story";
@@ -15,6 +16,45 @@ function isPlanRootKind(issue: Issue): issue is PlanRootIssue {
 function isPlanRootCandidate(issue: PlanRootIssue, projectId: string): boolean {
   if (issue.partOf !== projectId) return false;
   return issue.kind === "epic" || !issue.stackedOn;
+}
+
+function ideasByIdFrom(issues: Issue[]): Map<string, IdeaRecord> {
+  const byId = new Map<string, IdeaRecord>();
+  for (const issue of issues) {
+    if (issue.kind === "idea") byId.set(issue.id, issue);
+  }
+  return byId;
+}
+
+/** Idea ids with an outline link vs an Epic/root Story plan-root link, one pass. */
+export function ideaPlanningArtifactIds(issues: Issue[]): {
+  outlined: Set<string>;
+  planned: Set<string>;
+} {
+  const ideasById = ideasByIdFrom(issues);
+  const outlined = new Set<string>();
+  const planned = new Set<string>();
+
+  for (const issue of issues) {
+    if (issue.kind === "outline") {
+      if (!issue.sourceIdea || outlined.has(issue.sourceIdea)) continue;
+      const idea = ideasById.get(issue.sourceIdea);
+      if (!idea || issue.partOf !== idea.partOf) continue;
+      outlined.add(issue.sourceIdea);
+      planned.delete(issue.sourceIdea);
+      continue;
+    }
+    if (!isPlanRootKind(issue)) continue;
+    if (!issue.sourceIdea || outlined.has(issue.sourceIdea) || planned.has(issue.sourceIdea)) {
+      continue;
+    }
+    const idea = ideasById.get(issue.sourceIdea);
+    if (!idea) continue;
+    if (!isPlanRootCandidate(issue, idea.partOf)) continue;
+    planned.add(issue.sourceIdea);
+  }
+
+  return { outlined, planned };
 }
 
 /**
@@ -46,24 +86,4 @@ export function findPlanningWorkRoot(
   }
 
   return best;
-}
-
-/** Idea ids with at least one Epic or root Story whose `sourceIdea` points back. */
-export function ideaIdsWithPlanRoot(issues: Issue[]): Set<string> {
-  const planned = new Set<string>();
-  const ideasById = new Map<string, Extract<Issue, { kind: "idea" }>>();
-  for (const issue of issues) {
-    if (issue.kind === "idea") ideasById.set(issue.id, issue);
-  }
-
-  for (const issue of issues) {
-    if (!isPlanRootKind(issue)) continue;
-    if (!issue.sourceIdea || planned.has(issue.sourceIdea)) continue;
-    const idea = ideasById.get(issue.sourceIdea);
-    if (!idea) continue;
-    if (!isPlanRootCandidate(issue, idea.partOf)) continue;
-    planned.add(issue.sourceIdea);
-  }
-
-  return planned;
 }

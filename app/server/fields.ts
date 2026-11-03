@@ -44,6 +44,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "sourceOutline",
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
@@ -74,6 +75,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "sourceOutline",
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
@@ -101,6 +103,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "retro",
   "labels",
   "sourceIdea",
+  "sourceOutline",
   "workQueuedAt",
   "workQueuePosition",
   "workParkedAt",
@@ -124,12 +127,13 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
 // (e.g. noDiff) live in TASK_IMPERATIVE_ONLY_KEYS and are excluded.
 export const TASK_FORM_FIELD_KEYS = ["status", "commits"] as const;
 
-export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "sourceIdea"] as const;
+export const TASK_IMPERATIVE_ONLY_KEYS = ["noDiff", "sourceIdea", "sourceOutline"] as const;
 
 export const TASK_RUNTIME_OPTIONAL_KEYS = [
   "commits",
   "noDiff",
   "sourceIdea",
+  "sourceOutline",
   "appended",
 ] as const;
 
@@ -175,6 +179,7 @@ export type ClearableKey = (typeof CLEARABLE_KEYS)[number];
 export const NULL_CLEARABLE_OBJECT_KEYS = [
   "supportingDocs",
   "runtime",
+  "sourceOutline",
 ] as const satisfies readonly (keyof IssueFields)[];
 
 export type NullClearableObjectKey = (typeof NULL_CLEARABLE_OBJECT_KEYS)[number];
@@ -241,6 +246,7 @@ export const FIELD_LABELS = {
   codeApprovalRequired: "Code approval required",
   appendTo: "Append to",
   sourceIdea: "Source idea",
+  sourceOutline: "Source outline",
   generatedIssues: "Generated issues",
   maxImplementingRuns: "Max implementing runs",
   autonomous: "Autonomous",

@@ -218,6 +218,7 @@ export function checkIntegrity(issues: Issue[]): Problem[] {
         });
       }
     }
+    checkSourceOutline(issue, byId, problems);
   }
 
   for (const id of dependencyCycles(issues, byId)) {
@@ -232,6 +233,31 @@ export function checkIntegrity(issues: Issue[]): Problem[] {
   checkReviewSources(issues, byId, problems);
 
   return problems;
+}
+
+function checkSourceOutline(
+  issue: Issue,
+  byId: Map<string, Issue>,
+  problems: Problem[],
+): void {
+  if (issue.kind !== "epic" && issue.kind !== "story" && issue.kind !== "task") return;
+  const stamp = issue.sourceOutline;
+  if (!stamp) return;
+  checkReferent(issue, stamp.outline, ["outline"], "sourceOutline", byId, problems);
+  const referent = byId.get(stamp.outline);
+  if (referent?.kind !== "outline") return;
+  if (projectContaining(issue, byId) !== referent.partOf) {
+    problems.push({
+      id: issue.id,
+      message: `sourceOutline "${stamp.outline}" must be in the same Project`,
+    });
+  }
+  if (stamp.version > referent.bodyVersion) {
+    problems.push({
+      id: issue.id,
+      message: `sourceOutline version ${stamp.version} is not a version of "${stamp.outline}"`,
+    });
+  }
 }
 
 function checkReviewSources(

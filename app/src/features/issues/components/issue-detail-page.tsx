@@ -60,6 +60,7 @@ import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
 import { OutlineBodyCard } from "./outline-body-card";
+import { OutlineLinkedWorkCard } from "./outline-linked-work-card";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
@@ -164,6 +165,9 @@ function IssueOverviewPanel({
         />
       ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
+      {issue.kind === "outline" ? (
+        <OutlineLinkedWorkCard key={`${issue.id}-linked`} issue={issue} />
+      ) : null}
       {issue.kind === "outline" ? (
         <OutlineBodyCard key={issue.id} issue={issue} />
       ) : (

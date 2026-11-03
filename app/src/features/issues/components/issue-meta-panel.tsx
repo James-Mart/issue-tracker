@@ -13,6 +13,7 @@ import { IssueAppendToField } from "./issue-append-to-field";
 import { IssuePartOfField } from "./issue-part-of-field";
 import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 import { IssueSourceIdeaField } from "./issue-source-idea-field";
+import { IssueSourceOutlineField } from "./issue-source-outline-field";
 import { IssueStakeholderField } from "./issue-stakeholder-field";
 import { CompactMetaBlock } from "./compact-meta";
 import { GitStackPanel } from "./git-stack-panel";
@@ -47,6 +48,10 @@ export function IssueMetaPanel({
 
   if (issue.kind === "epic" || issue.kind === "story") {
     rows.push(<IssueSourceIdeaField key="sourceIdea" issue={issue} />);
+  }
+
+  if (issue.kind === "epic" || issue.kind === "story" || issue.kind === "task") {
+    rows.push(<IssueSourceOutlineField key="sourceOutline" issue={issue} />);
   }
 
   if (hasAssignee(issue)) {

@@ -31,9 +31,6 @@ export function outlineVersionLabel(bodyVersion: number): string {
   return `v${bodyVersion}`;
 }
 
-/** Linked roots stay zero until outline linking exists. */
-export const PROJECT_OUTLINES_LINKED_ROOTS_LABEL = "0 roots";
-
 function byRecentVersion(a: OutlineRecord, b: OutlineRecord): number {
   const byTime = b.updatedAt.localeCompare(a.updatedAt);
   return byTime === 0 ? a.id.localeCompare(b.id) : byTime;

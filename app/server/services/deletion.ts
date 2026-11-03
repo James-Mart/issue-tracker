@@ -21,6 +21,10 @@ export interface DropAppendTo {
   id: string;
 }
 
+export interface DropSourceOutline {
+  id: string;
+}
+
 export interface DeletionPlan {
   // The target plus everything transitively `partOf` it (the containment
   // closure), plus the reviews of every Story in that closure.
@@ -34,6 +38,8 @@ export interface DeletionPlan {
   dropSourceIdea: DropSourceIdea[];
   // Surviving Ideas whose `appendTo` pointed at a deleted Story.
   dropAppendTo: DropAppendTo[];
+  // Surviving Epics, Stories, and Tasks whose `sourceOutline` named a deleted outline.
+  dropSourceOutline: DropSourceOutline[];
 }
 
 export interface RetainedWorktree {
@@ -48,6 +54,7 @@ export interface DeletionResult {
   unblocked: Unblock[];
   droppedSourceIdea: DropSourceIdea[];
   droppedAppendTo: DropAppendTo[];
+  droppedSourceOutline: DropSourceOutline[];
   // Worktrees that refused automatic removal (no `--discard`) and remain on disk.
   retainedWorktrees: RetainedWorktree[];
 }
@@ -76,6 +83,8 @@ export function addReviewsOfDeletedStories(
 //   - Epic / root Story / Task / Outline `sourceIdea`: the field is cleared when
 //     the Idea is deleted, no inheritance.
 //   - Idea `appendTo`: the field is cleared when the target Story is deleted.
+//   - Epic / Story / Task `sourceOutline`: the field is cleared when the outline
+//     is deleted.
 // `partOf` never needs repair: anything that points into the delete set via
 // `partOf` is itself contained and therefore also deleted.
 export function planDeletion(issues: Issue[], id: string): DeletionPlan {
@@ -119,6 +128,7 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
   const unblock: Unblock[] = [];
   const dropSourceIdea: DropSourceIdea[] = [];
   const dropAppendTo: DropAppendTo[] = [];
+  const dropSourceOutline: DropSourceOutline[] = [];
   for (const issue of issues) {
     if (deleteSet.has(issue.id)) continue;
     // Branch `stackedOn` splices within its Epic.
@@ -151,7 +161,21 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
     ) {
       dropAppendTo.push({ id: issue.id });
     }
+    if (
+      (issue.kind === "epic" || issue.kind === "story" || issue.kind === "task") &&
+      issue.sourceOutline &&
+      deleteSet.has(issue.sourceOutline.outline)
+    ) {
+      dropSourceOutline.push({ id: issue.id });
+    }
   }
 
-  return { deleteIds: [...deleteSet], repoint, unblock, dropSourceIdea, dropAppendTo };
+  return {
+    deleteIds: [...deleteSet],
+    repoint,
+    unblock,
+    dropSourceIdea,
+    dropAppendTo,
+    dropSourceOutline,
+  };
 }

@@ -248,11 +248,12 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     if (detail.workParkedAt) lines.push(`workParkedAt: ${detail.workParkedAt}`);
     if (detail.workResumeNote) lines.push(`workResumeNote: ${detail.workResumeNote}`);
   }
-  if (
-    (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") &&
-    detail.sourceIdea
-  ) {
-    lines.push(`sourceIdea: ${detail.sourceIdea}`);
+  if (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") {
+    if (detail.sourceIdea) lines.push(`sourceIdea: ${detail.sourceIdea}`);
+    if (detail.sourceOutline) {
+      lines.push(`sourceOutline: ${JSON.stringify(detail.sourceOutline)}`);
+      if (list().derived[id]?.behind) lines.push("behind: true");
+    }
   }
   const labelIds = labelIdsForView(detail);
   if (labelIds.length > 0) {
@@ -351,6 +352,9 @@ async function printDeleteResult(id: string): Promise<void> {
   }
   for (const { id: bid } of result.droppedAppendTo) {
     console.log(`  cleared ${bid}.appendTo`);
+  }
+  for (const { id: bid } of result.droppedSourceOutline) {
+    console.log(`  cleared ${bid}.sourceOutline`);
   }
   for (const { id: wid, path } of result.retainedWorktrees) {
     console.log(`  retained worktree for ${wid} at ${path}`);
