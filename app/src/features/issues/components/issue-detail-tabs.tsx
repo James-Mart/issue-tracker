@@ -18,6 +18,7 @@ import { exportTabIncluded } from "../lib/export-tab";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
+  OUTLINES_DETAIL_TAB,
   mobileChannelChromeForTab,
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
@@ -32,6 +33,7 @@ import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { AgentRunsPanel } from "./agent-runs-panel";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 import { IssueChangePanel } from "./issue-change-panel";
+import { ProjectOutlinesTab } from "./project-outlines-tab";
 import { SupportingDocPreview } from "./supporting-doc-preview";
 
 function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
@@ -50,6 +52,12 @@ function isDiffTab(
   return tab.key === DIFF_DETAIL_TAB;
 }
 
+function isOutlinesTab(
+  tab: IssueDetailTab,
+): tab is Extract<IssueDetailTab, { key: typeof OUTLINES_DETAIL_TAB }> {
+  return tab.key === OUTLINES_DETAIL_TAB;
+}
+
 function isChannelTab(
   tab: IssueDetailTab,
 ): tab is Extract<IssueDetailTab, { channel: string }> {
@@ -58,7 +66,8 @@ function isChannelTab(
 
 /**
  * Page-level tab bar below the persistent header. Overview always; optional
- * channel from `channelForIssue`; Project keeps supporting-doc preview tabs.
+ * channel from `channelForIssue`; Project keeps an Outlines catalog and
+ * supporting-doc preview tabs.
  * With Overview alone, no bar renders unless `showTabBar` is set.
  */
 export function IssueDetailTabs({
@@ -151,6 +160,7 @@ export function IssueDetailTabs({
   const channelTabs = tabs.filter(isChannelTab);
   const agentsTabs = tabs.filter(isAgentsTab);
   const diffTabs = tabs.filter(isDiffTab);
+  const outlinesTabs = tabs.filter(isOutlinesTab);
   const docTabs = tabs.filter(isDocTab);
   const showBar = tabs.length > 1 || showTabBar;
   const overviewSelected = active === "overview";
@@ -218,6 +228,23 @@ export function IssueDetailTabs({
       >
         {overview}
       </div>
+
+      {outlinesTabs.map((tab) => {
+        const selected = active === tab.key;
+        return (
+          <div
+            key={tab.key}
+            role="tabpanel"
+            className={cn(
+              "min-h-0 min-w-0 flex-1 overflow-y-auto",
+              !selected && "hidden",
+            )}
+            {...tabPanelVisibility(selected)}
+          >
+            <ProjectOutlinesTab projectId={projectId} />
+          </div>
+        );
+      })}
 
       {channelTabs.map((tab) => {
         const selected = active === tab.key;

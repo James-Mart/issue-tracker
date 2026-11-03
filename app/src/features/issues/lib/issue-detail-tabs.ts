@@ -15,11 +15,13 @@ import {
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
 export const AGENTS_DETAIL_TAB = "agents" as const;
 export const DIFF_DETAIL_TAB = "diff" as const;
+export const OUTLINES_DETAIL_TAB = "outlines" as const;
 
 export type IssueDetailTabKey =
   | typeof DEFAULT_ISSUE_DETAIL_TAB
   | typeof AGENTS_DETAIL_TAB
   | typeof DIFF_DETAIL_TAB
+  | typeof OUTLINES_DETAIL_TAB
   | ConversationChannel
   | SupportingDocPreviewTab["key"];
 
@@ -27,6 +29,7 @@ export type IssueDetailTab =
   | { key: typeof DEFAULT_ISSUE_DETAIL_TAB; label: "Overview" }
   | { key: typeof AGENTS_DETAIL_TAB; label: "Agents" }
   | { key: typeof DIFF_DETAIL_TAB; label: "Diff" }
+  | { key: typeof OUTLINES_DETAIL_TAB; label: "Outlines" }
   | { key: ConversationChannel; label: string; channel: ConversationChannel }
   | SupportingDocPreviewTab;
 
@@ -34,6 +37,7 @@ const ISSUE_DETAIL_TAB_LABELS = {
   overview: "Overview",
   agents: "Agents",
   diff: "Diff",
+  outlines: "Outlines",
   planning: "Planning",
   implementing: "Implementing",
   export: "Export",
@@ -71,7 +75,8 @@ export function diffTabForIssue(issue: Issue): boolean {
 
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
- * Export when a start has happened; Project keeps supporting-doc preview tabs.
+ * Export when a start has happened; Project keeps an Outlines catalog, then
+ * supporting-doc preview tabs.
  */
 export function tabsForIssueDetail(
   issue: Issue,
@@ -109,6 +114,10 @@ export function tabsForIssueDetail(
     tabs.push({ key: DIFF_DETAIL_TAB, label: ISSUE_DETAIL_TAB_LABELS.diff });
   }
   if (issue.kind === "project") {
+    tabs.push({
+      key: OUTLINES_DETAIL_TAB,
+      label: ISSUE_DETAIL_TAB_LABELS.outlines,
+    });
     tabs.push(...previewableSupportingDocs(issue.supportingDocs));
   }
   return tabs;
