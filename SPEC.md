@@ -116,7 +116,7 @@ Every issue has a `kind`, one of:
 
 ### Relationships
 
-Five relationships, each with a distinct, non-overlapping role:
+Six relationships, each with a distinct, non-overlapping role:
 
 - **partOf** — *containment*: the node this one belongs to. A Task is `partOf`
   a Story; a Story is `partOf` an Epic **or** a Project; an Epic, Idea, or
@@ -143,6 +143,14 @@ Five relationships, each with a distinct, non-overlapping role:
   Epic-child or stacked Stories. Ideas never carry `sourceIdea`, so the edge
   cannot form a cycle; provenance for nested Stories and non-appended Tasks
   comes from the containment chain.
+- **sourceOutline** — *outline version*: optional `{ outline, version }` on
+  Epics, Stories, and Tasks. `outline` names one outline in the same Project;
+  `version` is one of that outline's saved versions (a positive integer no
+  greater than its latest `bodyVersion`). It records the version the item was
+  authored or last reconciled against. Imperative only (kind [`set`](#kind-scoped-get--set));
+  `apply` and `issue story append` preserve it and never read it from YAML.
+  Cleared when that outline is deleted. Derived **`behind`** is separate
+  (see [Derived state](#derived-state)).
 - **appendTo** — *append target*: an optional reference from an Idea to one
   open Story **in the same Project**. When set, `issue-tracker-plan` lands
   the Idea's plan as Tasks on that Story (`issue story append`) instead of
@@ -311,6 +319,13 @@ These are computed by `derive()` and never written to disk (see
   chip `plan not final` when true. A work root reports ready on every surface
   a worker reads only when `planNotFinal` is `false`; archiving the source
   Idea is the act that declares planning finished.
+- **behind** — derived on Epics, Stories, and Tasks. `true` when
+  `sourceOutline` names a version older than that outline's latest and the
+  item is unmerged; otherwise `false` (including when `sourceOutline` is
+  absent). A Story is unmerged when stored `merged` is false. A Task is
+  unmerged unless its Story is merged. An Epic is unmerged when its derived
+  status is not `done`. Also `issue epic|story|task get … behind`. Tree chip
+  `behind` when true. `issue view` prints `behind: true` when the flag holds.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -673,7 +688,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -696,10 +711,10 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | kind | settable fields |
 | --- | --- |
 | project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `secrets`, `description` |
-| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
+| epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `mergeBase`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
-| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
-| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `description` |
+| story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
+| task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `sourceOutline`, `description` |
 | outline | `title`, `archived`, `partOf`, `sourceIdea`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
@@ -734,6 +749,8 @@ and refuses a sha already present on that Task. Whole-series replace uses
   `--rename`):
   - **Clearable scalars** (`assignee`, `branchName`, `stackedOn`,
     `prUrl`, `workspace`, `setupCommand`, `review`, `retro`, `sourceIdea`, `appendTo`, `mergeBase`): blanks the field (absent / `null`).
+  - **`sourceOutline`**: blanks the field (absent / `null`). Set with a JSON
+    object `{ "outline": "<outlineId>", "version": <n> }` (see [Relationships](#relationships)).
   - **`blockedBy`** / **`reviewedTasks`** / assignment **`labels`**: sets `[]` (empty array, not null).
   - **Project `labels`**: sets `[]` (empty catalog).
   - **Project `supportingDocs`**: blanks the field (absent / `null`); with
@@ -1303,6 +1320,7 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | `blockedBy` | string[] | other Epic ids in the same Project that must finish first; defaults `[]`; the only cross-Epic edge |
 | `mergeBaseOverride` | string? | optional; set via imperative `mergeBase`; first-layer Stories inherit this as their derived `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `sourceIdea` | string? | optional; names one Idea in the same Project this Epic was planned from (see [Relationships](#relationships)) |
+| `sourceOutline` | `{ outline, version }`? | optional; outline id and one of its versions in the same Project (see [Relationships](#relationships)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get (see [Project merge policy](#project-merge-policy)) |
 | `retro` | `"in-progress"` \| `"done"`? | absent until set; informational record that retro ran (`in-progress` while mining, `done` after terminal comment); no workflow branches on it |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
@@ -1353,6 +1371,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `stackedOn` | string? | single fork-point Story id (must be in the same Epic, or same Project for project-level Stories); absent => root |
 | `mergeBaseOverride` | string? | optional; meaningful on project-level root Stories only; set via imperative `mergeBase` (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `sourceIdea` | string? | optional; meaningful on project-level root Stories only; names one Idea in the same Project this Story was planned from (see [Relationships](#relationships)) |
+| `sourceOutline` | `{ outline, version }`? | optional; outline id and one of its versions in the same Project (see [Relationships](#relationships)) |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | optional stored override; effective value derived on get — this is what `finish-branch` reads (see [Project merge policy](#project-merge-policy)) |
 | `prUrl` | string? | optional |
 | `merged` | boolean | defaults `false` |
@@ -1376,6 +1395,7 @@ Task — the Epic/Story/Task needs-attention common fields plus:
 | `commits` | string[] | ordered oldest first; each element a full 40- or 64-character hex object name; defaults `[]`; set via `issue task set <taskId> commits '<json array>'` or appended with `issue task add-commit <taskId> <sha>` (refuses a sha already on that Task); presentation surfaces show the head (last element) |
 | `noDiff` | boolean? | absent until set; signals no source-controlled implementor changes |
 | `sourceIdea` | string? | optional; names one Idea in the same Project that produced this Task (append path; see [Relationships](#relationships)) |
+| `sourceOutline` | `{ outline, version }`? | optional; outline id and one of its versions in the same Project (see [Relationships](#relationships)) |
 | `appended` | boolean? | readable via kind [`get`](#kind-scoped-get--set); not settable — `issue story append` and `issue story update-from-merge-base` set it on created Tasks |
 
 Deliberately excluded: `rank`/priority (sibling order is stored as `order`, not
@@ -1944,6 +1964,7 @@ into it, and each edge type resolves deterministically:
 | `stackedOn` (a deleted Story; always same container) | **Splice**: repoint the surviving Story to the deleted story's own `stackedOn`, walking up until a surviving Story, or absent (forks the Project trunk) if none. The next read re-derives `mergeBase` from the new topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)). Preserves the stack minus the removed node. |
 | `blockedBy` (a deleted Epic; cross-Epic, same Project) | **Drop**: remove the deleted Epic id from the blocked Epic's list, with no inheritance. This is the case that matters for Epic deletion, since `blockedBy` is the only edge that crosses an Epic boundary. |
 | `sourceIdea` (a deleted Idea; Epic, root Story, or Task, same Project) | **Drop**: clear the field, with no inheritance. |
+| `sourceOutline` (a deleted Outline; Epic, Story, or Task) | **Drop**: clear the field, with no inheritance. |
 | `appendTo` (a deleted Story; Idea, same Project) | **Drop**: clear the field, with no inheritance. |
 | `stackedOn` → a deleted Task/Epic, or `blockedBy` → a deleted Story/Task | Impossible — `stackedOn` only ever references a Story, and `blockedBy` only ever references an Epic. |
 
@@ -2214,7 +2235,8 @@ project:
 ### Rooted forms: epic and story scope
 
 A project doc reconciles the whole project, so it prunes every Epic, Idea, and
-project-level Story the doc omits from `children:`. To edit a single epic or
+project-level Story the doc omits from `children:`. Outlines are not apply
+children; a plan doc leaves the catalog in place. To edit a single epic or
 story without disturbing its siblings, root the doc at that node and name the
 enclosing parents by **id** (a reference — never upserted, never pruned).
 Epic- and story-rooted docs never include Ideas (or other Project board
@@ -2329,11 +2351,12 @@ preserves everything else from the existing same-kind issue.
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
 | `partOf`, `stackedOn` | inferred from nesting (a story-rooted doc has no nesting, so it preserves the on-disk `stackedOn`); runtime `partOf`/`stackedOn` edits use kind [`set`](#kind-scoped-get--set) |
 | `id`, `createdAt` | set on create; `apply` preserves them, never rewrites |
-| `status`, `commits`, `noDiff`, `sourceIdea` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit`); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
+| `status`, `commits`, `noDiff`, `sourceIdea`, `sourceOutline` (Task) | imperative only (kind [`set`](#kind-scoped-get--set) / `issue task add-commit` for `commits`); `apply` preserves; `apply` never reads `sourceIdea` or `sourceOutline` from YAML |
 | `appended` (Task) | append path only (`issue story append`, `issue story update-from-merge-base`); readable via kind [`get`](#kind-scoped-get--set); not settable; `apply` preserves |
 | `branchName`, `worktreePath`, `worktreeBlockedReason`, `worktreeSetupFailed`, `prUrl`, `merged`, `mergedAt`, `review`, `reviewedTasks`, `retro` (Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `mergedAt` is system-written on the `merged` false→true flip (optional caller timestamp); `apply` preserves |
 | `mergeBaseOverride` (Epic / Story) | imperative only via `setRootMergeSettings` (kind [`set`](#kind-scoped-get--set) field `mergeBase`, or PATCH); null / `""` / `--clear` clears it; `apply` preserves |
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
+| `sourceOutline` (Epic / Story / Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` and `issue story append` preserve it; neither reads it from YAML |
 | `sourceIdea` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set), or `sourceIdea` on create); names the Idea planning produced this outline from |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
@@ -2514,9 +2537,21 @@ so cannot drift:
   every Epic and root project-level Story. Readiness surfaces exclude roots
   while `planNotFinal` is `true`; `issue idea set … archived true` on the
   source Idea is what clears it.
+- **Epic / Story / Task `behind`** — `true` when the issue stores
+  `sourceOutline`, that outline is in the pass's issue set, the stamped
+  `version` is lower than the outline's `bodyVersion`, and the item is
+  unmerged. A Story is unmerged when stored `merged` is false. A Task is
+  unmerged unless its Story's stored `merged` is true. An Epic is unmerged
+  when derived `epicStatus` is not `done` (no Stories, or at least one Story
+  not merged). Otherwise `false`, including a missing outline, a stamp on the
+  latest version, and merged work whose stamp is older. Computed by `derive()`
+  for every Epic, Story, and Task. `issue view` prints `behind: true` when it
+  holds; the tree chip is `behind`.
 - **problems** — the integrity checks `derive()` runs over the parsed issues:
   dependency cycles over `stackedOn`/`blockedBy`; dangling
-  `partOf`/`stackedOn`/`blockedBy` ids; a Story whose `stackedOn` entry is not a
+  `partOf`/`stackedOn`/`blockedBy`/`sourceOutline` ids; a `sourceOutline` whose
+  version is past that outline's latest `bodyVersion`, or whose outline is in
+  a different Project; a Story whose `stackedOn` entry is not a
   Story, or an Epic whose `blockedBy` entry is not an Epic; a Story whose
   `stackedOn` is in a different container (Epic or Project), or an Epic whose
   `blockedBy` names an Epic in a different Project (`stackedOn` stays within one

@@ -897,7 +897,8 @@ export function linkableTaskStatuses(
 // descendant `partOf` it) and repairs every surviving foreign reference into it:
 // a branch stacked on a deleted branch is spliced to the deleted branch's own
 // fork point, deleted ids are dropped from any Epic's `blockedBy`, and
-// `sourceIdea` is cleared on surviving Epics, root Stories, Tasks, and Outlines. The
+// `sourceIdea` is cleared on surviving Epics, root Stories, Tasks, and Outlines.
+// `sourceOutline` is cleared on surviving Epics, Stories, and Tasks. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
 // `appendTo` is cleared on surviving Ideas when the target Story is deleted.
@@ -951,6 +952,11 @@ export async function remove(id: string): Promise<DeletionResult> {
       patch.appendTo = null;
       patchOf.set(bid, patch);
     }
+    for (const { id: bid } of plan.dropSourceOutline) {
+      const patch = patchOf.get(bid) ?? {};
+      patch.sourceOutline = null;
+      patchOf.set(bid, patch);
+    }
 
     const now = new Date().toISOString();
     const survivors: Issue[] = [];
@@ -985,6 +991,7 @@ export async function remove(id: string): Promise<DeletionResult> {
       unblocked: plan.unblock,
       droppedSourceIdea: plan.dropSourceIdea,
       droppedAppendTo: plan.dropAppendTo,
+      droppedSourceOutline: plan.dropSourceOutline,
       retainedWorktrees,
     };
   });

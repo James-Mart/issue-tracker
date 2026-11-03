@@ -1,4 +1,4 @@
-import { CLEARABLE_KEYS } from "./fields.js";
+import { CLEARABLE_KEYS, NULL_CLEARABLE_OBJECT_KEYS } from "./fields.js";
 import { MERGE_POLICIES } from "./issue-constants.js";
 import {
   TASK_STATUSES,
@@ -38,7 +38,7 @@ export type FieldCoerce =
   | { type: "string"; storeAs?: string }
   | { type: "boolean" }
   | { type: "enum"; values: readonly string[] }
-  | { type: "json" }
+  | { type: "sourceOutline" }
   | { type: "array" }
   | { type: "labelCatalog" }
   | { type: "supportingDocs" }
@@ -84,6 +84,7 @@ export const EPIC_SET_FIELDS = {
   partOf: { type: "string" },
   blockedBy: { type: "array" },
   sourceIdea: { type: "string" },
+  sourceOutline: { type: "sourceOutline" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   labels: { type: "array" },
@@ -117,6 +118,7 @@ export const STORY_SET_FIELDS = {
   worktreeSetupFailed: { type: "boolean" },
   stackedOn: { type: "string" },
   sourceIdea: { type: "string" },
+  sourceOutline: { type: "sourceOutline" },
   mergeBase: { type: "string", storeAs: "mergeBaseOverride" },
   mergePolicy: { type: "enum", values: MERGE_POLICIES },
   prUrl: { type: "string" },
@@ -139,6 +141,7 @@ export const TASK_SET_FIELDS = {
   commits: { type: "commits" },
   noDiff: { type: "boolean" },
   sourceIdea: { type: "string" },
+  sourceOutline: { type: "sourceOutline" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -211,6 +214,7 @@ export const EPIC_GET_FIELDS = {
   archived: STORED,
   blockedBy: STORED,
   sourceIdea: STORED,
+  sourceOutline: STORED,
   labels: STORED,
   retro: STORED,
   order: STORED,
@@ -222,6 +226,7 @@ export const EPIC_GET_FIELDS = {
   mergeSettingsLock: DERIVED,
   blocked: DERIVED,
   planNotFinal: DERIVED,
+  behind: DERIVED,
   workQueuedAt: STORED,
   workQueuePosition: STORED,
   workParkedAt: STORED,
@@ -265,6 +270,7 @@ export const STORY_GET_FIELDS = {
   mergeBase: DERIVED,
   stackedOn: STORED,
   sourceIdea: STORED,
+  sourceOutline: STORED,
   prUrl: STORED,
   merged: STORED,
   mergedAt: STORED,
@@ -283,6 +289,7 @@ export const STORY_GET_FIELDS = {
   mergeSettingsLock: DERIVED,
   blocked: DERIVED,
   planNotFinal: DERIVED,
+  behind: DERIVED,
   worktree: DERIVED,
   behindMergeBase: DERIVED,
   mergeBaseRef: DERIVED,
@@ -306,12 +313,14 @@ export const TASK_GET_FIELDS = {
   commits: STORED,
   noDiff: STORED,
   sourceIdea: STORED,
+  sourceOutline: STORED,
   appended: STORED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,
   description: DESCRIPTION,
   blocked: DERIVED,
+  behind: DERIVED,
   openLinkedThreadRoots: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
@@ -357,7 +366,10 @@ export const KIND_GET_FIELDS = {
   outline: OUTLINE_GET_FIELDS,
 } as const satisfies Record<IssueKind, Record<string, GetFieldSpec>>;
 
-const clearableSet = new Set<string>(CLEARABLE_KEYS);
+const clearableSet = new Set<string>([
+  ...CLEARABLE_KEYS,
+  ...NULL_CLEARABLE_OBJECT_KEYS,
+]);
 
 export function isClearableSetField(field: string): boolean {
   return clearableSet.has(field);

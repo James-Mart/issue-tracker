@@ -45,6 +45,7 @@ import {
   type SupportingDocRef,
   type SupportingDocs,
   formatZodError,
+  sourceOutlineSchema,
   inspirationAppEntrySchema,
   inspirationAppsSchema,
   personaEntrySchema,
@@ -181,6 +182,17 @@ function coerceArrayPatch(
     throw new Error(`invalid ${field}: expected a JSON array of strings`);
   }
   return { [field]: parsed } as IssuePatch;
+}
+
+function parseSourceOutline(raw: string, field: string): { outline: string; version: number } {
+  const parsed = coerceJson(raw, field);
+  const result = sourceOutlineSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `invalid ${field}: ${formatZodError(result.error, "expected { outline, version }")}`,
+    );
+  }
+  return result.data;
 }
 
 function parseLabelObject(raw: string): ProjectLabel {
@@ -703,8 +715,8 @@ export function coerceSetPatch(
       return { [storeKey]: coerceBoolean(raw, field) } as IssuePatch;
     case "enum":
       return { [storeKey]: coerceEnum(raw, field, spec.values) } as IssuePatch;
-    case "json":
-      return { [storeKey]: coerceJson(raw, field) } as IssuePatch;
+    case "sourceOutline":
+      return { sourceOutline: parseSourceOutline(raw, field) };
   }
 }
 

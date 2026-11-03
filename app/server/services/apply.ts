@@ -346,10 +346,13 @@ export function apply(doc: ApplyDoc): Promise<ApplySummary> {
     // omitted ones are pruned. Epic-/story-rooted docs never include Ideas in
     // scope (Ideas are Project children), so those forms leave Ideas untouched.
     // Docs never declare reviews; a review goes only with its pruned Story.
+    // Docs never declare outlines; the catalog stays when the plan is re-applied.
     const deleteSet = new Set(
-      [...scope].filter(
-        (id) => !desiredIds.has(id) && onDiskById.get(id)?.kind !== "review",
-      ),
+      [...scope].filter((id) => {
+        if (desiredIds.has(id)) return false;
+        const kind = onDiskById.get(id)?.kind;
+        return kind !== "review" && kind !== "outline";
+      }),
     );
     addReviewsOfDeletedStories(issues, deleteSet);
 

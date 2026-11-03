@@ -411,6 +411,14 @@ const timestamps = {
 };
 const orderField = { order: z.number().int().nonnegative().default(0) };
 
+// Version of an outline this work was authored or last reconciled against.
+export const sourceOutlineSchema = z
+  .object({
+    outline: nonEmpty,
+    version: z.number().int().positive(),
+  })
+  .strict();
+
 export const supportingDocsSchema = z
   .object({
     vision: supportingDocRefSchema.optional(),
@@ -527,6 +535,7 @@ export const epicSchema = z.object({
   // Imperative override for first-layer Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),
   sourceIdea: z.string().optional(),
+  sourceOutline: sourceOutlineSchema.optional(),
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   retro: z.enum(RETRO_STATUSES).optional(),
   // Catalog id assignments (imperative; apply preserves).
@@ -575,6 +584,7 @@ export const storySchema = z.object({
   // Imperative override for root (project-level) Stories' derived mergeBase.
   mergeBaseOverride: z.string().optional(),
   sourceIdea: z.string().optional(),
+  sourceOutline: sourceOutlineSchema.optional(),
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   prUrl: z.string().optional(),
   merged: z.boolean().default(false),
@@ -601,6 +611,7 @@ export const taskSchema = z.object({
   commits: z.array(z.string()).default([]),
   noDiff: z.boolean().optional(),
   sourceIdea: z.string().optional(),
+  sourceOutline: sourceOutlineSchema.optional(),
   appended: z.boolean().optional(),
   ...taskMutable,
   ...orderField,
@@ -851,6 +862,11 @@ export interface DerivedState {
   planRoots?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
+  /**
+   * True when `sourceOutline` names a version older than that outline's latest
+   * and the item is unmerged. Epics, Stories, and Tasks.
+   */
+  behind?: boolean;
   /**
    * Present on Epics and project-level root Stories. The reason matches the
    * `merge-settings-locked` error `setRootMergeSettings` throws in human mode.
