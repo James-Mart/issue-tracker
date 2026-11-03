@@ -8,7 +8,8 @@ authoring issues or changing tracker code.
 The tracker models work as a tree of **Project > Epic > Story > Task** nodes
 that maps onto git stacked PRs, plus **Idea** nodes and optional **project-level
 Stories** that sit beside Epics under a Project (Ideas are capture items, not
-work; a project-level Story is work without an Epic wrapper). A directory per
+work; a project-level Story is work without an Epic wrapper). An **Outline** is
+a versioned feature description under a Project, not a work item. A directory per
 issue on disk is the sole source of truth; a validated service layer
 (`issues.ts` + sibling writers such as `attachments.ts`) is the only sanctioned
 writer; all state that could drift is derived, never stored.
@@ -103,14 +104,23 @@ Every issue has a `kind`, one of:
   empty until a commit is recorded, and empty for a `noDiff` Task), and an optional `noDiff` flag (set via kind
   [`set`](#kind-scoped-get--set) when the implementor deliberately lands no
   source-controlled file changes).
+- **Outline** — a versioned feature description. Is `partOf` a Project
+  (required). The body is the outline. Each saved body whose text differs from
+  the current `description.md` creates the next integer version, starting at
+  1, and keeps every prior body. The latest body is `description.md`; snapshot
+  `n` is `versions/<n>.md`. Stored `bodyVersion` is that latest integer.
+  `issue outline get <id> version` prints it. `archived` defaults `false`.
+  No children, assignee, needs-attention, comments, or attachments. Sibling `order` is its
+  own per-Project group, separate from the board, and `issue tree` does not
+  render outlines.
 
 ### Relationships
 
 Five relationships, each with a distinct, non-overlapping role:
 
 - **partOf** — *containment*: the node this one belongs to. A Task is `partOf`
-  a Story; a Story is `partOf` an Epic **or** a Project; an Epic or Idea is
-  `partOf` a Project. It points exactly one tier up and builds the tree.
+  a Story; a Story is `partOf` an Epic **or** a Project; an Epic, Idea, or
+  Outline is `partOf` a Project. It points exactly one tier up and builds the tree.
   Projects have none.
 - **stackedOn** — *the single git fork point* of a Story: which one Story it
   forks from. Story-only, always singular, and strictly within one container
@@ -351,7 +361,7 @@ These are computed by `derive()` and never written to disk (see
   `issue task get <taskId> openLinkedThreadRoots`. One thread root id per
   line from the review of the Task's Story: threads that are open and linked
   to that Task. Empty stdout when there are none or the Story has no review.
-- **archived** — stored visibility flag on Epic / Idea / Story / Task (never
+- **archived** — stored visibility flag on Epic / Idea / Story / Task / Outline (never
   Project). Explicit; **not** auto-derived from Done. Cascade and CLI/UI
   filtering — see [Archived visibility](#archived-visibility).
 - **problems** — integrity issues that are surfaced, never silently ignored:
@@ -497,7 +507,7 @@ issue view|get|comment|attach|attachments|detach|merge <id> …
 issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
 ```
 
-`<kind>` is one of `project` | `epic` | `idea` | `story` | `task`.
+`<kind>` is one of `project` | `epic` | `idea` | `story` | `task` | `review` | `outline`.
 
 | verb | kinds |
 | --- | --- |
@@ -507,9 +517,9 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
 | `merge` | story (asserting alias) |
 
 - **`add`** — `issue project add <title>` (no `--part-of`); children take
-  `--part-of`. Description: `--description` and/or `--file` (use `-` for
-  stdin). Also: `--assignee` on task; `--stacked-on` on story.
-  Prints the new id on stdout.
+  `--part-of`, except outline (below). Description: `--description` and/or
+  `--file` (use `-` for stdin). Also: `--assignee` on task; `--stacked-on`
+  on story. Prints the new id on stdout.
 - **`view`** — asserting alias for `issue view <id>`.
 - **`delete`** — `issue <kind> delete <id>`; cascades per
   [Deletion policy](#deletion-policy).
@@ -584,6 +594,27 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `awaiting-human`. Prints the new comment id.
   `POST /api/stories/:id/human-done` with body `{ note?: string }` calls the
   same store operation and returns the comment.
+- **`add`** (outline) — `issue outline add --in <projectId> --title <title>
+  --description-file <path|->`. Creates an outline `partOf` that Project. The
+  file is body version 1 (`-` reads stdin). Prints the new id. Refuses a
+  parent that is not a Project.
+- **`view`** (outline) — `issue outline view <id> [--version <n>]`. Prints
+  metadata, including `version: <n>`, and a body. Without `--version`, `<n>`
+  is the latest and the body is `description.md`. With `--version`, the body
+  is snapshot `<n>`. `<n>` is a positive integer. A version newer than
+  `bodyVersion`, or a missing snapshot, is an error. Bare `issue view <id>`
+  shows the latest body and has no `--version`.
+- **`versions`** (outline) — `issue outline versions <id>`. Prints each saved
+  version number, oldest first, one per line.
+- **`diff`** (outline) — `issue outline diff <id> <from> <to>`. Unified diff
+  of body `<from>` against body `<to>` (`--- version/<from>`,
+  `+++ version/<to>`). Identical bodies print nothing and exit 0. A version
+  out of range, or a non-integer, is an error.
+- **`version`** (outline get) — `issue outline get <id> version` prints the
+  latest integer (`bodyVersion`). Not settable. `issue outline set <id>
+  description` (`--file <path|->` or a positional value) saves the next
+  version when the text differs and keeps the prior snapshot. The same text
+  does not add a version. Title and `partOf` sets do not add a version.
 
 ### Global ops
 
@@ -598,12 +629,12 @@ issue apply|tree|summary|list
   [Project workspace](#project-workspace) resolution.)
 - **`tree [id]`** — optional positional `[id]` scopes the subtree (no title
   lookup). Omitted = all projects; project / epic / story scopes the subtree;
-  idea / task refused. Under a Project, `tree` interleaves Epics, Ideas, and
+  idea / task / outline refused. Under a Project, `tree` interleaves Epics, Ideas, and
   *root* project-level Stories by shared sibling `order` (stacked
   project-level Stories nest under their fork point).
 - **`list [kind] [--in <containerId>]`** — optional kind positional filters
-  output to one issue kind (`project` | `epic` | `idea` | `story` | `task`);
-  `--in` scopes to a project / epic / story subtree (idea / task refused;
+  output to one issue kind (`project` | `epic` | `idea` | `story` | `task` | `review` | `outline`);
+  `--in` scopes to a project / epic / story subtree (idea / task / outline refused;
   omitted = all projects). Both are optional and combinable. JSON shape
   `issues` / `derived` / `problems`, filtered to the same visible id set.
   `--show-archived` unchanged. Label chips / no CLI label filter: see
@@ -618,7 +649,9 @@ Field read/write:
 - `issue <kind> get <id> <field>`
 - `issue <kind> set <id> <field> [value] [--clear] [--add <ids...>] [--remove <ids...>] [--rename <oldId> <newId>] [--file <path|->] [--reason <text>]`
 
-Field names are camelCase, identical to schema / `issue.json` keys. There is no
+Field names are camelCase, identical to schema / `issue.json` keys, except
+outline `version`, which prints stored `bodyVersion` (the latest body
+snapshot — not the content-hash `version` on `read()`). There is no
 cross-kind `get`/`set`; shared fields are repeated on each kind that owns them.
 
 Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
@@ -659,6 +692,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | idea | `title`, `archived`, `outlineGate`, `executionGate`, `mergeBase`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `description` |
+| outline | `title`, `archived`, `partOf`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
 and refuses a sha already present on that Task. Whole-series replace uses
@@ -721,14 +755,17 @@ truth (no database).
 ```
 issues/<id>/
   issue.json        # metadata + relationships (machine-readable)
-  description.md    # the spec/description (for an Epic, the plan). GFM; may contain issue: links
+  description.md    # the spec/description (for an Epic, the plan; for an Outline, the latest body). GFM; may contain issue: links
+  versions/         # outline only; versions/<n>.md is body snapshot n (n starts at 1)
   comments.jsonl    # append-only per-issue comment log, one message object per line
   attachments/      # optional; opaque files for any kind with attachments
 ```
 
 - `description.md` and `comments.jsonl` are discovered **by convention** from `<id>`
   (there are no path fields, so there can be no dangling file refs). Both are
-  optional; absent means empty.
+  optional; absent means empty. An outline's latest body is `description.md`.
+  `versions/<n>.md` keeps every saved body. A save whose text matches the
+  current `description.md` does not add a version.
 - `attachments/` is likewise by convention: no manifest; scan the directory.
   Allowed on every kind with the attachments capability. See
   [Attachments](#attachments).
@@ -756,7 +793,7 @@ Common to every kind:
 | field | type | notes |
 | --- | --- | --- |
 | `id` | string | = directory name; stable |
-| `kind` | `"project"` \| `"epic"` \| `"idea"` \| `"story"` \| `"task"` | discriminator |
+| `kind` | `"project"` \| `"epic"` \| `"idea"` \| `"story"` \| `"task"` \| `"review"` \| `"outline"` | discriminator |
 | `title` | string | non-empty |
 | `order` | int | sibling position within its parent group; defaults `0` |
 | `createdAt` | ISO string | set at create |
@@ -1285,6 +1322,18 @@ No assignee, needs-attention, stored status, worktree, or comments. Derived
 **`ideaStatus`** and **`planRoots`** on get / tree / list (see [Derived state](#derived-state)). Leaf under a Project;
 shares the Project-child `order` space with Epics and root project-level Stories.
 
+Outline — the common-to-every-kind fields plus:
+
+| field | type | notes |
+| --- | --- | --- |
+| `partOf` | string | the Project id (required) |
+| `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
+| `bodyVersion` | positive integer | latest saved body; starts at 1; system-written; CLI [`get`](#kind-scoped-get--set) name is `version` |
+
+No assignee, needs-attention, stored status, worktree, comments, or
+attachments. Not a board child: `issue tree` does not render it; `issue list outline`
+does. Deleting an outline removes its `versions/` snapshots with the directory.
+
 Story — the Epic/Story/Task needs-attention common fields plus:
 
 | field | type | notes |
@@ -1369,10 +1418,11 @@ project-level Stories share one Project-child sibling group). Duplicate `order`
 within a sibling group is an integrity problem.
 
 **Projects scope the view.** A Project is the top-level container: every Epic,
-Idea, and project-level Story is `partOf` exactly one Project. The web UI lists
+Idea, Outline, and project-level Story is `partOf` exactly one Project. The web UI lists
 Projects in a sidebar; selecting one scopes the tree to that Project's subtree
 (its board children — Epics, Ideas, and root project-level Stories — plus each
-Epic's or project-level Story's descendants). Projects themselves are not
+Epic's or project-level Story's descendants). Outlines are `partOf` the Project
+and are not board children, so `issue tree` does not render them. Projects themselves are not
 rendered as nodes inside the tree — they are the selectable root. Projects are
 ordered by `order`.
 
@@ -1387,12 +1437,12 @@ group. Tree emission is structural DFS (each level sorted by `order`), never by
 
 ### Archived visibility
 
-Epic / Idea / Story / Task carry a stored boolean `archived` (default / absent =
+Epic / Idea / Story / Task / Outline carry a stored boolean `archived` (default / absent =
 `false`). Projects are never archived. Setting `archived` true or false on a
 node applies the same value to all descendants (cascade). Creating a child
 under any archived ancestor starts the child `archived: true`. Archiving a
-child while its parent stays unarchived remains allowed. Ideas are leaves, so
-archiving an Idea has no descendants to cascade to. `issue tree` and
+child while its parent stays unarchived remains allowed. Ideas and Outlines are leaves, so
+archiving one has no descendants to cascade to. `issue tree` and
 `issue list` omit archived rows by default; pass
 `--show-archived` to include them. The web UI tree uses the same filter rule:
 archived rows are hidden unless the client "Show archived" preference is on
@@ -1752,7 +1802,7 @@ no consumer can persist a broken file.
   `description.md`.
 - `update(id, patch)` — **partial merge**, never a blind overwrite; bumps
   `updatedAt`. The mergeable fields are `title`, `assignee` (Task only),
-  `needsAttention`/`attentionReason`, `archived` (Epic / Idea / Story / Task;
+  `needsAttention`/`attentionReason`, `archived` (Epic / Idea / Story / Task / Outline;
   cascades to
   descendants — see [Archived visibility](#archived-visibility)), `partOf`, the
   kind-specific fields (`blockedBy` for an Epic; `status`/`commits`/`noDiff`
@@ -1864,11 +1914,13 @@ set"):**
 - **Task** — removes only that Task (Tasks have no children).
 - **Story** — removes the Story and every Task `partOf` it.
 - **Idea** — removes only that Idea (Ideas have no children).
+- **Outline** — removes only that Outline (Outlines have no children), including
+  its `versions/` snapshots.
 - **Epic** — removes the Epic, every Story `partOf` it, and every Task
   `partOf` those Stories (transitive). Does **not** remove project-level
   Stories (they are `partOf` the Project, not the Epic).
 - **Project** — removes the Project and its entire subtree: every Epic, Idea,
-  and project-level Story `partOf` it, every Story `partOf` those Epics, and
+  Outline, and project-level Story `partOf` it, every Story `partOf` those Epics, and
   every Task `partOf` those Stories (transitive). Deleting a Project therefore
   discards all of its work; the UI gates this behind a confirmation dialog that
   names the contained-issue count.

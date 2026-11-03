@@ -4,6 +4,7 @@ import { readCliFileArg } from "./cli-io.js";
 import { resolveRuntimeSet, RUNTIME_PHASES_HELP } from "./cli-runtime-set.js";
 import { resolveSecretsSet } from "./cli-project-secrets.js";
 import { assertAllowedAgentModelSlug } from "./server/agent-model-slugs.js";
+import { articleForKind } from "./server/kind.js";
 import {
   isClearableSetField,
   KIND_GET_FIELDS,
@@ -73,10 +74,6 @@ export type KindSetOptions = {
   key?: string;
 };
 
-function articleFor(kind: IssueKind): "a" | "an" {
-  return kind === "epic" || kind === "idea" ? "an" : "a";
-}
-
 type DetailOfKind<K extends IssueKind> = Extract<IssueDetail, { kind: K }>;
 
 function isDetailOfKind<K extends IssueKind>(
@@ -90,7 +87,7 @@ export function assertKind<K extends IssueKind>(expected: K, id: string): Detail
   const detail = read(id);
   if (!isDetailOfKind(detail, expected)) {
     throw new Error(
-      `"${id}" is ${articleFor(detail.kind)} ${detail.kind}, not ${articleFor(expected)} ${expected}`,
+      `"${id}" is ${articleForKind(detail.kind)} ${detail.kind}, not ${articleForKind(expected)} ${expected}`,
     );
   }
   return detail;
@@ -731,7 +728,7 @@ export async function kindGetValue(
 ): Promise<string | null> {
   const tables = KIND_GET_FIELDS[kind] as Record<
     string,
-    { source: "stored" | "description" | "derived" }
+    { source: "stored" | "description" | "derived"; storeAs?: string }
   >;
   const spec = tables[field];
   if (!spec) {
@@ -783,7 +780,7 @@ export async function kindGetValue(
     return formatGetValue(state[field as keyof typeof state]);
   }
 
-  return formatGetValue(storedFieldValue(detail, field));
+  return formatGetValue(storedFieldValue(detail, spec.storeAs ?? field));
 }
 
 function currentArrayValue(detail: IssueDetail, field: string): string[] {

@@ -149,6 +149,13 @@ export const REVIEW_SET_FIELDS = {
   worktreeSetupFailed: { type: "boolean" },
 } as const satisfies Record<string, SetFieldSpec>;
 
+export const OUTLINE_SET_FIELDS = {
+  title: { type: "string" },
+  archived: { type: "boolean" },
+  partOf: { type: "string" },
+  description: { type: "description" },
+} as const satisfies Record<string, SetFieldSpec>;
+
 export const KIND_SET_FIELDS = {
   project: PROJECT_SET_FIELDS,
   epic: EPIC_SET_FIELDS,
@@ -156,12 +163,15 @@ export const KIND_SET_FIELDS = {
   story: STORY_SET_FIELDS,
   task: TASK_SET_FIELDS,
   review: REVIEW_SET_FIELDS,
+  outline: OUTLINE_SET_FIELDS,
 } as const satisfies Record<IssueKind, Record<string, SetFieldSpec>>;
 
 export type GetFieldSource = "stored" | "description" | "derived";
 
 export type GetFieldSpec = {
   source: GetFieldSource;
+  /** Stored key when the CLI field name differs from `issue.json`. */
+  storeAs?: string;
 };
 
 const STORED = { source: "stored" } as const satisfies GetFieldSpec;
@@ -304,6 +314,19 @@ export const TASK_GET_FIELDS = {
   openLinkedThreadRoots: DERIVED,
 } as const satisfies Record<string, GetFieldSpec>;
 
+export const OUTLINE_GET_FIELDS = {
+  id: STORED,
+  kind: STORED,
+  title: STORED,
+  partOf: STORED,
+  archived: STORED,
+  version: { source: "stored", storeAs: "bodyVersion" },
+  order: STORED,
+  createdAt: STORED,
+  updatedAt: STORED,
+  description: DESCRIPTION,
+} as const satisfies Record<string, GetFieldSpec>;
+
 export const REVIEW_GET_FIELDS = {
   id: STORED,
   kind: STORED,
@@ -329,6 +352,7 @@ export const KIND_GET_FIELDS = {
   story: STORY_GET_FIELDS,
   task: TASK_GET_FIELDS,
   review: REVIEW_GET_FIELDS,
+  outline: OUTLINE_GET_FIELDS,
 } as const satisfies Record<IssueKind, Record<string, GetFieldSpec>>;
 
 const clearableSet = new Set<string>(CLEARABLE_KEYS);

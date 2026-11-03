@@ -3,6 +3,7 @@ import { format } from "util";
 import { Command, CommanderError } from "commander";
 import { parse as parseYaml } from "yaml";
 import { list, readAll, update } from "./server/services/issues.js";
+import { registerOutlineCommands } from "./cli-outline.js";
 import { KINDS } from "./server/issue-constants.js";
 import {
   type DerivedState,
@@ -373,6 +374,9 @@ function createIssueProgram(run: Run): Command {
     if (kind === "review") {
       registerReviewStandardsCommands(kindCmd, run);
     }
+    if (kind === "outline") {
+      registerOutlineCommands(kindCmd, run);
+    }
     if (kind === "task") {
       kindCmd
         .command("add-commit")
@@ -588,13 +592,13 @@ function createIssueProgram(run: Run): Command {
     .description("print issues, derived state, and any problems as JSON")
     .argument(
       "[kind]",
-      "filter to issues of this kind (project | epic | idea | story | task | review)",
+      "filter to issues of this kind (project | epic | idea | story | task | review | outline)",
     )
     .option(
       "--in <containerId>",
-      "scope to project/epic/story subtree (idea/task refused; omit for all projects)",
+      "scope to project/epic/story subtree (idea/task/outline refused; omit for all projects)",
     )
-    .option("--show-archived", "include archived Epic / Idea / Story / Task issues")
+    .option("--show-archived", "include archived Epic / Idea / Story / Task / Outline issues")
     .addHelpText(
       "after",
       `
@@ -646,9 +650,9 @@ Output shape:
     )
     .argument(
       "[id]",
-      "scope by issue id (project/epic/story subtree; idea/task refused; omit for all projects)",
+      "scope by issue id (project/epic/story subtree; idea/task/outline refused; omit for all projects)",
     )
-    .option("--show-archived", "include archived Epic / Idea / Story / Task issues")
+    .option("--show-archived", "include archived Epic / Idea / Story / Task / Outline issues")
     .action((id, opts) =>
       run(() => {
         const { issues: allIssues, derived } = list();

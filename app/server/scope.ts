@@ -38,6 +38,10 @@ export function resolveBoardScope(
       throw new Error(
         `cannot scope ${verb} to a review; pass project "${issue.partOf}" instead`,
       );
+    case "outline":
+      throw new Error(
+        `cannot scope ${verb} to an outline; pass project "${issue.partOf}" instead`,
+      );
   }
 }
 

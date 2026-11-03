@@ -28,6 +28,7 @@ import {
   setThreadInclusion,
 } from "./server/services/thread-events.js";
 import { CHIP_UNSET } from "./server/services/merge-base.js";
+import { outlineBodyForView } from "./server/services/outline-body.js";
 import {
   appendComment,
   list,
@@ -111,6 +112,7 @@ export async function mergeStory(
 
 type ViewOptions = {
   comments?: boolean;
+  version?: string;
 };
 
 function commentAuthor(message: Comment): string {
@@ -187,6 +189,18 @@ function labelIdsForView(detail: IssueDetail): string[] {
 
 async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void> {
   const detail = read(id);
+  let description = detail.description;
+  let shownVersion: number | undefined;
+  if (detail.kind === "outline") {
+    const view = outlineBodyForView(
+      detail.id,
+      detail.bodyVersion,
+      detail.description,
+      opts.version,
+    );
+    description = view.body;
+    shownVersion = view.shownVersion;
+  }
   const lines = [
     `id: ${detail.id}`,
     `kind: ${detail.kind}`,
@@ -220,6 +234,9 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     }
   }
   if (hasPartOf(detail)) lines.push(`partOf: ${detail.partOf}`);
+  if (detail.kind === "outline" && shownVersion !== undefined) {
+    lines.push(`version: ${shownVersion}`);
+  }
   if (detail.kind === "epic" && detail.blockedBy.length > 0) {
     lines.push(`blockedBy: ${detail.blockedBy.join(", ")}`);
   }
@@ -291,7 +308,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   }
   console.log(lines.join("\n"));
   console.log();
-  console.log(detail.description || "(no description)");
+  console.log(description || "(no description)");
 
   if (opts.comments) {
     const { messages, threads, problems } = await enrichCommentsForRead(id);
@@ -630,19 +647,22 @@ async function printComment(
 }
 
 function registerViewCommand(parent: Command, run: Run, kind: IssueKind): void {
-  parent
+  const view = parent
     .command("view")
     .argument("<id>", "issue id")
     .description(
       "print an issue's metadata and description (pass --comments for the comment log)",
     )
-    .option("--comments", "also print the comment log")
-    .action((id: string, opts: ViewOptions) =>
-      run(async () => {
-        assertKind(kind, id);
-        await printIssueView(id, opts);
-      }),
-    );
+    .option("--comments", "also print the comment log");
+  if (kind === "outline") {
+    view.option("--version <n>", "print body version n instead of the latest");
+  }
+  view.action((id: string, opts: ViewOptions) =>
+    run(async () => {
+      assertKind(kind, id);
+      await printIssueView(id, opts);
+    }),
+  );
 }
 
 function registerDeleteCommand(parent: Command, run: Run, kind: IssueKind): void {
