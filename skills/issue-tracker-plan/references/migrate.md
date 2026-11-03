@@ -35,7 +35,7 @@ When the grill included mockup rounds with chosen directions, follow
 Never a project-form `apply` for this migration. Use the **story-form** or
 **epic-form** already chosen for the approved outline.
 
-After **each** successful root `apply`, record the merge-base answer and
+After a successful root `apply`, record the merge-base answer and
 policy from **Merge-base first** (**Rules (mandatory):** in the parent
 skill):
 
@@ -47,13 +47,12 @@ skill):
 `<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
 resulting root id from that apply. Imperative only — not in the YAML doc.
 
-- After each successful root `apply`:
+- After a successful root `apply`:
   `issue epic set <rootId> sourceIdea <ideaId>` for an epic-form root, or
   `issue story set <rootId> sourceIdea <ideaId>` for a story-form root.
   `<rootId>` is the resulting root id from that apply; `<ideaId>` is the
-  source Idea's id. Applies to **single-root** and **multi-root** migrations
-  alike. Imperative only — not in the YAML doc.
-- After each successful root `apply`, follow **Post-migrate imperatives** for
+  source Idea's id. Imperative only — not in the YAML doc.
+- After a successful root `apply`, follow **Post-migrate imperatives** for
   `noDiff`.
 
 ### Promoted mockup artifacts
@@ -115,7 +114,7 @@ for each chosen direction on that surface:
 Surfaces whose round ended with no chosen direction — a dropped escalation —
 skip this step.
 
-### Single root (not splitting)
+### Root
 
 One epic-form or story-form apply. Leave the source Idea **unarchived** after
 `apply` — the Idea is the record that keeps the resulting root from reporting
@@ -134,19 +133,3 @@ ready until plan-polish finishes.
 | **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
 
 Show `apply` stdout. Report the resulting Story or Epic id.
-
-### Multi-root (splitting)
-
-N separate epic-form / story-form applies — one per resulting root. Roots may
-mix Epics and project-level Stories. **Always mint new root ids** (do not reuse
-the source Idea id as any new root id).
-
-1. Apply in **`blockedBy` order** when deps exist among the new Epic roots;
-   otherwise any order.
-2. On **first apply failure:** stop. Leave already-written roots in place. Do
-   **not** delete the source. No automatic rollback.
-3. Only after **every** apply succeeds: leave the source Idea **unarchived** —
-   the Idea is the record that keeps the resulting roots from reporting ready
-   until every root's plan-polish has finished.
-
-Show each `apply` stdout. Report every resulting root id.

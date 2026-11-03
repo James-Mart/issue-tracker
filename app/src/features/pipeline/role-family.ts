@@ -26,6 +26,7 @@ const ROLE_FAMILY_TITLES: Record<string, string> = {
   "auto-plan-discriminator": "Discriminator",
   "model-discriminator": "Model discriminator",
   planner: "Planner",
+  decomposer: "Decomposer",
   implementor: "Implementor",
   research: "Research",
   "mockup-author": "Mockup author",

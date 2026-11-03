@@ -26,9 +26,9 @@ asked.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-Grain, multi-Epic split, apply doc shape, parent-prose, and prune-by-default
-rules live in issue-tracker-authoring and [SPEC.md](../../SPEC.md) — when
-proposing the tree(s), apply those rules yourself; only ask the user when a
+Grain, apply doc shape, parent-prose, and prune-by-default rules live in
+issue-tracker-authoring and [SPEC.md](../../SPEC.md) — when proposing the
+tree, apply those rules yourself; only ask the user when a
 product or dependency choice remains after those rules. Do not restate them
 here.
 
@@ -222,15 +222,13 @@ When the grill is ready (no extra pre-outline confirm):
 
 1. **Outline.** Show the proposed tree outline in chat with enough prose that
    the user can judge scope. Name the merge-base the plan will be built on,
-   and the merge-policy when non-trunk. Match the chosen migrate shape(s):
-   - **Single root** — story-form → root Story title + Task titles; epic-form →
-     Epic title + Story/Task hierarchy (implementation order).
-   - **Multi-root** — list every resulting root (Epic or project-level Story),
-     each with its Story/Task hierarchy and any `blockedBy` edges.
+   and the merge-policy when non-trunk. Match the chosen migrate shape:
+   story-form → root Story title + Task titles; epic-form → Epic title +
+   Story/Task hierarchy (implementation order).
    Do **not** `apply` yet. The user may edit the outline in chat before
    answering the gate.
 2. **One gate.** Ask **one** yes/no whose lead-in states that **yes** means:
-   migrate the plan, run `issue-tracker-plan-polish` on every resulting root,
+   migrate the plan, run `issue-tracker-plan-polish` on the resulting root,
    and auto-apply polish fixes. No other confirm beats before migrate.
 3. On **yes** → **Migrate** (below). On **no** → stop (do not migrate).
 
@@ -242,24 +240,13 @@ and follow it. Then continue at **## After success**.
 
 ## After success
 
-For each resulting root in `blockedBy` order when deps exist among Epic
-roots (otherwise any order) — **serially**: finish that root's polish
-before starting the next; never parallelize polish across roots (each
-polish spawns parallel check agents; concurrent polish runs overload CPU):
-
-1. Auto-chain **`issue-tracker-plan-polish`** on that root — **Read**
-   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
-   and follow it; no polish
-   yes/no. Polish itself auto-applies when safe (see that skill); do not add
-   an approve-before-apply beat here. If polish is deferred in this session
-   (e.g. the user asks to grill more before polish runs), the polish
-   obligation for that root persists — deferral does not reset or cancel it.
-
-When every resulting root's polish has finished, archive the source Idea:
-`issue idea set <ideaId> archived true`. That is a no-op in the single-root
-case — polish already archived it when `planRoots` held exactly that one root
-— and it closes the multi-root case after the last root's polish. Keep the
-serial ordering above; this archive is the last action, not an extra gate.
+Auto-chain **`issue-tracker-plan-polish`** on the resulting root — **Read**
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
+and follow it; no polish yes/no. Polish itself auto-applies when safe (see
+that skill) and archives the source Idea when it finishes; do not add an
+approve-before-apply beat here. If polish is deferred in this session (e.g.
+the user asks to grill more before polish runs), the polish obligation for
+that root persists — deferral does not reset or cancel it.
 
 ## Append
 

@@ -55,11 +55,10 @@ Doc format and field seam: [SPEC.md § `apply` doc format](../../SPEC.md#apply-d
   nesting; `blockedBy` is an **Epic-level** list of other same-Project Epic ids —
   the sole edge that crosses an Epic boundary. Model dependencies *within* an
   Epic as **stacks** (`stackedOn`), not `blockedBy`. When a unit needs code from
-  two parallel Stories at once (a multi-parent / cross-stack dependency that a
-  single fork point can't express), don't reach for a Story-level edge: split it
-  into a **separate Epic that is `blockedBy` the first**, keeping Epics small
-  (see the diamond in SPEC.md — keeps parallel stories parallel instead of
-  linearizing them, at the cost of waiting for the blocking Epic to merge).
+  two parallel Stories at once (fan-in that a single fork point can't express),
+  linearize it as a stack: stack one of those Stories on the other, then the
+  dependent unit on top
+  ([SPEC.md § Fan-in](../../SPEC.md#fan-in-why-a-multi-parent-dependency-becomes-a-stack)).
 - **Re-apply as the plan evolves.** `apply` is an idempotent upsert that
   prunes-by-default: nodes you add appear, nodes you drop from the doc are
   deleted, and unchanged nodes are untouched. Omitting `blockedBy` on a
@@ -84,7 +83,8 @@ Doc format and field seam: [SPEC.md § `apply` doc format](../../SPEC.md#apply-d
 
 ## Epic grain: project-level Story vs Epic
 
-Choose the top-level work root by shape, not habit — **unless the Idea's
+A plan lands as exactly **one** work root. Choose it by shape, not habit —
+**unless the Idea's
 `appendTo` names an existing Story**, in which case the plan is a Task series
 on that Story only (no new Epic or root Story; see
 [Source idea (sourceIdea)](#source-idea-sourceidea) for the append path).
@@ -102,26 +102,6 @@ an integrity error. Polish may warn on a lone single-Story Epic (suggest a
 project-level Story) and on a project-level stack (suggest wrapping in an
 Epic). Do not invent Story-level `blockedBy`; promote to an Epic when you need
 cross-unit deps.
-
-## Multi-Epic split
-
-When one capture might be more than one top-level root, split into multiple
-roots (sibling Epics and/or project-level Stories) when either applies:
-
-- **(a) Diamond / cross-stack dependency** — requires a new Epic with
-  `blockedBy` (mechanism:
-  [Author declaratively](#author-declaratively-one-yaml-doc-then-apply);
-  [SPEC.md § The diamond](../../SPEC.md#the-diamond-why-a-multi-parent-dependency-becomes-a-new-epic)).
-- **(b) Independent topics** — themes are independent under the Project
-  vision, not facets of one super-feature (each theme becomes its own root;
-  choose Epic vs project-level Story per root by Epic grain above).
-
-Keep themes that are facets of one super-feature under a **single** root
-Epic (or one project-level Story when grain allows). **Size alone is not a
-signal** to split.
-
-For each resulting root, still choose Epic vs project-level Story by
-[Epic grain](#epic-grain-project-level-story-vs-epic) above.
 
 ## Task footprint
 
@@ -169,7 +149,8 @@ override. Rules:
 
 ## Source idea (sourceIdea)
 
-When an Idea's plan lands as a new root, record that edge **after** `apply`
+When an Idea's plan lands as a new root, including a root decomposed from an
+outline whose `sourceIdea` names that Idea, record that edge **after** `apply`
 (imperative only — not in the YAML doc):
 
 - Epic: `issue epic set <id> sourceIdea <ideaId>`
@@ -184,6 +165,22 @@ created Task (imperative only — not in the YAML doc):
 `apply` and `issue story append` preserve `sourceIdea` and never read it from
 description prose or YAML. Only Idea-sourced migrations set this — replans
 from an Epic or Story record nothing. Rules:
+[SPEC.md § Relationships](../../SPEC.md#relationships).
+
+## Source outline (sourceOutline)
+
+A root decomposed from an outline version covers that version. Each Epic and
+Story describes the slice of the outline it implements and links to the
+outline sections it builds on instead of quoting them, naming the section in
+the link text: `[<section heading>](issue:<outlineId>)`.
+
+Stamp that version on every item `apply` created (each id on its stdout
+`created:` line: the root, each Story, and each Task) **after** `apply`
+(imperative only — not in the YAML doc):
+
+`issue <kind> set <id> sourceOutline '{"outline":"<outlineId>","version":<n>}'`
+
+The stamp is metadata; prose never restates the version. Rules:
 [SPEC.md § Relationships](../../SPEC.md#relationships).
 
 ## Tasks with no diff (noDiff)
@@ -258,9 +255,10 @@ Before done:
 - **Epic grain** — single-Story plans use a project-level Story; Epics are for
   sibling roots, stacking, or `blockedBy` (see
   [Epic grain](#epic-grain-project-level-story-vs-epic)).
-- **Multi-Epic split** — decide single root vs multiple top-level roots by
-  diamond/`blockedBy` and independent-topics criteria; size alone does not
-  force a split (see [Multi-Epic split](#multi-epic-split)).
+- **One root** — the plan is one Epic or project-level Story, with fan-in
+  linearized as stacks (see
+  [Epic grain](#epic-grain-project-level-story-vs-epic) and
+  [Author declaratively](#author-declaratively-one-yaml-doc-then-apply)).
 - **Parent/child prose boundaries** — follow the localize guidance above
   ([SPEC.md](../../SPEC.md#parent-prose-must-not-restate-descendant-lists)):
   Epic holds no phase- or task-level detail that belongs in children; no
@@ -280,6 +278,9 @@ Before done:
 - Idea-sourced migrations record `sourceIdea` imperatively after `apply` or
   `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
+- Outline decompositions stamp `sourceOutline` on every created item after
+  `apply`, and each Epic and Story links to the outline sections it builds on
+  (see [Source outline (sourceOutline)](#source-outline-sourceoutline)).
 - Every Task with no diff uses imperative `noDiff` after `apply` or
   `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the

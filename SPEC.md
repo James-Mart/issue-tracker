@@ -157,21 +157,16 @@ Six relationships, each with a distinct, non-overlapping role:
   minting a new Epic or root Story. Refused when the target Story is merged.
   Cleared when the target Story is deleted.
 
-#### The diamond (why a multi-parent dependency becomes a new Epic)
+#### Fan-in (why a multi-parent dependency becomes a stack)
 
 The one thing a single `stackedOn` fork point cannot express is a unit that needs
 code from **two** parallel Stories at once (the classic diamond: Stories A and
 B both fork the Project trunk, worked in parallel, and C needs both). Rather than
 reintroduce a Story-level multi-parent edge — which would force a merge gate
 *inside* an Epic and break the "one Epic run = one clean, bottom-up-mergeable
-stack of PRs" property — we resolve it at the Epic boundary: split the dependent
-unit into a **new Epic that is `blockedBy` the Epic holding the parallel
-Stories** (A and B). The tradeoff is
-deliberate: keeping A and B in one Epic preserves their parallelism (two
-independent stacks, no gate between them), while moving C into a second Epic makes
-it wait for the whole blocking Epic to *merge* first — coarser, but landing
-exactly where a merge round-trip is natural (a human-paced Epic boundary) instead
-of stalling a stack mid-flight.
+stack of PRs" property — authoring linearizes it: B stacks on A, and C stacks
+on B. The tradeoff is deliberate: A and B give up their parallelism, while the
+plan stays one work root and C never waits on a separate Epic to merge.
 
 #### The stacked-PR merge model
 
@@ -2601,7 +2596,8 @@ this SPEC entry is where the invariant is durable.
 is good at, so each role carries one line naming the craft it is trusted with,
 sitting with its role intro. A role that exists as several model-pinned
 wrappers carries the line once in its shared body
-(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`) and not in the
+(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`,
+`_issue-tracker-decomposer.md`) and not in the
 wrappers. Like the include, the line never modulates scope, effort, or
 thoroughness.
 
