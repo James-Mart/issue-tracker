@@ -10,8 +10,6 @@ import {
   AxisChips,
   EpicAxisChips,
   StoryAxisChips,
-  epicAxesVisible,
-  storyAxesVisible,
 } from "./axis-chips";
 import { TaskStatusChips } from "./task-status-chips";
 
@@ -37,16 +35,17 @@ export function IssueDetailStatusChips({
 
   if (issue.kind === "task") {
     return (
-      <TaskStatusChips status={issue.status} className={className} />
+      <TaskStatusChips
+        status={issue.status}
+        behind={derived?.[issue.id]?.behind === true}
+        className={className}
+      />
     );
   }
 
   if (issue.kind === "story") {
     const state = derived?.[issue.id];
     const reviewStale = Boolean(issue.review && state?.reviewCurrent === false);
-    if (!storyAxesVisible(state?.storyStatus, issue.review, issue.retro, issue.needsRebase, reviewStale)) {
-      return null;
-    }
     return (
       <StoryAxisChips
         storyStatus={state?.storyStatus}
@@ -54,6 +53,7 @@ export function IssueDetailStatusChips({
         reviewStale={reviewStale}
         needsRebase={issue.needsRebase}
         retro={issue.retro}
+        behind={state?.behind === true}
         className={className}
       />
     );
@@ -61,13 +61,11 @@ export function IssueDetailStatusChips({
 
   if (issue.kind === "epic") {
     const state = derived?.[issue.id];
-    if (!epicAxesVisible(state?.epicStatus, issue.retro)) {
-      return null;
-    }
     return (
       <EpicAxisChips
         epicStatus={state?.epicStatus}
         retro={issue.retro}
+        behind={state?.behind === true}
         className={className}
       />
     );

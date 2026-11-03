@@ -24,6 +24,12 @@ export type AxisChip = {
   prefix?: string;
 };
 
+/** Outline stamp is older than the outline's latest version. */
+export const BEHIND_AXIS_CHIP: AxisChip = {
+  variant: "warn",
+  label: "behind",
+};
+
 /** Shared status/axis chip row (status, review, retro, …). */
 export function AxisChips({
   chips,
@@ -50,22 +56,13 @@ export function AxisChips({
   );
 }
 
-export function storyAxesVisible(
-  storyStatus?: StoryStatus,
-  review?: ReviewStatus,
-  retro?: RetroStatus,
-  needsRebase?: string,
-  reviewStale?: boolean,
-) {
-  return Boolean(storyStatus || review || retro || needsRebase || reviewStale);
-}
-
 export function StoryAxisChips({
   storyStatus,
   review,
   reviewStale,
   retro,
   needsRebase,
+  behind,
   className,
 }: {
   storyStatus?: StoryStatus;
@@ -73,6 +70,7 @@ export function StoryAxisChips({
   reviewStale?: boolean;
   retro?: RetroStatus;
   needsRebase?: string;
+  behind?: boolean;
   className?: string;
 }) {
   const chips: AxisChip[] = [];
@@ -110,20 +108,19 @@ export function StoryAxisChips({
       prefix: "retro",
     });
   }
+  if (behind) chips.push(BEHIND_AXIS_CHIP);
   return <AxisChips chips={chips} className={className} />;
-}
-
-export function epicAxesVisible(epicStatus?: EpicStatus, retro?: RetroStatus) {
-  return Boolean(epicStatus || retro);
 }
 
 export function EpicAxisChips({
   epicStatus,
   retro,
+  behind,
   className,
 }: {
   epicStatus?: EpicStatus;
   retro?: RetroStatus;
+  behind?: boolean;
   className?: string;
 }) {
   const chips: AxisChip[] = [];
@@ -140,5 +137,6 @@ export function EpicAxisChips({
       prefix: "retro",
     });
   }
+  if (behind) chips.push(BEHIND_AXIS_CHIP);
   return <AxisChips chips={chips} className={className} />;
 }

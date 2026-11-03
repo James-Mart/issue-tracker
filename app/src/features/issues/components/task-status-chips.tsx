@@ -1,6 +1,5 @@
 import type { TaskStatus } from "@server/schemas";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils/cn";
+import { AxisChips, BEHIND_AXIS_CHIP, type AxisChip } from "./axis-chips";
 import {
   TASK_STATUS_BADGE_VARIANT,
   TASK_STATUS_LABEL,
@@ -8,16 +7,19 @@ import {
 
 export function TaskStatusChips({
   status,
+  behind,
   className,
 }: {
   status: TaskStatus;
+  behind?: boolean;
   className?: string;
 }) {
-  return (
-    <span className={cn("flex items-center gap-1.5", className)}>
-      <Badge variant={TASK_STATUS_BADGE_VARIANT[status]}>
-        {TASK_STATUS_LABEL[status]}
-      </Badge>
-    </span>
-  );
+  const chips: AxisChip[] = [
+    {
+      variant: TASK_STATUS_BADGE_VARIANT[status],
+      label: TASK_STATUS_LABEL[status],
+    },
+  ];
+  if (behind) chips.push(BEHIND_AXIS_CHIP);
+  return <AxisChips chips={chips} className={className} />;
 }
