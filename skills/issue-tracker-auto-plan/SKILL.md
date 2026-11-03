@@ -10,18 +10,19 @@ description: >-
 
 # Issue Tracker — Auto-plan (stakeholder)
 
-Turn a seed issue into a polished plan tree, leaving an audit trail the human
-reviews afterward. You are the **stakeholder**: you answer the
+Turn a seed issue into an outline and the polished plan tree decomposed from
+it, leaving an audit trail the human reviews afterward. You are the **stakeholder**: you answer the
 vanilla planner's grill from product intent (never from what code already
 does), hold the grill open until every implied seam is opened, then route the
-post-outline gate to the human unless the Idea's outline-gate flag is unset
+outline gate to the human unless the Idea's outline-gate flag is unset
 and the Project's gate rubric exempts the outline, record whether the code
 needs human approval (**## Flow** step 3), resolve polish escalations, and
 finalize with an audit report on the archived source Idea.
-Provenance (`sourceIdea`) lands on each resulting root from the planner's
-migrate step — not from finalize.
-You do **not** author the plan tree yourself — the vanilla planner does
-(`issue-tracker-plan` unchanged; Story *"Reuse over reinvention"* invariant).
+Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
+post-apply step — not from finalize.
+You do **not** author the outline or the plan tree yourself — the vanilla
+planner and the decomposer it delegates do (`issue-tracker-plan` unchanged;
+Story *"Reuse over reinvention"* invariant).
 
 This skill is meant to be invoked **manually on opus 5.5
 (`claude-opus-5-5-thinking-high`)**. All judgment happens in this agent plus
@@ -33,10 +34,10 @@ the spawned discriminator / planner.
 
 **Allowed writes:** `issue idea set <issueId> approvalPending` and
 `issue idea set <issueId> codeApprovalRequired` (**## Flow** step 3),
-`issue comment <rootId> --role human` on each resulting root
-after an approved gate (**## Flow** step 3), plus finalize `attach` +
+`issue comment <rootId> --role human` on the resulting root
+after a human Yes (**## Flow** step 3), plus finalize `attach` +
 `comment` — `issue idea attach` and `issue idea comment` on the archived
-source Idea (the seed after migration). Standout-decisions comments use
+source Idea. Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
 skill itself directs you to follow — today, **`issue-tracker-vision-docs`**
 on the **§ Subsystem vision consult** path. All other `issue` use is
@@ -79,12 +80,12 @@ there is nothing to resume.
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
 6. **Outline-gate flag** — `issue idea get <issueId> outlineGate`. `true` → the
-   human answers the post-outline gate; empty output → the gate rubric decides
+   human answers the outline gate; empty output → the gate rubric decides
    who answers it. Carry the value through the run; do not re-read it.
 7. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult per that file using the step-1 summary output:
-   - `gateRubric` — the exemptions for the post-outline gate (**## Flow**
+   - `gateRubric` — the exemptions for the outline gate (**## Flow**
      step 3). An absent or unreadable doc exempts nothing: both gates apply.
    - `vision`
 8. The Project's **`inspirationApps`** field (consult-if-present): use the
@@ -237,14 +238,15 @@ specifics and stop; otherwise proceed to Flow.
    vision + the source issue's theme + inspirationApps.
    Resolve any **polish escalation** the planner surfaces the same way, then
    re-enter it with that same `resumeId` to continue. Repeat until the planner
-   returns the resulting plan root id(s) (it has already migrated / polished).
+   returns its final message: after Yes, the resulting root id (already
+   applied and polished); after Not now, the outline id.
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
    **Coverage check.** The mock-or-skip check, a mockup-round question
    (conformant or escalated presentation), any "shared understanding
-   reached" / ready-for-outline judgment, and the post-outline gate are the
+   reached" / ready-for-outline judgment, and the outline gate are the
    coverage-check triggers.
    Consult the implied-seam inventory (**## Bootstrap** step 10) before
    answering each of them, and again at every later one. Any seam still
@@ -252,13 +254,14 @@ specifics and stop; otherwise proceed to Flow.
    seams, and re-enter the planner with that as your reply. On the
    mock-or-skip check, the push is your **Keep grilling** answer. A push is
    the **Terse grill answers** exception for context the griller lacks. Never
-   answer the gate no to mean keep grilling. With no seam left unopened,
+   answer the gate Not now to mean keep grilling. With no seam left unopened,
    answer the beat as you otherwise would.
 
-   **Post-outline gate.** The planner puts this gate to you after each
-   outline. Run the **Coverage check** first; a push goes back to the planner
-   and leaves the routing below unrun. Then route the gate by the first row
-   that matches:
+   **Outline gate.** The planner puts this gate to you after each saved
+   outline version, with three answers: **Yes**, **Not now**, and **Amend**
+   with feedback. Run the **Coverage check** first; a push goes back to the
+   planner and leaves the routing below unrun. Then route the gate by the
+   first row that matches:
 
    - Outline-gate flag `true` (**## Bootstrap** step 6) → the human's.
    - The outline clearly meets a clause under the gate rubric's
@@ -266,7 +269,7 @@ specifics and stop; otherwise proceed to Flow.
    - Otherwise → the human's.
 
    **Code verdict.** Whoever answers the gate, in the turn that relays a
-   yes to the planner and before re-entering it, judge the outline being
+   Yes to the planner and before re-entering it, judge the outline being
    approved against the gate rubric's `## Code does not need approval
    when`. When no clause there clearly exempts the resulting code, run
    `issue idea set <issueId> codeApprovalRequired true`.
@@ -281,14 +284,14 @@ specifics and stop; otherwise proceed to Flow.
    heading over the answer you would have given.
 
    When the human replies, re-enter the same planner with its `resumeId`
-   from step 2 — a yes as the gate answer, or the rejection together with
-   the human's reason. A rejection comes back as a revised outline; post
-   it the same way as the first. On the approved path, inside the turn
-   that relays the yes and before re-entering the planner, run
+   from step 2, relaying the human's answer: Yes, Not now, or Amend with
+   the human's feedback. Amend comes back as the next outline version;
+   post it the same way as the first. Inside the turn that relays Yes or
+   Not now and before re-entering the planner, run
    `issue idea set <issueId> approvalPending false`. The marker's
-   lifecycle across rejection rounds is fixed by
+   lifecycle across Amend rounds is fixed by
    `issue:awaiting-approval-status`. After the planner returns the
-   resulting root id(s) on that approved path, comment on each with
+   resulting root id on the Yes path, comment on it with
    `issue comment <rootId> --role human --body <text>`. The body
    records that a human approved the plan and names the Idea
    (`<issueId>`). This is your write, not the planner's: the planner
@@ -316,12 +319,12 @@ specifics and stop; otherwise proceed to Flow.
    entry per decision: the decision, the answer you chose, and the rationale
    (distilled, not the raw transcript). Do not defer this to the end; across
    many planner re-entries, reconstructing it later is lossy. This draft is the
-   decision-summary attached at **## Finalize**. The post-outline gate adds
-   two entries: the outline verdict (yours or the human's) and the code
-   verdict (exempt or approval required). Each names the rubric clause it
-   relied on, "no exempting clause", or for an outline routed by the flag,
-   the outline-gate flag.
-4. **Retro.** After the planner returns the resulting plan root id(s), re-enter
+   decision-summary attached at **## Finalize**. Each outline gate answer
+   adds the outline verdict (Yes, Not now, or Amend; yours or the human's),
+   and a Yes also adds the code verdict (exempt or approval required). Each
+   names the rubric clause it relied on, "no exempting clause", or for an
+   outline routed by the flag, the outline-gate flag.
+4. **Retro.** After the planner returns its final message, re-enter
    it once with the same `resumeId` from step 2, asking it to run a retro on
    the planning session per
    [issue-tracker-retro](../issue-tracker-retro/SKILL.md). Wait for that
@@ -375,6 +378,6 @@ When finalize is done, report per **## Finalize**. Then stop.
 - You are the stakeholder on opus 5.5 (`claude-opus-5-5-thinking-high`):
   bootstrap, grill answers,
   discriminator + planner spawns, retro request, finalize. Do not author the
-  plan tree yourself — the vanilla planner owns authoring / polish via
-  `issue-tracker-plan`.
+  outline or the plan tree yourself — the vanilla planner and its decomposer
+  own authoring / polish via `issue-tracker-plan`.
 - Honor the intro **Allowed writes** contract.

@@ -22,6 +22,8 @@ that lands in an order someone can build.
 - **Outline** — outline id
 - **Version** — the outline version to decompose
 - **Execution gate** — `on` or `off`
+- **Merge policy** — optional; the merge policy for a root built on a
+  merge-base branch
 
 ## Bootstrap
 
@@ -49,8 +51,13 @@ that lands in an order someone can build.
 3. **Post-apply.** Follow these authoring skill sections on what `apply`
    created: **Source outline (sourceOutline)** with this outline and version;
    **Source idea (sourceIdea)** with the source Idea, when there is one;
-   **Merge-base override** with the merge-base branch, when there is one; and
-   **Tasks with no diff (noDiff)**.
+   **Merge-base override** with the merge-base branch, when there is one;
+   **Tasks with no diff (noDiff)**; and **Promoted mockup artifacts** for
+   each mockup direction the outline version names, copied from the source
+   Idea, with the tweak wording the outline states for it. With a **Merge
+   policy** input, run `issue <rootKind> set <rootId> mergePolicy <policy>`
+   after the merge-base override, where `<rootKind>` is `epic` or `story`
+   to match the root.
 4. **Polish.** **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
    and follow it on the root.

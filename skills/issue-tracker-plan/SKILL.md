@@ -2,21 +2,19 @@
 name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
-  Grill an Idea into a plan tree via apply or story append (when appendTo is
-  set), checking which affected screens to mock or skip before any mockup
-  round, then auto-chain polish. Use when the user asks to plan an Idea, flesh
-  out a tracker plan, or run issue-tracker-plan.
+  Grill an Idea into a saved outline and ask the outline gate, handing Yes to
+  a decomposer, or append Tasks to a Story when appendTo is set; checks which
+  affected screens to mock or skip before any mockup round. Use when the user
+  asks to plan an Idea, flesh out a tracker plan, or run issue-tracker-plan.
 ---
 
-# Issue Tracker — Plan (grill → plan tree)
+# Issue Tracker — Plan (grill → outline)
 
-Turn a rough capture into a detailed plan. You grill the user, check which
-affected screens get a mockup round, run those rounds, show the outline, get
-one explicit-consequence yes, then migrate and auto-chain
-`issue-tracker-plan-polish`. Behavioral contract:
-Epic **auto-plan-polish-confirm** invariants (single post-outline gate +
-auto-chain polish) — do not restate that list here. Do not implement product
-code; this skill only authors the plan artifact.
+Turn a rough capture into an outline in the Project catalog. You grill the
+user, check which affected screens get a mockup round, run those rounds, save
+the outline, and ask the outline gate. Yes hands the outline version to a
+decomposer, which builds, applies, and polishes one work root. Do not
+implement product code; this skill only authors the plan artifact.
 
 A retro on the planning session is available on demand through
 [issue-tracker-retro](../issue-tracker-retro/SKILL.md); run one only when
@@ -26,11 +24,11 @@ asked.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-Grain, apply doc shape, parent-prose, and prune-by-default rules live in
-issue-tracker-authoring and [SPEC.md](../../SPEC.md) — when proposing the
-tree, apply those rules yourself; only ask the user when a
-product or dependency choice remains after those rules. Do not restate them
-here.
+For an append plan, grain, apply doc shape, parent-prose, and
+prune-by-default rules live in issue-tracker-authoring and
+[SPEC.md](../../SPEC.md) — when proposing the Tasks, apply those rules
+yourself; only ask the user when a product or dependency choice remains after
+those rules. Do not restate them here.
 
 ## Argument
 
@@ -93,12 +91,11 @@ dependencies between decisions one-by-one. For each question, provide your
 recommended answer.
 
 Do **not** ask the user to choose Story vs Task grain, Epic vs project-level
-Story grain, or slice decomposition — apply issue-tracker-authoring grain
-yourself. Reserve questions for product and dependency choices that remain
-after those rules.
+Story grain, or slice decomposition — the decomposer slices the outline; for
+an append plan, apply issue-tracker-authoring grain yourself. Reserve
+questions for product and dependency choices.
 
-Keep asking one question at a time — do **not** dump a Story/Task outline
-mid-grill.
+Keep asking one question at a time — do **not** show the outline mid-grill.
 
 **Rules (mandatory):**
 
@@ -113,7 +110,7 @@ mid-grill.
   **non-trunk branch**. **Trunk** — proceed with the rest of the grill;
   Focused codebase research uses the workspace working tree only (omit
   `Ref` in spawn stubs). Carry the answer and the merge-policy (when
-  non-trunk) through to outline and migrate.
+  non-trunk) through to the outline gate and **## Decompose**.
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
@@ -166,8 +163,8 @@ mid-grill.
   - **Amend** — the reply moves named screens between mock and skip. Treat
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
-- **Do not enact** the plan (no tracker writes that materialize the
-  tree) until the user answers yes at the single post-outline gate.
+- **Do not enact** the plan (no tracker writes that materialize work)
+  until the user answers Yes at the outline gate, or yes at the append gate.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
   when the grill is ready, go straight to the outline + gate.
 
@@ -195,66 +192,82 @@ doc.
     the same way a redirection does. Neither the direction nor those tweaks
     are accepted. It never starts a second round for that screen.
 - **Held tweak wording** — hold the wording of every accepted tweak, yours
-  and the stakeholder's, with its direction id through to migrate.
+  and the stakeholder's, with its direction id through to the outline (or,
+  for an append plan, to migrate).
 - **Escalated return** — post the captures together with the violations the
   round named, labelled as failing conformance. Then ask **one** question
   whose three answers each carry their consequence in the answer list:
   - **Accept as it is** — the direction goes to the round's acceptance beat
-    exactly as a conformant one does, and migrate promotes it.
+    exactly as a conformant one does, and is carried forward like one.
   - **Redirect** — the stakeholder's redirection goes back as feedback to the
     round already open, which resumes iterating on it with a fresh cap.
   - **Drop** — from `/root/.cursor/plugins/local/issue-tracker/app`, stop
     that conversation's stack with
     `npm run mockup-stack -- stop <conversationId> --ended`, then the round
-    ends for that screen with no direction, the plan proceeds without one,
-    and migrate promotes nothing for that screen.
+    ends for that screen with no direction, and the plan proceeds without
+    one.
 - **A new product question** — when a return raises a product or dependency
   decision the grill has not settled, ask it and have it answered before the
   next screen's round starts.
 - **Before the outline** — every mock screen's round ends in an accepted
   direction or a drop before you show the outline.
 
-## Single post-outline gate, then migrate
+## Outline gate
 
 When Bootstrap printed a Story id for `appendTo`, continue at **## Append**.
 
 When the grill is ready (no extra pre-outline confirm):
 
-1. **Outline.** Show the proposed tree outline in chat with enough prose that
-   the user can judge scope. Name the merge-base the plan will be built on,
-   and the merge-policy when non-trunk. Match the chosen migrate shape:
-   story-form → root Story title + Task titles; epic-form → Epic title +
-   Story/Task hierarchy (implementation order).
-   Do **not** `apply` yet. The user may edit the outline in chat before
-   answering the gate.
-2. **One gate.** Ask **one** yes/no whose lead-in states that **yes** means:
-   migrate the plan, run `issue-tracker-plan-polish` on the resulting root,
-   and auto-apply polish fixes. No other confirm beats before migrate.
-3. On **yes** → **Migrate** (below). On **no** → stop (do not migrate).
+1. **Write the outline.** **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
+   and follow it. The body opens with `# Background`, then
+   `# Implementation` with one `##` section per feature area of concern. It
+   has no Epic or Story headings and no implementation order; slicing
+   belongs to the decomposer. The section covering each screen whose round
+   accepted a direction names that direction id and states its held tweak
+   wording.
+2. **Save it.** The first save creates the outline under the Project:
+   `issue outline add --in <projectId> --title <title> --description-file <path>`
+   prints `<outlineId>`; then run
+   `issue outline set <outlineId> sourceIdea <ideaId>`. Each later save is
+   `issue outline set <outlineId> description --file <path>`. Every save is
+   the outline's next version.
+3. **Ask.** Post the body `issue outline view <outlineId>` prints in chat.
+   Name the merge base the work builds on, and the merge policy when
+   non-trunk. Then ask **one** question whose answer list carries each
+   consequence:
+   - **Yes** — a decomposer turns the latest outline version into one work
+     root, applies it, and polishes it; the Idea's execution gate decides
+     whether that root then starts.
+   - **Not now** — the outline stays in the Project catalog, the Idea is
+     archived, and no work is created.
+   - **Amend** — the reply is feedback on the outline. Revise it, save the
+     next version (step 2), and ask this gate again.
+4. On **Yes** → **## Decompose**. On **Not now** → run
+   `issue idea set <ideaId> archived true` and report `<outlineId>`.
 
-## Migrate
+## Decompose
 
-On **yes** at the single post-outline gate, **Read**
-`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
-and follow it. Then continue at **## After success**.
-
-## After success
-
-Auto-chain **`issue-tracker-plan-polish`** on the resulting root — **Read**
-`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
-and follow it; no polish yes/no. Polish itself auto-applies when safe (see
-that skill) and archives the source Idea when it finishes; do not add an
-approve-before-apply beat here. If polish is deferred in this session (e.g.
-the user asks to grill more before polish runs), the polish obligation for
-that root persists — deferral does not reset or cancel it.
+1. When the grill settled a non-trunk merge base that Bootstrap step 7 did
+   not print, run `issue idea set <ideaId> mergeBase <branch>`; the
+   decomposer reads the merge base from the Idea.
+2. The execution gate is `on` when `issue idea get <ideaId> executionGate`
+   prints `true` or `issue idea get <ideaId> stakeholder` prints nothing;
+   otherwise it is `off`.
+3. `issue outline get <outlineId> version` prints the latest version.
+4. Delegate the **Decomposer** stub for the model you run on (Spawn stubs):
+   **Decomposer (opus)** on a Claude Opus model, **Decomposer (grok)** on any
+   other. Wait for its reply: the root id on the first line, then any queue
+   failure.
+5. Report that reply.
 
 ## Append
 
 When Bootstrap printed a Story id for `appendTo`:
 
-1. **Outline.** Name the target Story and list Task titles. When the work
+1. **Proposal.** Name the target Story and list Task titles. When the work
    does not fit a Task series, state that here and stop.
-2. **One gate.** Ask **one** yes/no whose lead-in states that **yes** means:
+2. **Append gate.** Ask **one** yes/no whose lead-in states that **yes** means:
    migrate the plan, run `issue-tracker-plan-polish` on the target Story,
    and auto-apply polish fixes.
 3. On **yes** → **Read**
@@ -284,11 +297,22 @@ workflow instructions here.
 > Research: `<focused question>`. Workspace: `<absolute workspace path>`.
 > Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional).
 
+**Decomposer (opus)** — `role: issue-tracker-decomposer-opus`
+
+**Decomposer (grok)** — `role: issue-tracker-decomposer-grok`
+
+Both take the same prompt:
+
+> Outline: `<outlineId>`. Version: `<n>`. Execution gate: `<on|off>`.
+
+For a non-trunk merge base, append `` Merge policy: `<policy>`. `` to that
+prompt.
+
 ## Rules
 
-- Tracker writes for the migration happen only after yes at the single
-  post-outline gate.
+- Tracker writes that create work happen only after Yes at the outline gate
+  or yes at the append gate.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
-- Do not auto-start `issue-tracker-work`. After a successful migrate, always
-  auto-chain polish (no second yes/no).
+- Do not start `issue-tracker-work` yourself. After a successful append,
+  always auto-chain polish (no second yes/no).

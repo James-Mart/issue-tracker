@@ -218,7 +218,8 @@ Copy mode moves bytes already attached — the scratch and harness are gone by
 migrate time. `apply` never writes attachment bytes.
 
 Write the tweak wording held with that direction (**Held tweak wording** in
-issue-tracker-plan) into that Story's description.
+issue-tracker-plan, or the outline section that names the direction) into
+that Story's description.
 
 In that Story's prose, name the copied files and state what they are:
 
