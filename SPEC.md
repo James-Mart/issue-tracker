@@ -157,21 +157,16 @@ Six relationships, each with a distinct, non-overlapping role:
   minting a new Epic or root Story. Refused when the target Story is merged.
   Cleared when the target Story is deleted.
 
-#### The diamond (why a multi-parent dependency becomes a new Epic)
+#### Fan-in (why a multi-parent dependency becomes a stack)
 
 The one thing a single `stackedOn` fork point cannot express is a unit that needs
 code from **two** parallel Stories at once (the classic diamond: Stories A and
 B both fork the Project trunk, worked in parallel, and C needs both). Rather than
 reintroduce a Story-level multi-parent edge — which would force a merge gate
 *inside* an Epic and break the "one Epic run = one clean, bottom-up-mergeable
-stack of PRs" property — we resolve it at the Epic boundary: split the dependent
-unit into a **new Epic that is `blockedBy` the Epic holding the parallel
-Stories** (A and B). The tradeoff is
-deliberate: keeping A and B in one Epic preserves their parallelism (two
-independent stacks, no gate between them), while moving C into a second Epic makes
-it wait for the whole blocking Epic to *merge* first — coarser, but landing
-exactly where a merge round-trip is natural (a human-paced Epic boundary) instead
-of stalling a stack mid-flight.
+stack of PRs" property — authoring linearizes it: B stacks on A, and C stacks
+on B. The tradeoff is deliberate: A and B give up their parallelism, while the
+plan stays one work root and C never waits on a separate Epic to merge.
 
 #### The stacked-PR merge model
 
@@ -1102,6 +1097,14 @@ it. Idle or archived sessions do not hold the lock.
 
 **Launcher.** At the start of each launcher pass (before the per-Project work-root drain from [Work queue](#work-queue)), the server drains Ideas carrying `planQueuedAt` across all Projects, oldest first, with no cap. It starts each through `createIssueChannelSession` with channel `planning`, model = the Idea's `stakeholder`, and the title and first prompt that `app/src/features/issues/lib/planning-launch.ts` builds for a stakeholder. It then clears `planQueuedAt`. On failure it clears the field and posts `issue idea comment <id> --role launcher --body "Auto-plan failed to start: <message>"` through the service layer. The Idea stays `captured`, so the human can start it from the button.
 
+### Outline planning channel
+
+An Outline offers the `planning` channel. Issue detail shows it as a Planning tab, the same tab an Idea uses. The tab lists sessions on that channel. It does not start them.
+
+`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner or decomposer session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
+
+A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
+
 ### Work queue
 
 `workQueuedAt` (ISO string, optional) on an Epic or a project-level Story records when the work root joined the queue. `workQueuePosition` (positive integer, optional) is its place among that Project's queued roots. `workParkedAt` (ISO string, optional) is set while the root is parked. All three are system writers: `apply` preserves them, and kind `set` does not accept them. `issue epic|story get <id> workQueuedAt`, `issue epic|story get <id> workQueuePosition`, and `issue epic|story get <id> workParkedAt` read them. Roots that already carry `workQueuedAt` and lack `workQueuePosition` receive positions in `workQueuedAt` order, id as the tie-break, per Project, after any position already stored.
@@ -1334,10 +1337,10 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `outlineGate` | boolean? | absent until set; when true, the human must answer the post-outline auto-plan gate (see [Roles](#roles)); written by the human; legacy stores may still hold `approvePlan` until `migrate:outline-gate` rewrites them |
+| `outlineGate` | boolean? | absent until set; when true, the human must answer the auto-plan outline gate (see [Roles](#roles)); written by the human; legacy stores may still hold `approvePlan` until `migrate:outline-gate` rewrites them |
 | `executionGate` | boolean? | absent until set; when true, work roots planned from this Idea are not started automatically; written by the human; requires a `stakeholder` |
 | `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset, except the Idea a review submission creates, which carries the reviewed change's head branch (the pull request base for a fork); `apply` preserves |
-| `approvalPending` | boolean? | absent until set; when true, a post-outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
+| `approvalPending` | boolean? | absent until set; when true, an outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
 | `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create, or a review submitted as a new idea, queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
@@ -2601,7 +2604,8 @@ this SPEC entry is where the invariant is durable.
 is good at, so each role carries one line naming the craft it is trusted with,
 sitting with its role intro. A role that exists as several model-pinned
 wrappers carries the line once in its shared body
-(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`) and not in the
+(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`,
+`_issue-tracker-decomposer.md`) and not in the
 wrappers. Like the include, the line never modulates scope, effort, or
 thoroughness.
 

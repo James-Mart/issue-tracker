@@ -470,6 +470,27 @@ export async function createIssueChannelSession(
   return created;
 }
 
+/** Create an anchored session and start the first prompt persisted with it. */
+export async function startIssueChannelSession(
+  input: CreateIssueChannelSessionInput & { message: string },
+  sessions: Pick<AgentSessions, "isBusy" | "claimStart" | "sendPrompt">,
+): Promise<ConversationMeta> {
+  const { meta, firstPrompt } = await createIssueChannelSession(
+    input,
+    sessions,
+  );
+  if (!firstPrompt) {
+    throw new Error(
+      `${input.channel} session "${meta.id}" was created without a prompt`,
+    );
+  }
+  const started = await startFirstPrompt(meta.id, firstPrompt, sessions);
+  if (!started.ok) {
+    throw new Error(started.message);
+  }
+  return meta;
+}
+
 /** Start a new channel session's persisted first prompt; its claim is released however the start ends. */
 export async function startFirstPrompt(
   conversationId: string,

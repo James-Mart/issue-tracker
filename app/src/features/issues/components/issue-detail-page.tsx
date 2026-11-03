@@ -233,7 +233,6 @@ function IssueDetailBody({
         exportTab={exportTab}
         exportDraftReaderOpen={exportDraftReaderOpen}
         onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
-        showTabBar={issue.kind === "outline"}
         overview={
           <IssueOverviewPanel
             issue={issue}

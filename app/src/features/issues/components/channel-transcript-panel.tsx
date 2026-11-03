@@ -45,17 +45,42 @@ import {
   ImplementingNewRunControl,
 } from "./implementing-launch-control";
 import {
+  OUTLINE_PLANNING_EMPTY_DETAIL,
+  OUTLINE_PLANNING_EMPTY_TITLE,
+} from "../lib/outline-planning-launch";
+import {
   PlanningChannelEmptyState,
   PlanningNewRunControl,
 } from "./planning-launch-control";
 
 type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
+type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
 
 function isPlanningIdea(
   channel: ConversationChannel,
   issue: IssueDetail | undefined,
 ): issue is IdeaDetail {
   return channel === "planning" && issue?.kind === "idea";
+}
+
+function isPlanningOutline(
+  channel: ConversationChannel,
+  issue: IssueDetail | undefined,
+): issue is OutlineDetail {
+  return channel === "planning" && issue?.kind === "outline";
+}
+
+function OutlinePlanningChannelEmptyState({ label }: { label: string }) {
+  return (
+    <div data-testid="outline-planning-empty">
+      <ShellState
+        className="border-0 bg-transparent px-4 py-8 shadow-none"
+        eyebrow={label}
+        title={OUTLINE_PLANNING_EMPTY_TITLE}
+        detail={OUTLINE_PLANNING_EMPTY_DETAIL}
+      />
+    </div>
+  );
 }
 
 type StartedSession = Pick<
@@ -161,6 +186,7 @@ function ChannelTranscriptBody({
     <ChannelLaunchFaultBanner fault={thisFault} />
   ) : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
+  const planningOutline = isPlanningOutline(channel, issue) ? issue : undefined;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
     : undefined;
@@ -322,6 +348,8 @@ function ChannelTranscriptBody({
         channel={channel}
         onStarted={onSessionStarted}
       />
+    ) : planningOutline ? (
+      <OutlinePlanningChannelEmptyState label={label} />
     ) : implementingWorkRoot && projectId ? (
       <ImplementingChannelEmptyState issue={implementingWorkRoot} />
     ) : (

@@ -41,6 +41,7 @@ import {
   read,
   readAll,
   readIssueOrThrow,
+  readOutlineOrThrow,
   remove,
 } from "../services/issues.js";
 import { patchIssue } from "../services/root-merge-settings.js";
@@ -132,14 +133,6 @@ function outlineVersionQuery(raw: unknown, name: string): number {
   }
 }
 
-function requireOutline(id: string) {
-  const issue = readIssueOrThrow(id);
-  if (issue.kind !== "outline") {
-    throw new IssueError("validation", `issue "${id}" is not an outline`);
-  }
-  return issue;
-}
-
 export function createIssuesRouter(
   sessions: AgentSessions = agentSessions,
 ): Router {
@@ -164,7 +157,7 @@ export function createIssuesRouter(
   router.get(
     "/:id/outline/body",
     asyncRoute((req, res) => {
-      const issue = requireOutline(req.params.id);
+      const issue = readOutlineOrThrow(req.params.id);
       const version = outlineVersionQuery(req.query.version, "version");
       let body: string;
       try {
@@ -179,7 +172,7 @@ export function createIssuesRouter(
   router.get(
     "/:id/outline/diff",
     asyncRoute((req, res) => {
-      const issue = requireOutline(req.params.id);
+      const issue = readOutlineOrThrow(req.params.id);
       const from = outlineVersionQuery(req.query.from, "from");
       const to = outlineVersionQuery(req.query.to, "to");
       let diff: string;

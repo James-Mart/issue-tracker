@@ -67,8 +67,7 @@ function isChannelTab(
 /**
  * Page-level tab bar below the persistent header. Overview always; optional
  * channel from `channelForIssue`; Project keeps an Outlines catalog and
- * supporting-doc preview tabs.
- * With Overview alone, no bar renders unless `showTabBar` is set.
+ * supporting-doc preview tabs. With Overview alone, no bar renders.
  */
 export function IssueDetailTabs({
   issue,
@@ -78,7 +77,6 @@ export function IssueDetailTabs({
   exportTab = false,
   exportDraftReaderOpen = false,
   onExportDraftReaderOpenChange,
-  showTabBar = false,
 }: {
   issue: IssueDetail;
   projectId: string;
@@ -88,8 +86,6 @@ export function IssueDetailTabs({
   exportTab?: boolean | "loading";
   exportDraftReaderOpen?: boolean;
   onExportDraftReaderOpenChange?: (open: boolean) => void;
-  /** Keep the tab bar when Overview is the only tab. */
-  showTabBar?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const includeExport = exportTabIncluded(exportTab, searchParams.get("tab"));
@@ -162,7 +158,7 @@ export function IssueDetailTabs({
   const diffTabs = tabs.filter(isDiffTab);
   const outlinesTabs = tabs.filter(isOutlinesTab);
   const docTabs = tabs.filter(isDocTab);
-  const showBar = tabs.length > 1 || showTabBar;
+  const showBar = tabs.length > 1;
   const overviewSelected = active === "overview";
 
   if (!showBar) {

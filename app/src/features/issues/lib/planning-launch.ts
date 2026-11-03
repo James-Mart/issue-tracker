@@ -57,7 +57,7 @@ export function planningLaunchCopy(
   if (stakeholder) {
     const name = stakeholderDisplayName(stakeholder, models);
     const detail = outlineGate
-      ? `Start auto-plan with ${name} as stakeholder. The run pauses for your approval of the proposed tree before anything is built.`
+      ? `Start auto-plan with ${name} as stakeholder. The run pauses for your answer to the outline gate before any work is created.`
       : `Start auto-plan with ${name} as stakeholder. It answers the grill, and routes the outline to you when the Project's gate rubric does not exempt it.`;
     return {
       title: "No planning session.",

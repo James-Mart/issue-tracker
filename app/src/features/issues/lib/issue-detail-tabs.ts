@@ -53,10 +53,7 @@ export function channelTabForIssue(
     if (parentKind === undefined) return undefined;
     return channelForIssue(issue, parentKind);
   }
-  if (issue.kind === "idea" || issue.kind === "epic") {
-    return channelForIssue(issue);
-  }
-  return undefined;
+  return channelForIssue(issue);
 }
 
 /** Agents tab for Task and Story (once its parent is known) — kind-only, not data-dependent. */

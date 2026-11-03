@@ -104,18 +104,17 @@ const planning: Pipeline = {
     },
     {
       id: "outline-gate",
-      name: "Single post-outline gate",
-      shortLabel: "Outline gate",
+      name: "Outline gate",
       kind: "gate",
       pipeline: "planning",
       source: PLAN_SKILL,
     },
     {
-      id: "migrate",
-      name: "Migrate",
+      id: "decomposer",
+      name: "Decomposer",
       kind: "step",
       pipeline: "planning",
-      source: "skills/issue-tracker-plan/references/migrate.md",
+      source: "agents/_issue-tracker-decomposer.md",
     },
     {
       id: "polish",
@@ -193,8 +192,11 @@ const planning: Pipeline = {
     { from: "mockup-round", to: "design-conformance", kind: "spawn" },
     { from: "design-conformance", to: "mockup-author", kind: "spawn" },
     { from: "mockup-round", to: "outline-gate", kind: "flow" },
-    { from: "outline-gate", to: "migrate", kind: "flow" },
-    { from: "migrate", to: "polish", kind: "flow" },
+    // The gate delegates one of the model-pinned decomposer wrappers, so the
+    // spawn has no single defining file for the drift guard to match.
+    { from: "outline-gate", to: "decomposer", kind: "flow" },
+    { from: "decomposer", to: "research", kind: "spawn" },
+    { from: "decomposer", to: "polish", kind: "flow" },
     { from: "polish", to: "check-dry", kind: "spawn" },
     { from: "polish", to: "check-authoring-conformance", kind: "spawn" },
     { from: "polish", to: "check-dependency-order", kind: "spawn" },

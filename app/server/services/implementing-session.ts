@@ -2,8 +2,7 @@ import { listedAgentModels } from "../agent-model-slugs.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   clearWorkQueueFields,
-  createIssueChannelSession,
-  startFirstPrompt,
+  startIssueChannelSession,
 } from "./conversations.js";
 import { implementingSessionModel } from "./implementing-launch.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
@@ -26,7 +25,7 @@ export async function startImplementingChannelSession(
   if (!model) {
     throw new Error("no coordinator model is available");
   }
-  const { meta, firstPrompt } = await createIssueChannelSession(
+  await startIssueChannelSession(
     {
       projectId: input.projectId,
       title: input.title,
@@ -37,14 +36,5 @@ export async function startImplementingChannelSession(
     },
     sessions,
   );
-  if (!firstPrompt) {
-    throw new Error(
-      `implementing session "${meta.id}" was created without a prompt`,
-    );
-  }
-  const started = await startFirstPrompt(meta.id, firstPrompt, sessions);
-  if (!started.ok) {
-    throw new Error(started.message);
-  }
   await clearWorkQueueFields(input.issueId);
 }

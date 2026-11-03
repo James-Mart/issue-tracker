@@ -10,18 +10,17 @@ description: >-
 # Issue Tracker — GitHub export rewrite
 
 Rewrite one root — an unarchived Epic or project-level Story — into
-publishing-prose drafts on that root. The reader is an implementer who already
-knows this project. Tracker issues stay the detailed plan agents use. Each
-draft file keeps a YAML `title`; the body is the GitHub issue markdown.
-Nothing is posted to GitHub. The work merges to trunk.
+publishing-prose drafts on that root. Each draft file keeps a YAML `title`;
+the body is the GitHub issue markdown. Nothing is posted to GitHub. The work
+merges to trunk.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
 **Read**
-`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-plan-body.md`
-and follow it except **Grain** and **Task shape**.
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
+and follow it.
 
 Use the default issues dir (do not set `ISSUES_DIR`).
 
@@ -76,7 +75,8 @@ A failed PUT is a failure: report the response and stop. Do not call
 ## Publishing prose
 
 A Story draft uses the Story shape below. An Epic draft uses the Epic shape
-below. The YAML `title` is a short name of the outcome.
+below. Both are written in the publishing voice. The YAML `title` is a short
+name of the outcome.
 
 ### Story
 
@@ -86,11 +86,7 @@ plan body **Describe the work** and carries cross-cutting contracts named
 in the tracker description. Leave data model, actions, queries, and UI work
 to `# Implementation`.
 
-Under `# Implementation`, break the work into `##` area headings. Each
-heading is the name the reader already uses for that area, as the tracker
-names it, not a procedural task title. Prefer the tracker's own section and
-task area names over invented labels. A table appears only when behavior is
-a matrix.
+Under `# Implementation`, break the work into `##` area headings.
 
 When a Story has to land after another, its prose names the piece it follows
 in ordinary language. A Story whose `stackedOn` is set lands after that

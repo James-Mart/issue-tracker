@@ -34,9 +34,9 @@ Broken or missing dependency / order structure:
   the reverse); stack order contradicts stated prerequisites in prose;
   within-Epic dependencies modeled as Epic `blockedBy` instead of stacks.
 - **Epic `blockedBy`** — missing when the Epic truly needs another same-Project
-  Epic to finish first; spurious or wrong-target `blockedBy`; multi-parent /
-  diamond cases that should be a separate `blockedBy` Epic instead of a fake
-  Story edge (see SPEC stacked-PR / `blockedBy` guidance).
+  Epic to finish first; spurious or wrong-target `blockedBy`.
+- **Fan-in** — a unit needs code from two Stories that remain parallel
+  instead of linearized into one stack (SPEC § Fan-in).
 - **Task order** — Tasks listed in an order that cannot work (consumer before
   producer). Array position is implementation order.
 - **Integrity smells visible from reads** — dangling/wrong-kind referents if

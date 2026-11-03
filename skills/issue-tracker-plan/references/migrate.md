@@ -2,7 +2,7 @@
 
 ### Post-migrate imperatives
 
-After any successful `issue story append` or root `apply`, set `noDiff` per
+After a successful `issue story append`, set `noDiff` per
 [Tasks with no diff (noDiff)](../../issue-tracker-authoring/SKILL.md#tasks-with-no-diff-nodiff)
 — imperative only, not in the YAML doc.
 
@@ -30,37 +30,11 @@ Then follow **Post-migrate imperatives** for `noDiff`.
 When the grill included mockup rounds with chosen directions, follow
 **### Promoted mockup artifacts** using the target Story as `<storyId>`.
 
-### Merge-base and policy
-
-Never a project-form `apply` for this migration. Use the **story-form** or
-**epic-form** already chosen for the approved outline.
-
-After **each** successful root `apply`, record the merge-base answer and
-policy from **Merge-base first** (**Rules (mandatory):** in the parent
-skill):
-
-| Merge-base answer | Post-apply |
-| --- | --- |
-| **Trunk** | (none) |
-| **Non-trunk branch** | `issue <rootKind> set <rootId> mergeBase <branch>` then `issue <rootKind> set <rootId> mergePolicy <policy>` |
-
-`<rootKind>` is `story` or `epic` matching the apply shape; `<rootId>` is the
-resulting root id from that apply. Imperative only — not in the YAML doc.
-
-- After each successful root `apply`:
-  `issue epic set <rootId> sourceIdea <ideaId>` for an epic-form root, or
-  `issue story set <rootId> sourceIdea <ideaId>` for a story-form root.
-  `<rootId>` is the resulting root id from that apply; `<ideaId>` is the
-  source Idea's id. Applies to **single-root** and **multi-root** migrations
-  alike. Imperative only — not in the YAML doc.
-- After each successful root `apply`, follow **Post-migrate imperatives** for
-  `noDiff`.
-
 ### Promoted mockup artifacts
 
-When the grill included mockup rounds with chosen directions, after **each**
-successful migrate that lands work on a Story implementing a mocked surface,
-for each chosen direction on that surface:
+When the grill included mockup rounds with chosen directions, after the
+append lands work on a Story implementing a mocked surface, for each chosen
+direction on that surface:
 
 1. From `/root/.cursor/plugins/local/issue-tracker/app`, run
    `npm run mockup-promote -- --from-issue <fromIssueId> --direction <directionId> --issue <storyId> --mode copy`
@@ -114,39 +88,3 @@ for each chosen direction on that surface:
 
 Surfaces whose round ended with no chosen direction — a dropped escalation —
 skip this step.
-
-### Single root (not splitting)
-
-One epic-form or story-form apply. Leave the source Idea **unarchived** after
-`apply` — the Idea is the record that keeps the resulting root from reporting
-ready until plan-polish finishes.
-
-**Story-form** — `project: <projectId>` string + `story:` object (no `epic:`):
-
-| Source | Story id in the doc | After successful `apply` |
-| --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
-
-**Epic-form** — `project: <projectId>` string + `epic:` object:
-
-| Source | Epic id in the doc | After successful `apply` |
-| --- | --- | --- |
-| **Idea** | Mint a **new** kebab id — **do not reuse the Idea id** | (none) |
-
-Show `apply` stdout. Report the resulting Story or Epic id.
-
-### Multi-root (splitting)
-
-N separate epic-form / story-form applies — one per resulting root. Roots may
-mix Epics and project-level Stories. **Always mint new root ids** (do not reuse
-the source Idea id as any new root id).
-
-1. Apply in **`blockedBy` order** when deps exist among the new Epic roots;
-   otherwise any order.
-2. On **first apply failure:** stop. Leave already-written roots in place. Do
-   **not** delete the source. No automatic rollback.
-3. Only after **every** apply succeeds: leave the source Idea **unarchived** —
-   the Idea is the record that keeps the resulting roots from reporting ready
-   until every root's plan-polish has finished.
-
-Show each `apply` stdout. Report every resulting root id.
