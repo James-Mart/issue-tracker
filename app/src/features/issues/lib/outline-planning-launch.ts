@@ -51,6 +51,7 @@ export function outlineDecomposerSessionMessage(input: {
   const message =
     `Decompose ${input.outlineId} in the issue tracker. ` +
     `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
+    `Mode: \`decompose\`. ` +
     `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`. ` +
     `Execution gate: \`${input.executionGate}\`.`;
   if (!input.mergePolicy) return message;

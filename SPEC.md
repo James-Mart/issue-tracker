@@ -621,6 +621,12 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   of body `<from>` against body `<to>` (`--- version/<from>`,
   `+++ version/<to>`). Identical bodies print nothing and exit 0. A version
   out of range, or a non-integer, is an error.
+- **`open-roots`** (outline) — `issue outline open-roots <id>`. Prints one
+  `<rootId> <version>` line per open linked root, in board order, where
+  `<version>` is the root's `sourceOutline` version. A linked root is an
+  unarchived root Epic or project-level Story whose `sourceOutline` names
+  this outline. It is open when it is an Epic whose `epicStatus` is not
+  `done`, or a Story that is not `merged`.
 - **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
   returns `{ version, body }`. `<n>` is a positive integer through
   `bodyVersion`. The latest body is `description.md`; an older body is
@@ -1103,9 +1109,11 @@ An Outline offers the `planning` channel. Issue detail shows it as a Planning ta
 
 `startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner or decomposer session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
 
-A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
+A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`decompose`), `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
 
 The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off" }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `planning` channel at the latest `bodyVersion`, with that execution gate and no outline gate and no merge policy. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a body with any other field, or a Project with no workspace is an error. A busy planning session on that outline is `409`, the same refusal as any other start on that channel. The decomposer queues the new root after polish when the gate is `off`, and leaves the root unqueued when the gate is `on`.
+
+A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, and an optional `Covered by` list of Task ids the triggering flow already created. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`).
 
 ### Work queue
 

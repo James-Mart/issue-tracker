@@ -1,9 +1,11 @@
 import type { Command } from "commander";
+import { linkedRootsForOutline } from "@/features/issues/lib/outline-links";
 import { assertKind } from "./cli-kind.js";
 import {
   outlineVersionDiff,
   parseOutlineVersion,
 } from "./server/services/outline-body.js";
+import { list } from "./server/services/issues.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
@@ -35,6 +37,22 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
         process.stdout.write(
           outlineVersionDiff(id, outline.bodyVersion, from, to),
         );
+      }),
+    );
+
+  kindCmd
+    .command("open-roots")
+    .argument("<id>", "outline id")
+    .description(
+      "list open root Epics and project-level Stories stamped with this outline as `<rootId> <version>` lines",
+    )
+    .action((id: string) =>
+      run(() => {
+        assertKind("outline", id);
+        const { issues, derived } = list();
+        for (const root of linkedRootsForOutline(issues, derived, id, false)) {
+          if (root.open) process.stdout.write(`${root.id} ${root.version}\n`);
+        }
       }),
     );
 }

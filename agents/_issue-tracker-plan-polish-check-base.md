@@ -20,7 +20,7 @@ tracker or edit workspace source.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
 **Read-only allowlist:** `summary`, `tree`, `list`,
-`get`, `view`, `attachments`, and `--help`.
+`get`, `view`, `attachments`, `outline diff`, and `--help`.
 
 Load issue specs via `issue view <id>` (and `get` for scalars).
 
@@ -45,13 +45,23 @@ Load issue specs via `issue view <id>` (and `get` for scalars).
 4. `issue tree <rootId>` for the Story/Task outline.
 5. `issue view <id>` on the work root and every Story/Task you review
    (plus any extra `get` / sibling reads your agent file calls for).
+6. With an **Outline diff** input, run that command.
 
 ## Inputs (from invoking prompt)
 
 - **Work root** id (+ title) — Epic, project-level Story, or
   append-target Story
+- **Outline diff** — optional; an `issue outline diff` command for the
+  outline change this tree was reconciled to
 - Return findings **only** in this delegation result to the parent (never
   `issue comment` or other writes).
+
+## Outline diff
+
+A Task that carries out a change in the outline diff is intended, including
+when it undoes or replaces what an older Task in the tree built. Judge that
+pair as one planned change; findings on it cover only what the diff does not
+explain.
 
 ## Output
 

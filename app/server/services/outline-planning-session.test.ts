@@ -82,7 +82,7 @@ describe("startOutlinePlanningSession", () => {
     expect(JSON.parse(line).text).toBe(
       "Decompose feature-outline in the issue tracker. " +
         `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
-        "Outline: `feature-outline`. Version: `2`. Execution gate: `off`. " +
+        "Mode: `decompose`. Outline: `feature-outline`. Version: `2`. Execution gate: `off`. " +
         "Merge policy: `squash`.",
     );
   });
