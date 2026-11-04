@@ -85,11 +85,10 @@ Doc format and field seam: [SPEC.md § `apply` doc format](../../SPEC.md#apply-d
 
 ## Epic grain: project-level Story vs Epic
 
-A plan lands as exactly **one** work root. Choose it by shape, not habit —
-**unless the Idea's
-`appendTo` names an existing Story**, in which case the plan is a Task series
-on that Story only (no new Epic or root Story; see
-[Source idea (sourceIdea)](#source-idea-sourceidea) for the append path).
+A decomposition lands exactly **one** work root. Choose it by shape, not
+habit. A reconciliation mints no root: it edits the linked roots in place and
+appends Tasks to their open Stories (see
+[Source outline (sourceOutline)](#source-outline-sourceoutline)).
 
 - **Project-level Story** (`partOf` the Project, no Epic) — the plan is a
   **single Story plus its Tasks**. Author with Project `children:`
@@ -158,9 +157,9 @@ outline whose `sourceIdea` names that Idea, record that edge **after** `apply`
 - Epic: `issue epic set <id> sourceIdea <ideaId>`
 - Project-level root Story: `issue story set <id> sourceIdea <ideaId>`
 
-When an Idea's `appendTo` names a Story, land Tasks with
-`issue story append` instead of `apply`, then record provenance on each
-created Task (imperative only — not in the YAML doc):
+When a reconciliation carries a source Idea (the Idea's `appendTo` named the
+target Story), record provenance on each Task `issue story append` created on
+that target Story (imperative only — not in the YAML doc):
 
 - `issue task set <taskId> sourceIdea <ideaId>` for each created Task id
 
