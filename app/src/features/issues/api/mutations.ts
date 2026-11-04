@@ -35,6 +35,7 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
+import type { OutlineExecutionGate } from "../lib/outline-planning-launch";
 import type { OutboxComment } from "../lib/comment-outbox";
 import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
@@ -588,6 +589,76 @@ export function useDequeueWorkRoot(issueId: string) {
   });
 }
 
+export type DecomposeOutlineResult = {
+  id: string;
+  title: string;
+  model: string;
+};
+
+function invalidateStartedChannelSession(
+  qc: QueryClient,
+  issueId: string,
+  channel: ConversationChannel,
+): void {
+  qc.invalidateQueries({
+    queryKey: issuesKeys.channelSessions(issueId, channel),
+  });
+  qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+}
+
+function rememberStartedChannelSession(
+  qc: QueryClient,
+  issueId: string,
+  channel: ConversationChannel,
+  created: { id: string; title: string; model: string },
+): void {
+  const now = new Date().toISOString();
+  const item: ChannelSessionListItem = {
+    id: created.id,
+    title: created.title,
+    model: created.model,
+    createdAt: now,
+    updatedAt: now,
+    archived: false,
+    activeRun: true,
+    awaitingHuman: false,
+  };
+  qc.setQueryData<ChannelSessionListItem[]>(
+    issuesKeys.channelSessions(issueId, channel),
+    (prev) => {
+      const rest = (prev ?? [])
+        .filter((session) => session.id !== created.id)
+        .map((session) =>
+          session.archived ? session : { ...session, archived: true },
+        );
+      return [item, ...rest];
+    },
+  );
+}
+
+/** Start a decomposer on the outline's planning channel at its latest version. */
+export function useDecomposeOutline(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<
+    DecomposeOutlineResult,
+    Error,
+    { executionGate: OutlineExecutionGate }
+  >({
+    mutationFn: (body) =>
+      request<DecomposeOutlineResult>(
+        `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
+        { method: "POST", body },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      rememberStartedChannelSession(qc, outlineId, "planning", data);
+    },
+    onSettled: () => {
+      invalidateStartedChannelSession(qc, outlineId, "planning");
+    },
+  });
+}
+
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,
@@ -613,35 +684,15 @@ export function useCreateChannelSession(
       toast.error(messageOf(err));
     },
     onSuccess: (data, variables) => {
-      const now = new Date().toISOString();
-      const created: ChannelSessionListItem = {
+      rememberStartedChannelSession(qc, issueId, channel, {
         id: data.id,
         title: variables.title,
         model: variables.model,
-        createdAt: now,
-        updatedAt: now,
-        archived: false,
-        activeRun: true,
-        awaitingHuman: false,
-      };
-      qc.setQueryData<ChannelSessionListItem[]>(
-        issuesKeys.channelSessions(issueId, channel),
-        (prev) => {
-          const rest = (prev ?? [])
-            .filter((session) => session.id !== data.id)
-            .map((session) =>
-              session.archived ? session : { ...session, archived: true },
-            );
-          return [created, ...rest];
-        },
-      );
+      });
       void qc.invalidateQueries({ queryKey: issuesKeys.list() });
     },
     onSettled: () => {
-      qc.invalidateQueries({
-        queryKey: issuesKeys.channelSessions(issueId, channel),
-      });
-      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+      invalidateStartedChannelSession(qc, issueId, channel);
     },
   });
 }
@@ -655,10 +706,7 @@ export function useDeleteChannelSession(
     mutationFn: deleteConversation,
     onError: (err) => toast.error(messageOf(err)),
     onSettled: () => {
-      qc.invalidateQueries({
-        queryKey: issuesKeys.channelSessions(issueId, channel),
-      });
-      qc.invalidateQueries({ queryKey: agentsKeys.conversationsPrefix() });
+      invalidateStartedChannelSession(qc, issueId, channel);
     },
   });
 }

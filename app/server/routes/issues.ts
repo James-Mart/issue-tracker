@@ -76,6 +76,10 @@ import {
   outlineVersionDiff,
   parseOutlineVersion,
 } from "../services/outline-body.js";
+import {
+  parseDecomposeRequest,
+  startOutlinePlanningSession,
+} from "../services/outline-planning-session.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import {
   applyArchivedListQuery,
@@ -182,6 +186,29 @@ export function createIssuesRouter(
         outlineServiceError(error);
       }
       res.json({ from, to, diff });
+    }),
+  );
+
+  router.post(
+    "/:id/outline/decompose",
+    asyncRoute(async (req, res) => {
+      const outline = readOutlineOrThrow(req.params.id);
+      const executionGate = parseDecomposeRequest(req.body);
+      requireProjectWorkspace(outline.partOf);
+      const meta = await startOutlinePlanningSession(
+        {
+          outlineId: outline.id,
+          role: "decomposer",
+          version: outline.bodyVersion,
+          executionGate,
+        },
+        sessions,
+      );
+      res.status(201).json({
+        id: meta.id,
+        title: meta.title,
+        model: meta.model,
+      });
     }),
   );
 

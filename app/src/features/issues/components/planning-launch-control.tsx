@@ -11,7 +11,6 @@ import type { ConversationChannel, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils/cn";
 import {
   Select,
   SelectContent,
@@ -35,6 +34,7 @@ import { useAppendPlanningContext } from "../lib/use-append-planning-context";
 import { issuesById } from "../lib/build-tree";
 import { useIssuesQuery } from "../api/queries";
 import { AppendPlanningCallout } from "./append-planning-callout";
+import { GateToggleButton } from "./gate-toggle-button";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -176,52 +176,13 @@ function useIdeaGateToggle(
   return { enabled, onToggle, saving };
 }
 
-function IdeaGateChipButton({
-  issue,
-  field,
-  label,
-  enabled,
-  onToggle,
-  saving,
-  testId,
-}: {
-  issue: IdeaRecord;
-  field: "outlineGate" | "executionGate";
-  label: string;
-  enabled: boolean;
-  onToggle: () => void;
-  saving: boolean;
-  testId: string;
-}) {
-  const stateLabel = enabled ? "on" : "off";
-  const controlId =
-    field === "outlineGate"
-      ? `outline-gate-${issue.id}`
-      : `execution-gate-${issue.id}`;
-
-  return (
-    <Button
-      type="button"
-      variant="default"
-      id={controlId}
-      aria-pressed={enabled}
-      data-testid={testId}
-      disabled={saving}
-      className="h-7 px-2 font-mono text-[10px] tracking-[0.08em]"
-      onClick={onToggle}
-    >
-      <span className="text-muted-foreground">{label} ·</span>{" "}
-      <span
-        className={cn(
-          enabled
-            ? "text-[hsl(var(--current))]"
-            : "text-muted-foreground",
-        )}
-      >
-        {stateLabel}
-      </span>
-    </Button>
-  );
+function gateControlId(
+  issueId: string,
+  field: "outlineGate" | "executionGate",
+): string {
+  return field === "outlineGate"
+    ? `outline-gate-${issueId}`
+    : `execution-gate-${issueId}`;
 }
 
 function OutlineGateChip({
@@ -233,14 +194,13 @@ function OutlineGateChip({
 }) {
   const control = useIdeaGateToggle(issue, "outlineGate");
   return (
-    <IdeaGateChipButton
-      issue={issue}
-      field="outlineGate"
+    <GateToggleButton
+      id={gateControlId(issue.id, "outlineGate")}
       label="Outline gate"
       testId={testId}
       enabled={control.enabled}
       onToggle={control.onToggle}
-      saving={control.saving}
+      disabled={control.saving}
     />
   );
 }
@@ -254,14 +214,13 @@ function ExecutionGateChip({
 }) {
   const control = useIdeaGateToggle(issue, "executionGate");
   return (
-    <IdeaGateChipButton
-      issue={issue}
-      field="executionGate"
+    <GateToggleButton
+      id={gateControlId(issue.id, "executionGate")}
       label="Execution gate"
       testId={testId}
       enabled={control.enabled}
       onToggle={control.onToggle}
-      saving={control.saving}
+      disabled={control.saving}
     />
   );
 }
@@ -752,14 +711,13 @@ export function PlanningChannelEmptyState({
               />
             )}
             {stakeholder ? (
-              <IdeaGateChipButton
-                issue={issue}
-                field="outlineGate"
+              <GateToggleButton
+                id={gateControlId(issue.id, "outlineGate")}
                 label="Outline gate"
                 testId="detail-outline-gate"
                 enabled={outlineGateControl.enabled}
                 onToggle={outlineGateControl.onToggle}
-                saving={outlineGateControl.saving}
+                disabled={outlineGateControl.saving}
               />
             ) : null}
             {stakeholder && !append ? (
