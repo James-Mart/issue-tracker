@@ -10,6 +10,7 @@ import {
   discardOutlineDraft,
   publishOutlineDraft,
   setOutlineDraft,
+  type OutlineDraftUpdate,
 } from "./server/services/outline-draft.js";
 import { agentSessions } from "./server/services/agent-sessions.js";
 import { list } from "./server/services/issues.js";
@@ -84,16 +85,21 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
       "--covered-by <taskIds...>",
       "tasks this flow already created (spaces or commas)",
     )
+    .option(
+      "--source-idea <id>",
+      "idea recorded as sourceIdea on tasks appended to the target story",
+    )
     .description(
       "save the pending draft as the next version and start reconciliation",
     )
-    .action((id: string, opts: { targetStory?: string; coveredBy?: string[] }) =>
+    .action((id: string, opts: OutlineDraftUpdate) =>
       run(async () => {
         const published = await publishOutlineDraft(
           id,
           {
             targetStory: opts.targetStory,
             coveredBy: coveredByIds(opts.coveredBy),
+            sourceIdea: opts.sourceIdea,
           },
           agentSessions,
         );

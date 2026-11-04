@@ -1,39 +1,9 @@
 # Migrate
 
-### Post-migrate imperatives
-
-After a successful `issue story append`, set `noDiff` per
-[Tasks with no diff (noDiff)](../../issue-tracker-authoring/SKILL.md#tasks-with-no-diff-nodiff)
-— imperative only, not in the YAML doc.
-
-### Append
-
-When the Idea's `appendTo` names a Story, write a story-form apply doc
-(`project: <projectId>` + `story:` object; include `epic: <id>` when the
-target sits under an Epic) whose `story.id` is that Story and whose
-`children:` are the outlined Tasks.
-
-`issue story append <storyId> <file>`
-
-`<storyId>` is the Idea's `appendTo`. Show append stdout. Report each
-created Task id.
-
-Leave the source Idea **unarchived** after append — the Idea is the
-record that keeps the work from reporting ready until plan-polish
-finishes.
-
-After a successful append:
-`issue task set <taskId> sourceIdea <ideaId>` for each created Task id.
-`<ideaId>` is the source Idea's id. Imperative only — not in the YAML doc.
-Then follow **Post-migrate imperatives** for `noDiff`.
-
-When the grill included mockup rounds with chosen directions, follow
-**### Promoted mockup artifacts** using the target Story as `<storyId>`.
-
 ### Promoted mockup artifacts
 
 When the grill included mockup rounds with chosen directions, after the
-append lands work on a Story implementing a mocked surface, for each chosen
+plan lands work on a Story implementing a mocked surface, for each chosen
 direction on that surface:
 
 1. From `/root/.cursor/plugins/local/issue-tracker/app`, run

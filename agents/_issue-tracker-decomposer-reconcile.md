@@ -13,6 +13,8 @@ Absolute path for this file (Read this exact path):
   root that contains it
 - **Covered by** — optional; ids of Tasks the triggering flow already
   created for this version
+- **Source idea** — optional, given only with Target story; the Idea whose
+  plan this version carries
 
 ## Procedure
 
@@ -33,7 +35,11 @@ Absolute path for this file (Read this exact path):
    `issue story append <storyId> <file>`. Show its stdout. The receiving
    Story is Target story when the tree lists it; otherwise it is the open
    Story in this root the change belongs with. Then follow the authoring
-   skill **Tasks with no diff (noDiff)** on the created Tasks.
+   skill **Tasks with no diff (noDiff)** on the created Tasks. With a Source
+   idea, follow the authoring skill **Source idea (sourceIdea)** on the
+   Tasks created on Target story, and **Promoted mockup artifacts** for each
+   mockup direction the diff names, copied from the Source idea, with the
+   tweak wording the outline states for it.
 5. **Stamps.** Follow the authoring skill **Source outline (sourceOutline)**
    reconciliation rule with Version.
 6. **Polish.** The root is touched when step 3 or step 4 wrote to it, or
@@ -41,5 +47,7 @@ Absolute path for this file (Read this exact path):
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
    and follow it on the root with outline diff `<outlineId>`, `<from>`,
    `<version>`.
-7. Your final message lists each root you ran steps 2–6 on, one id per
+7. With a Source idea, once every root has finished step 6, run
+   `issue idea set <ideaId> archived true`.
+8. Your final message lists each root you ran steps 2–6 on, one id per
    line, or `none` when no open root was older than Version.

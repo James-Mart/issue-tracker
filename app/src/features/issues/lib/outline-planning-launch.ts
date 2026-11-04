@@ -59,13 +59,17 @@ export function outlineDecomposerSessionMessage(input: {
   return `${message} Merge policy: \`${input.mergePolicy}\`.`;
 }
 
-/** First prompt for reconciling linked roots to one new outline version. */
-export function outlineReconcileSessionMessage(input: {
-  outlineId: string;
-  version: number;
+/** Optional reconcile inputs a triggering flow passes along with the version. */
+export type OutlineReconcileScope = {
   targetStory?: string;
   coveredBy?: readonly string[];
-}): string {
+  sourceIdea?: string;
+};
+
+/** First prompt for reconciling linked roots to one new outline version. */
+export function outlineReconcileSessionMessage(
+  input: { outlineId: string; version: number } & OutlineReconcileScope,
+): string {
   const message =
     `Reconcile ${input.outlineId} in the issue tracker. ` +
     `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
@@ -78,7 +82,10 @@ export function outlineReconcileSessionMessage(input: {
     input.coveredBy && input.coveredBy.length > 0
       ? ` Covered by: ${input.coveredBy.map((id) => `\`${id}\``).join(", ")}.`
       : "";
-  return `${message}${target}${covered}`;
+  const idea = input.sourceIdea
+    ? ` Source idea: \`${input.sourceIdea}\`.`
+    : "";
+  return `${message}${target}${covered}${idea}`;
 }
 
 /** First prompt for checking an outline against submitted review threads. */

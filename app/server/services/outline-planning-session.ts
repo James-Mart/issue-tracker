@@ -7,6 +7,7 @@ import {
   outlinePlanningSessionTitle,
   outlineReconcileSessionMessage,
   type OutlineExecutionGate,
+  type OutlineReconcileScope,
 } from "../../src/features/issues/lib/outline-planning-launch.js";
 import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
@@ -38,9 +39,7 @@ export type StartOutlineReconcileSession = {
   outlineId: string;
   role: "reconcile";
   version: number;
-  targetStory?: string;
-  coveredBy?: string[];
-};
+} & OutlineReconcileScope;
 
 export type StartOutlineCheckSession = {
   outlineId: string;
@@ -99,10 +98,12 @@ export async function createOutlinePlanningSession(
   sessions: ConversationMessageSessions,
 ): Promise<{ meta: ConversationMeta; firstPrompt: FirstPrompt }> {
   const outline = readOutlineOrThrow(input.outlineId);
-  const sourceIdea = sourceIdeaOf(outline);
-  const model = outlinePlanningSessionModel(sourceIdea?.stakeholder);
+  const outlineIdea = outline.sourceIdea
+    ? readSourceIdeaOrThrow(outline.sourceIdea)
+    : undefined;
+  const model = outlinePlanningSessionModel(outlineIdea?.stakeholder);
   const title = outlinePlanningSessionTitle(input.role, outline.title);
-  const message = sessionMessage(input, outline, sourceIdea);
+  const message = sessionMessage(input, outline, outlineIdea);
   const { meta, firstPrompt } = await createIssueChannelSession(
     {
       projectId: outline.partOf,
@@ -120,14 +121,11 @@ export async function createOutlinePlanningSession(
   return { meta, firstPrompt };
 }
 
-function sourceIdeaOf(outline: OutlineIssue): IdeaIssue | undefined {
-  if (!outline.sourceIdea) return undefined;
-  const idea = readIssueOrThrow(outline.sourceIdea);
+/** The Idea a `sourceIdea` field names. Any other kind is refused. */
+export function readSourceIdeaOrThrow(id: string): IdeaIssue {
+  const idea = readIssueOrThrow(id);
   if (idea.kind !== "idea") {
-    throw new IssueError(
-      "validation",
-      `source idea "${outline.sourceIdea}" is not an idea`,
-    );
+    throw new IssueError("validation", `source idea "${id}" is not an idea`);
   }
   return idea;
 }
@@ -135,16 +133,16 @@ function sourceIdeaOf(outline: OutlineIssue): IdeaIssue | undefined {
 function sessionMessage(
   input: StartOutlinePlanningSessionInput,
   outline: OutlineIssue,
-  sourceIdea: IdeaIssue | undefined,
+  outlineIdea: IdeaIssue | undefined,
 ): string {
   if (input.role === "planner") {
-    if (!sourceIdea) {
+    if (!outlineIdea) {
       throw new IssueError(
         "validation",
         `outline "${outline.id}" has no source idea to plan`,
       );
     }
-    return outlinePlannerSessionMessage(sourceIdea.id);
+    return outlinePlannerSessionMessage(outlineIdea.id);
   }
   if (input.role === "check") {
     return outlineCheckSessionMessage({
@@ -162,6 +160,7 @@ function sessionMessage(
       version: input.version,
       targetStory: input.targetStory,
       coveredBy: input.coveredBy,
+      sourceIdea: input.sourceIdea,
     });
   }
   return outlineDecomposerSessionMessage({

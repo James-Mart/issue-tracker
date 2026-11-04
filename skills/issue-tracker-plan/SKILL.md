@@ -3,9 +3,10 @@ name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
   Grill an Idea into a saved outline and ask the outline gate, handing Yes to
-  a decomposer, or append Tasks to a Story when appendTo is set; checks which
-  affected screens to mock or skip before any mockup round. Use when the user
-  asks to plan an Idea, flesh out a tracker plan, or run issue-tracker-plan.
+  a decomposer, or, when appendTo is set, amend the target Story's outline
+  and hand Yes to reconciliation; checks which affected screens to mock or
+  skip before any mockup round. Use when the user asks to plan an Idea, flesh
+  out a tracker plan, or run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → outline)
@@ -13,7 +14,9 @@ description: >-
 Turn a rough capture into an outline in the Project catalog. You grill the
 user, check which affected screens get a mockup round, run those rounds, save
 the outline, and ask the outline gate. Yes hands the outline version to a
-decomposer, which builds, applies, and polishes one work root. Do not
+decomposer, which builds, applies, and polishes one work root. An Idea with
+`appendTo` amends the target Story's outline instead, and Yes hands the new
+version to reconciliation, which appends the Tasks to that Story. Do not
 implement product code; this skill only authors the plan artifact.
 
 A retro on the planning session is available on demand through
@@ -23,12 +26,6 @@ asked.
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-cli.md`.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
-
-For an append plan, grain, apply doc shape, parent-prose, and
-prune-by-default rules live in issue-tracker-authoring and
-[SPEC.md](../../SPEC.md) — when proposing the Tasks, apply those rules
-yourself; only ask the user when a product or dependency choice remains after
-those rules. Do not restate them here.
 
 ## Argument
 
@@ -91,9 +88,8 @@ dependencies between decisions one-by-one. For each question, provide your
 recommended answer.
 
 Do **not** ask the user to choose Story vs Task grain, Epic vs project-level
-Story grain, or slice decomposition — the decomposer slices the outline; for
-an append plan, apply issue-tracker-authoring grain yourself. Reserve
-questions for product and dependency choices.
+Story grain, or slice decomposition — the decomposer slices the outline.
+Reserve questions for product and dependency choices.
 
 Keep asking one question at a time — do **not** show the outline mid-grill.
 
@@ -164,7 +160,7 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize work)
-  until the user answers Yes at the outline gate, or yes at the append gate.
+  until the user answers Yes at the outline gate.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
   when the grill is ready, go straight to the outline + gate.
 
@@ -192,8 +188,7 @@ doc.
     the same way a redirection does. Neither the direction nor those tweaks
     are accepted. It never starts a second round for that screen.
 - **Held tweak wording** — hold the wording of every accepted tweak, yours
-  and the stakeholder's, with its direction id through to the outline (or,
-  for an append plan, to migrate).
+  and the stakeholder's, with its direction id through to the outline.
 - **Escalated return** — post the captures together with the violations the
   round named, labelled as failing conformance. Then ask **one** question
   whose three answers each carry their consequence in the answer list:
@@ -263,25 +258,35 @@ When the grill is ready (no extra pre-outline confirm):
 
 ## Append
 
-When Bootstrap printed a Story id for `appendTo`:
+When Bootstrap printed a Story id for `appendTo` (`<storyId>`), the
+amendment goes to that Story's outline as its pending draft:
 
-1. **Proposal.** Name the target Story and list Task titles. When the work
-   does not fit a Task series, state that here and stop.
-2. **Append gate.** Ask **one** yes/no whose lead-in states that **yes** means:
-   migrate the plan, run `issue-tracker-plan-polish` on the target Story,
-   and auto-apply polish fixes.
-3. On **yes** → **Read**
-   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
-   and follow **### Append**. On **no** → stop.
-4. Auto-chain **`issue-tracker-plan-polish`** on the target Story — **Read**
-   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
-   and follow it; no polish yes/no. Polish itself auto-applies when safe
-   (see that skill); do not add an approve-before-apply beat here. If
-   polish is deferred in this session (e.g. the user asks to grill more
-   before polish runs), the polish obligation for that Story persists —
-   deferral does not reset or cancel it.
-5. When that polish has finished, archive the source Idea:
-   `issue idea set <ideaId> archived true`.
+1. **Read the outline.** `issue story get <storyId> sourceOutline` prints
+   `{"outline":"<outlineId>","version":<n>}`. `issue outline view
+   <outlineId>` prints the latest body.
+2. **Write the draft.** **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
+   and follow it. Revise the latest body so it describes the feature with
+   this Idea's change folded into the `##` sections it belongs to, keeping
+   the outline shape from **## Outline gate** step 1. The section covering
+   each screen whose round accepted a direction names that direction id
+   and states its held tweak wording. Save it with
+   `issue outline draft set <outlineId> <path>`; the draft is not a version.
+3. **Ask.** Post the draft body in chat and name the target Story. Then ask
+   **one** question whose answer list carries each consequence:
+   - **Yes** — the draft becomes the outline's next version; reconciliation
+     appends this Idea's Tasks to the target Story, brings every other open
+     root linked to the outline up to that version, and polishes each root
+     it touches.
+   - **Not now** — the draft is discarded and no Tasks are appended.
+   - **Amend** — the reply is feedback on the draft. Revise it, save it
+     again (step 2), and ask this gate again.
+4. On **Yes** → run
+   `issue outline draft update <outlineId> --target-story <storyId> --source-idea <ideaId>`,
+   which prints the new version and starts reconciliation on the outline's
+   Planning channel. Report `<storyId>` on the first line, then the outline
+   id and version. On **Not now** → run
+   `issue outline draft discard <outlineId>` and report `<outlineId>`.
 
 ## Spawn stubs
 
@@ -311,9 +316,7 @@ prompt.
 
 ## Rules
 
-- Tracker writes that create work happen only after Yes at the outline gate
-  or yes at the append gate.
+- Tracker writes that create work happen only after Yes at the outline gate.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
-- Do not start `issue-tracker-work` yourself. After a successful append,
-  always auto-chain polish (no second yes/no).
+- Do not start `issue-tracker-work` yourself.
