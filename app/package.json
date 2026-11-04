@@ -36,6 +36,7 @@
     "migrate-comment-ids": "tsx scripts/migrate-comment-ids.ts",
     "migrate-task-commits": "tsx scripts/migrate-task-commits.ts",
     "migrate:outline-gate": "tsx scripts/migrate-outline-gate.ts",
+    "outline-backfill": "tsx scripts/outline-backfill.ts",
     "test": "tsx scripts/run-with-deadline.ts",
     "test:live": "CURSOR_SDK_LIVE=1 vitest run live.test",
     "test:e2e": "playwright test",
