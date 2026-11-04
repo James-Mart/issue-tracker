@@ -1,19 +1,14 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { isInclusionThreadEvent, type ReviewSubmitDestination } from "@server/schemas";
+import { isInclusionThreadEvent } from "@server/schemas";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { SUPPORTING_DOC_KEY_LABELS } from "@/features/issues/lib/supporting-docs";
 import {
   Dialog,
   DialogContent,
-  DialogField,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { changedFileRowClass } from "@/features/issues/components/changed-file-row";
 import { usePostThreadEvent } from "@/features/issues/api/mutations";
 import { ThreadInclusionToggle } from "@/features/issues/components/comments/thread-inclusion-toggle";
@@ -30,39 +25,6 @@ type InclusionEvents = Pick<
   ReturnType<typeof usePostThreadEvent>,
   "isPending" | "variables" | "mutate"
 >;
-
-function DestinationOption({
-  value,
-  selected,
-  onSelect,
-  children,
-}: {
-  value: ReviewSubmitDestination;
-  selected: boolean;
-  onSelect: (value: ReviewSubmitDestination) => void;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      data-testid={`submit-destination-${value}`}
-      className={cn(
-        "flex min-w-0 cursor-pointer items-center gap-2.5",
-        changedFileRowClass(selected),
-        "px-3 py-2.5 font-sans text-sm font-medium focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
-      )}
-    >
-      <input
-        type="radio"
-        name="submit-destination"
-        value={value}
-        checked={selected}
-        className="size-4 shrink-0 accent-[hsl(var(--current))] focus-visible:outline-none"
-        onChange={() => onSelect(value)}
-      />
-      <span className="min-w-0 break-words">{children}</span>
-    </label>
-  );
-}
 
 function SubmitDialogThreadRow({
   thread,
@@ -214,76 +176,18 @@ function ThreadsToSubmit({
   );
 }
 
-function AssessStandardsOption({
-  checked,
-  enabled,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  /** False when the Project has no Coding standards doc. */
-  enabled: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  const reasonId = "submit-assess-standards-reason";
-  return (
-    <div className="flex flex-col gap-1">
-      <label
-        className={cn(
-          "flex items-start gap-2.5 text-sm font-medium",
-          enabled ? "cursor-pointer" : "cursor-not-allowed",
-        )}
-      >
-        <Checkbox
-          checked={checked}
-          disabled={!enabled}
-          aria-describedby={enabled ? undefined : reasonId}
-          data-testid="submit-assess-standards"
-          className="mt-0.5"
-          onCheckedChange={(value) => onCheckedChange(value === true)}
-        />
-        <span className={enabled ? "text-foreground" : "text-muted-foreground"}>
-          Assess feedback for coding-standards gaps
-        </span>
-      </label>
-      {enabled ? null : (
-        <p id={reasonId} data-testid="submit-assess-standards-reason" className="pl-6 text-xs text-muted-foreground">
-          This project has no {SUPPORTING_DOC_KEY_LABELS.codingStandards} doc.
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function SubmitReviewDialog({
   open,
-  storyId,
   reviewId,
   includedThreads,
   notIncludedThreads,
-  destination,
-  onDestinationChange,
-  summary,
-  onSummaryChange,
-  assessStandards,
-  hasCodingStandards,
-  onAssessStandardsChange,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean;
-  /** The source Story; without one, a new idea is the only destination. */
-  storyId: string | undefined;
   reviewId: string;
   includedThreads: readonly CommentThread[];
   notIncludedThreads: readonly CommentThread[];
-  destination: ReviewSubmitDestination;
-  onDestinationChange: (destination: ReviewSubmitDestination) => void;
-  summary: string;
-  onSummaryChange: (summary: string) => void;
-  assessStandards: boolean;
-  /** True when the Project has a coding-standards doc. Undefined while that is still loading. */
-  hasCodingStandards: boolean | undefined;
-  onAssessStandardsChange: (assessStandards: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
 }) {
@@ -298,40 +202,6 @@ export function SubmitReviewDialog({
           <DialogTitle>Submit review</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain">
-          <div role="radiogroup" aria-label="Submit to" className="flex min-w-0 flex-col gap-2">
-            {storyId ? (
-              <DestinationOption
-                value="story"
-                selected={destination === "story"}
-                onSelect={onDestinationChange}
-              >
-                Submit as tasks to <span className="font-mono">{storyId}</span>
-              </DestinationOption>
-            ) : null}
-            <DestinationOption
-              value="idea"
-              selected={destination === "idea"}
-              onSelect={onDestinationChange}
-            >
-              Submit as a new idea
-            </DestinationOption>
-          </div>
-          {storyId && hasCodingStandards !== undefined ? (
-            <AssessStandardsOption
-              checked={assessStandards}
-              enabled={hasCodingStandards}
-              onCheckedChange={onAssessStandardsChange}
-            />
-          ) : null}
-          <DialogField>
-            <Label htmlFor="submit-review-summary">Summary comment (optional)</Label>
-            <Textarea
-              id="submit-review-summary"
-              value={summary}
-              data-testid="submit-review-summary"
-              onChange={(event) => onSummaryChange(event.target.value)}
-            />
-          </DialogField>
           <ThreadsToSubmit
             included={includedThreads}
             notIncluded={notIncludedThreads}

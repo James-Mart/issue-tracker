@@ -2,10 +2,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, vi } from "vitest";
+import type { ReviewSubmission } from "../schemas/review.js";
 import type { AgentSessions } from "./agent-sessions.js";
 
 export const AT = "2026-07-09T14:00:00.000Z";
 export const REVIEW_ID = "11111111-1111-4111-8111-111111111111";
+
+export function onlySubmission(view: { submissions: ReviewSubmission[] }): ReviewSubmission {
+  return view.submissions[0]!;
+}
 
 let root: string;
 let issuesDir: string;
@@ -58,6 +63,31 @@ export function seedReviewTasking(): void {
     createdAt: AT,
     updatedAt: AT,
   });
+}
+
+export const OUTLINE_ID = "spec";
+
+/** Outline `spec` at version 1, with Story `s` linked to it. */
+export function seedOutlinedStory(): void {
+  writeReviewTaskingIssue(OUTLINE_ID, {
+    kind: "outline",
+    title: "Spec",
+    partOf: "p",
+    bodyVersion: 1,
+    order: 1,
+    archived: false,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeFileSync(join(issuesDir, OUTLINE_ID, "description.md"), "saved\n");
+  mkdirSync(join(issuesDir, OUTLINE_ID, "versions"), { recursive: true });
+  writeFileSync(join(issuesDir, OUTLINE_ID, "versions", "1.md"), "saved\n");
+  const storyPath = join(issuesDir, "s", "issue.json");
+  const story = JSON.parse(readFileSync(storyPath, "utf8")) as Record<string, unknown>;
+  writeFileSync(
+    storyPath,
+    JSON.stringify({ ...story, sourceOutline: { outline: OUTLINE_ID, version: 1 } }),
+  );
 }
 
 export function writeReviewSubmissions(submissions: unknown[]): void {

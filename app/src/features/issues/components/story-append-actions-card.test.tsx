@@ -13,8 +13,16 @@ const derivedState = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useCreateIssue: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateIssue: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateIssue: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({ id: "idea-1", kind: "idea" }),
+    isPending: false,
+  }),
+  useUpdateIssue: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  }),
   useUpdateFromMergeBase: () => ({
     mutate: updateFromMergeBaseMutate,
     isPending: false,

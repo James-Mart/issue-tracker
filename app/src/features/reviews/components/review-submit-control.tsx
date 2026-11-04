@@ -1,16 +1,19 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
-import type { ReviewSubmitDestination, ReviewView } from "@server/schemas";
+import { Link } from "react-router-dom";
+import type { ReviewView } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CommentThread } from "@/features/issues/lib/comment-threads";
+import { issueChannelPath } from "@/features/issues/lib/links";
 import {
   useArchiveReview,
   useReopenReview,
   useRetryOpenReviewSubmissions,
   useSubmitReview,
 } from "../api/mutations";
-import type { ReviewSubmitHeader } from "../lib/review-submission-ui";
+import type { ReviewSubmitHeader, ReviewTaskingStatus } from "../lib/review-submission-ui";
+import { ReviewFollowUpIdeaButton } from "./review-follow-up-idea-button";
 import { SubmitReviewDialog } from "./review-submit-dialog";
 
 function ReviewStatusAction({
@@ -48,17 +51,46 @@ function ReviewStatusAction({
   );
 }
 
-function TaskingStatus({ label }: { label: string }) {
+const TASKING_STATUS_CLASS = "h-8 gap-1.5 px-3 touch:h-11";
+
+/** In-flight phases spin. The outline gate waits on the human, so it links there instead. */
+function TaskingStatus({
+  projectId,
+  status,
+}: {
+  projectId: string;
+  status: ReviewTaskingStatus;
+}) {
+  if (status.gateOutlineId) {
+    return (
+      <Link
+        to={issueChannelPath(projectId, status.gateOutlineId, "planning")}
+        className="rounded-md hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`${status.label}: open the outline's Planning tab`}
+        data-testid="review-outline-gate-link"
+      >
+        <Badge
+          variant="warn"
+          className={`${TASKING_STATUS_CLASS} hover:border-[hsl(var(--rail-lit))]`}
+          data-testid="review-tasking-status"
+          role="status"
+          aria-live="polite"
+        >
+          {status.label}
+        </Badge>
+      </Link>
+    );
+  }
   return (
     <Badge
       variant="inProgress"
-      className="h-8 gap-1.5 px-3 touch:h-11"
+      className={TASKING_STATUS_CLASS}
       data-testid="review-tasking-status"
       role="status"
       aria-live="polite"
     >
       <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
-      {label}
+      {status.label}
     </Badge>
   );
 }
@@ -123,11 +155,11 @@ export function ReviewSubmitActions({
   review,
   header,
   submissionThreads,
+  storyOpen,
   onAcknowledge,
   onAcknowledgeEnd,
   onRetryStart,
   onRetryEnd,
-  hasCodingStandards,
 }: {
   projectId: string;
   review: ReviewView;
@@ -136,9 +168,8 @@ export function ReviewSubmitActions({
   submissionThreads:
     | { included: readonly CommentThread[]; notIncluded: readonly CommentThread[] }
     | undefined;
-  /** True when the Project has a coding-standards doc. Undefined while that is still loading. */
-  hasCodingStandards: boolean | undefined;
-  /** Tasking is acknowledged only for the Story destination. */
+  /** False when the source Story is merged. */
+  storyOpen: boolean;
   onAcknowledge: () => void;
   onAcknowledgeEnd: () => void;
   onRetryStart: (submissionIds: readonly string[]) => void;
@@ -146,28 +177,13 @@ export function ReviewSubmitActions({
 }) {
   const submit = useSubmitReview(projectId);
   const retry = useRetryOpenReviewSubmissions(projectId);
-  const defaultDestination: ReviewSubmitDestination = review.story ? "story" : "idea";
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [destination, setDestination] = useState(defaultDestination);
-  const [summary, setSummary] = useState("");
-  const [assessStandards, setAssessStandards] = useState(false);
-  const keepDraft = useRef(false);
-
-  const resetDraft = () => {
-    setSummary("");
-    setDestination(defaultDestination);
-    setAssessStandards(false);
-  };
-
-  const closeDialog = (next: boolean) => {
-    if (!next && !keepDraft.current) resetDraft();
-    if (!next) keepDraft.current = false;
-    setDialogOpen(next);
-  };
 
   const reason = header.submit?.reason ?? header.retry?.reason;
   const describedBy = reason ? "review-submit-merged-reason" : undefined;
   const retryAction = header.retry;
+  const followUpStoryId =
+    review.story && storyOpen && review.status !== "archived" ? review.story : undefined;
 
   return (
     <div
@@ -188,7 +204,10 @@ export function ReviewSubmitActions({
             }}
           />
         ) : null}
-        {header.taskingLabel ? <TaskingStatus label={header.taskingLabel} /> : null}
+        {header.tasking ? <TaskingStatus projectId={projectId} status={header.tasking} /> : null}
+        {followUpStoryId ? (
+          <ReviewFollowUpIdeaButton projectId={projectId} storyId={followUpStoryId} />
+        ) : null}
         <SubmitAction
           header={header}
           submitPending={submit.isPending}
@@ -200,38 +219,20 @@ export function ReviewSubmitActions({
       {header.submit && submissionThreads ? (
         <SubmitReviewDialog
           open={dialogOpen}
-          storyId={review.story}
           reviewId={review.id}
           includedThreads={submissionThreads.included}
           notIncludedThreads={submissionThreads.notIncluded}
-          destination={destination}
-          onDestinationChange={setDestination}
-          summary={summary}
-          onSummaryChange={setSummary}
-          assessStandards={assessStandards}
-          hasCodingStandards={hasCodingStandards}
-          onAssessStandardsChange={setAssessStandards}
-          onOpenChange={closeDialog}
+          onOpenChange={setDialogOpen}
           onSubmit={() => {
-            const trimmed = summary.trim();
-            keepDraft.current = true;
             setDialogOpen(false);
-            if (destination === "story") onAcknowledge();
+            onAcknowledge();
             submit.mutate(
-              {
-                reviewId: review.id,
-                destination,
-                summary: trimmed === "" ? undefined : trimmed,
-                ...(assessStandards && hasCodingStandards ? { assessStandards: true } : {}),
-              },
+              { reviewId: review.id },
               {
                 onSuccess: () => {
-                  resetDraft();
-                  keepDraft.current = false;
                   onAcknowledgeEnd();
                 },
                 onError: () => {
-                  keepDraft.current = false;
                   onAcknowledgeEnd();
                   setDialogOpen(true);
                 },

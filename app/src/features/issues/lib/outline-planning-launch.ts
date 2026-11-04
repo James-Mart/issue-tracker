@@ -11,18 +11,19 @@ import {
 export const OUTLINE_PLANNING_GROK_MODEL = "cursor-grok-4.7";
 export const OUTLINE_PLANNING_OPUS_MODEL = "claude-opus-5-5-thinking-high";
 
-export type OutlinePlanningRole = "planner" | "decomposer" | "reconcile";
+export type OutlinePlanningRole = "planner" | "decomposer" | "reconcile" | "check";
 
 /** Execution gate for one decomposer run. `off` queues the new root after polish. */
 export type OutlineExecutionGate = "on" | "off";
 
-/** Session title for a planner or decomposer run on an outline. */
+/** Session title for a planning-channel run on an outline. */
 export function outlinePlanningSessionTitle(
   role: OutlinePlanningRole,
   outlineTitle: string,
 ): string {
   if (role === "planner") return planningSessionTitle(outlineTitle);
   if (role === "reconcile") return `Reconcile ${outlineTitle}`;
+  if (role === "check") return `Check ${outlineTitle}`;
   return `Decompose ${outlineTitle}`;
 }
 
@@ -85,6 +86,23 @@ export function outlineReconcileSessionMessage(
     ? ` Source idea: \`${input.sourceIdea}\`.`
     : "";
   return `${message}${target}${covered}${idea}`;
+}
+
+/** First prompt for checking an outline against submitted review threads. */
+export function outlineCheckSessionMessage(input: {
+  outlineId: string;
+  reviewId: string;
+  submissionId: string;
+  storyId: string;
+  threadIds: readonly string[];
+}): string {
+  return (
+    `Check ${input.outlineId} against review feedback in the issue tracker. ` +
+    `Read ${agentBodyPath("_issue-tracker-outline-check")} and follow it. ` +
+    `Outline: \`${input.outlineId}\`. Review: \`${input.reviewId}\`. ` +
+    `Submission: \`${input.submissionId}\`. Story: \`${input.storyId}\`. ` +
+    `Threads: ${input.threadIds.map((id) => `\`${id}\``).join(", ")}.`
+  );
 }
 
 /** Empty planning tab on an outline. The server starts the run. */

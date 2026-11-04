@@ -32,10 +32,19 @@ export type ReviewOpenRound = {
   threadIds: readonly string[];
 };
 
+/**
+ * The phase a tasking submission is in. `gateOutlineId` is set while the
+ * outline check waits at the outline gate in that outline's Planning tab.
+ */
+export type ReviewTaskingStatus = {
+  label: string;
+  gateOutlineId?: string;
+};
+
 /** Submit, Retry, tasking, failures, and open rounds can all show together. */
 export type ReviewSubmitHeader = {
   /** Set while any submission is tasking. Submit is omitted for that time. */
-  taskingLabel?: string;
+  tasking?: ReviewTaskingStatus;
   submit?: ReviewSubmitAction;
   /** One control for every incomplete or failed submission. */
   retry?: ReviewRetryAction;
@@ -67,6 +76,24 @@ export function submitReviewLabel(readyCount: number): string {
 
 export function taskingLabel(threadCount: number): string {
   return `Tasking ${countLabel(threadCount, "thread", "threads")}…`;
+}
+
+export const CHECKING_OUTLINE_LABEL = "Checking outline";
+
+export const WAITING_ON_OUTLINE_LABEL = "Waiting on outline update";
+
+/** A check waiting at the outline gate shows first, then a running check, then tasking. */
+function taskingStatus(tasking: readonly HeaderSubmission[]): ReviewTaskingStatus {
+  const checks = tasking.flatMap((submission) =>
+    !isPendingSubmit(submission) && submission.outlineCheck ? [submission.outlineCheck] : [],
+  );
+  const waiting = checks.find((check) => check.status === "waiting");
+  if (waiting) return { label: WAITING_ON_OUTLINE_LABEL, gateOutlineId: waiting.outline };
+  if (checks.some((check) => check.status === "checking")) {
+    return { label: CHECKING_OUTLINE_LABEL };
+  }
+  const threadCount = tasking.reduce((sum, submission) => sum + submission.threadIds.length, 0);
+  return { label: taskingLabel(threadCount) };
 }
 
 export function threadsToSubmitLabel(count: number): string {
@@ -151,8 +178,7 @@ export function reviewSubmitHeader(input: {
     openRounds: openRounds(input.submissions),
   };
   if (tasking.length > 0) {
-    const threadCount = tasking.reduce((sum, submission) => sum + submission.threadIds.length, 0);
-    return { taskingLabel: taskingLabel(threadCount), ...shared };
+    return { tasking: taskingStatus(tasking), ...shared };
   }
   return {
     submit: {

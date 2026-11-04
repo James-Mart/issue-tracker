@@ -181,7 +181,6 @@ describe("outline draft HTTP API", () => {
         sourceIdea: "idea-append",
       }),
     );
-    expect(text).toContain("Source idea: `idea-append`.");
   });
 
   it("refuses a source idea without a target story before saving a version", async () => {

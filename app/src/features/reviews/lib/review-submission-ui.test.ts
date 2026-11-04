@@ -31,7 +31,7 @@ describe("reviewSubmitHeader", () => {
       ],
     });
     expect(header.submit).toBeUndefined();
-    expect(header.taskingLabel).toBe("Tasking 2 threads…");
+    expect(header.tasking).toEqual({ label: "Tasking 2 threads…" });
     expect(header.retry).toMatchObject({ submissionIds: ["open"], disabled: true });
   });
 });

@@ -54,6 +54,8 @@ The prompt ends with:
 - `Review: <reviewId>` — the review whose threads this run tasks
 - `Story: <storyId>` — the Story that review covers
 - `Threads: <id>, <id>` — the threads this run tasks
+- `Outline: <outlineId>` and `Version: <n>` — present when the Story is
+  linked to an outline; the outline version the new Tasks are written at
 
 ## Procedure
 
@@ -69,6 +71,10 @@ The prompt ends with:
    when that Epic line is present. Restate the Story id and title. Each new
    Task id is kebab-case and unused. Its description follows **Task
    description** above, written as a YAML block scalar (`|`).
+   When the prompt names an Outline, stamp each new Task:
+
+   issue task set <taskId> sourceOutline '{"outline":"<outlineId>","version":<n>}'
+
 4. Link every named thread to the Task that covers it:
 
    issue review comment <reviewId> --role issue-tracker-review-tasker --reply-to <threadId> --link-task <taskId>

@@ -3,16 +3,13 @@ import type { AgentSessions } from "./agent-sessions.js";
 import type { ReviewSubmission } from "../schemas/review.js";
 import {
   AT,
+  onlySubmission,
   REVIEW_ID,
   seedReviewTasking as seed,
   stubReviewTaskingSessions,
   useReviewTaskingStore,
   writeReviewTaskingIssue as writeIssue,
 } from "./review-tasking.test-fixtures.js";
-
-function submission(view: { submissions: ReviewSubmission[] }): ReviewSubmission {
-  return view.submissions[0]!;
-}
 
 function requireConversation(recorded: ReviewSubmission): string {
   if (!recorded.conversationId) throw new Error("expected tasker conversation");
@@ -40,7 +37,7 @@ async function launchRecorded(
   await api.launchRecordedSubmission(
     "p",
     REVIEW_ID,
-    submission(recorded).id,
+    onlySubmission(recorded).id,
     kind,
     sessions,
   );
@@ -80,14 +77,13 @@ describe("review tasking", () => {
     const sessions = stubReviewTaskingSessions(prompts);
 
     const recordedView = await submitReview("p", REVIEW_ID, {
-      destination: "story",
       summary: "Ship the wording",
     });
-    expect(submission(recordedView)).toMatchObject({
+    expect(onlySubmission(recordedView)).toMatchObject({
       status: "tasking",
       threadIds: [first.id, second.id],
     });
-    expect(submission(recordedView).conversationId).toBeUndefined();
+    expect(onlySubmission(recordedView).conversationId).toBeUndefined();
     expect(prompts).toHaveLength(0);
 
     const view = await launchRecorded(
@@ -95,9 +91,9 @@ describe("review tasking", () => {
       recordedView,
       sessions,
     );
-    const recorded = submission(view);
+    const recorded = onlySubmission(view);
     expect(recorded.status).toBe("tasking");
-    expect(recorded.summaryCommentId).toBe(submission(recordedView).summaryCommentId);
+    expect(recorded.summaryCommentId).toBe(onlySubmission(recordedView).summaryCommentId);
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain(`Review: ${REVIEW_ID}`);
     expect(prompts[0]).toContain(`Story: s`);
@@ -111,7 +107,7 @@ describe("review tasking", () => {
     );
 
     await expect(
-      submitReview("p", REVIEW_ID, { destination: "story" }),
+      submitReview("p", REVIEW_ID, {}),
     ).rejects.toThrow(SUBMISSION_TASKING_ERROR);
 
     const runs = listAgentRunsForIssue(REVIEW_ID);
@@ -139,13 +135,13 @@ describe("review tasking", () => {
     const kept = await appendComment(REVIEW_ID, { role: "human", body: "Keep" });
     const missed = await appendComment(REVIEW_ID, { role: "human", body: "Miss" });
     const sessions = stubReviewTaskingSessions(prompts);
-    const recordedView = await submitReview("p", REVIEW_ID, { destination: "story" });
+    const recordedView = await submitReview("p", REVIEW_ID, {});
     const started = await launchRecorded(
       { launchRecordedSubmission, readReviewView },
       recordedView,
       sessions,
     );
-    const recorded = submission(started);
+    const recorded = onlySubmission(started);
     const conversationId = requireConversation(recorded);
     const later = new Date(Date.parse(recorded.at) + 1000).toISOString();
     writeIssue("fix-kept", {
@@ -183,7 +179,7 @@ describe("review tasking", () => {
       stubReviewTaskingSessions(prompts),
     );
     expect(prompts).toHaveLength(1);
-    const incomplete = submission(readReviewView("p", REVIEW_ID));
+    const incomplete = onlySubmission(readReviewView("p", REVIEW_ID));
     expect(incomplete).toMatchObject({
       status: "incomplete",
       taskIds: ["fix-kept"],
@@ -200,7 +196,7 @@ describe("review tasking", () => {
       {},
       sessions,
     );
-    expect(submission(retried).status).toBe("tasking");
+    expect(onlySubmission(retried).status).toBe("tasking");
     expect(prompts).toHaveLength(1);
     await launchRecorded(
       { launchRecordedSubmission, readReviewView },
@@ -221,7 +217,7 @@ describe("review tasking", () => {
       { status: "error", errorMessage: "late" },
       stubReviewTaskingSessions(prompts),
     );
-    const done = submission(readReviewView("p", REVIEW_ID));
+    const done = onlySubmission(readReviewView("p", REVIEW_ID));
     expect(done).toMatchObject({
       status: "done",
       taskIds: ["fix-kept"],

@@ -39,7 +39,7 @@ import {
 import { presentSubmissions } from "./review-submission-threads.js";
 import { launchRecordedSubmission, reviewOfConversation } from "./review-tasking.js";
 import { liveReviewWorktreePath } from "./review-worktree.js";
-import { readReviewView, updateStoredReview } from "./reviews.js";
+import { patchStoredSubmission, readReviewView } from "./reviews.js";
 import { isRunLive } from "./run-live.js";
 import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
 import { resolveSupportingDocPath } from "./supporting-docs.js";
@@ -222,30 +222,6 @@ function failureReason(outcome: StandardsRunOutcome, phase: StandardsRunPhase): 
   return `${PHASE_LABEL[phase]} run ${outcome.status}`;
 }
 
-/** Drop read-model fields so a view submission can be written back. */
-function storedSubmission(submission: ReviewSubmission): ReviewSubmission {
-  const { round: _round, openThreadIds: _openThreadIds, ...stored } =
-    submission as ReviewSubmission & { round?: number; openThreadIds?: string[] };
-  return stored;
-}
-
-function patchSubmission(
-  projectId: string,
-  reviewId: string,
-  submissionId: string,
-  patch: (stored: ReviewSubmission) => ReviewSubmission,
-): ReviewRecordView {
-  return updateStoredReview(projectId, reviewId, (current) => {
-    const index = current.submissions.findIndex((item) => item.id === submissionId);
-    if (index < 0) {
-      throw new IssueError("not_found", `unknown submission "${submissionId}"`);
-    }
-    const submissions = current.submissions.slice();
-    submissions[index] = storedSubmission(patch(current.submissions[index]!));
-    return { ...current, updatedAt: new Date().toISOString(), submissions };
-  });
-}
-
 /** Land a run's phase on its failed status. A submission past that phase stays as it is. */
 function markPhaseFailed(
   projectId: string,
@@ -256,7 +232,7 @@ function markPhaseFailed(
 ): boolean {
   const reason = message.trim() || `${PHASE_LABEL[phase]} failed`;
   let saved = false;
-  patchSubmission(projectId, reviewId, submissionId, (stored) => {
+  patchStoredSubmission(projectId, reviewId, submissionId, (stored) => {
     if (stored.standards?.status !== phase) return stored;
     saved = true;
     return {
@@ -367,7 +343,7 @@ async function startNewAssessor(
     message: prompt,
   });
   try {
-    const recorded = patchSubmission(projectId, reviewId, submissionId, (stored) => {
+    const recorded = patchStoredSubmission(projectId, reviewId, submissionId, (stored) => {
       const currentStandards = stored.standards;
       if (!currentStandards || currentStandards.status !== phase) return stored;
       if (currentStandards.conversationId !== priorConversationId) return stored;
@@ -505,7 +481,7 @@ export function setReviewStandards(
   }
   const review = readReviewOrThrow(reviewId);
   const status = proposals.length === 0 ? "noGaps" : "ready";
-  patchSubmission(review.partOf, reviewId, submissionId, (stored) => {
+  patchStoredSubmission(review.partOf, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "assessing") {
       throw new IssueError(
@@ -552,7 +528,7 @@ export function setStandardsProposal(
     );
   }
   const { decision, editedAfter, feedback } = parsed.data;
-  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+  return patchStoredSubmission(projectId, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "ready") {
       throw new IssueError(
@@ -617,7 +593,7 @@ export function submitStandardsGroup(
 ): ReviewRecordView {
   const parsed = parseEmptyBody(body, "submit body must be empty");
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
-  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+  return patchStoredSubmission(projectId, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "ready") {
       throw new IssueError(
@@ -790,7 +766,7 @@ export function recordStandardsIterate(
 ): void {
   const review = readReviewOrThrow(reviewId);
   let refused: IssueError | undefined;
-  patchSubmission(review.partOf, reviewId, submissionId, (stored) => {
+  patchStoredSubmission(review.partOf, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "iterating") {
       throw new IssueError(
@@ -838,7 +814,7 @@ export async function launchStandardsRun(
 /** Handler for `issue review standards applied`, reported once the accepted edits are on the attachment. */
 export function markStandardsApplied(reviewId: string, submissionId: string): void {
   const review = readReviewOrThrow(reviewId);
-  patchSubmission(review.partOf, reviewId, submissionId, (stored) => {
+  patchStoredSubmission(review.partOf, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (!standards || standards.status !== "applying") {
       throw new IssueError(
@@ -863,7 +839,7 @@ export function retryStandardsAssessment(
 ): ReviewRecordView {
   const parsed = parseRetryReviewSubmissionBody(body);
   if (!parsed.ok) throw new IssueError("validation", parsed.message);
-  return patchSubmission(projectId, reviewId, submissionId, (stored) => {
+  return patchStoredSubmission(projectId, reviewId, submissionId, (stored) => {
     const standards = stored.standards;
     if (standards?.status === "applyFailed") {
       assertAssessorIdle(standards, sessions);

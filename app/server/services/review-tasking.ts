@@ -35,6 +35,14 @@ import {
   submissionThreads,
 } from "./review-submission-threads.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
+import {
+  findOutlineCheckRun,
+  initialOutlineCheck,
+  launchOutlineCheck,
+  outlineCheckPending,
+  outlineCheckTaskerLines,
+  reconcileAmendedOutline,
+} from "./review-outline-check.js";
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
 import { readReviewView, requireReviewStory, updateStoredReview } from "./reviews.js";
@@ -47,6 +55,8 @@ export const NO_READY_THREADS_ERROR = "no threads are ready to task";
 export const SUBMISSION_TASKING_ERROR = "a submission is already tasking";
 
 export const NO_RETRYABLE_SUBMISSION_ERROR = "no submission to retry";
+
+export const OUTLINE_CHECK_NO_VERDICT_ERROR = "outline check ended without a verdict";
 
 const REVIEW_TASKER_DELEGATION_PREFIX = "review-tasker:";
 
@@ -93,13 +103,18 @@ export function assertThreadsStillSubmittable(
   }
 }
 
-function taskingPrompt(review: ReviewRecordView, threadIds: string[]): string {
+function taskingPrompt(
+  review: ReviewRecordView,
+  submission: ReviewSubmission,
+  threadIds: string[],
+): string {
   return [
     loadRoleBody(REVIEW_TASKER_ROLE),
     "",
     `Review: ${review.id}`,
     `Story: ${requireReviewStory(review)}`,
     `Threads: ${threadIds.join(", ")}`,
+    ...outlineCheckTaskerLines(submission),
   ].join("\n");
 }
 
@@ -118,6 +133,7 @@ function submissionBase(
       : {}),
     ...(submission.coordinatorResumed ? { coordinatorResumed: true as const } : {}),
     ...(submission.standards ? { standards: submission.standards } : {}),
+    ...(submission.outlineCheck ? { outlineCheck: submission.outlineCheck } : {}),
   };
 }
 
@@ -167,10 +183,10 @@ function incompleteSubmission(
   };
 }
 
-function failureReason(outcome: TaskingRunOutcome): string {
+function failureReason(outcome: TaskingRunOutcome, run = "tasking run"): string {
   const message = outcome.errorMessage?.trim();
   if (message) return message;
-  return `tasking run ${outcome.status}`;
+  return `${run} ${outcome.status}`;
 }
 
 function settledSubmission(
@@ -192,7 +208,7 @@ async function completeWhenSettled(
   const next = settledSubmission(submission, split, () => submission);
   if (next.status !== "done") return false;
   replaceSubmission(projectId, review.id, submission.id, next);
-  await bringCoordinatorForDone(projectId, review, next, sessions);
+  await followUpDoneSubmission(projectId, review, next, sessions);
   return true;
 }
 
@@ -228,9 +244,14 @@ function replaceSubmission(
     }
     const submissions = current.submissions.slice();
     const stored = current.submissions[index]!;
-    // A standards launch may attach its conversation between this snapshot
-    // and the lock. Tasking never edits standards, so keep the stored copy.
-    submissions[index] = stored.standards ? { ...next, standards: stored.standards } : next;
+    // A standards launch, an outline check launch, or a check verdict may land
+    // between this snapshot and the lock. Tasking edits neither, so keep the
+    // stored copies.
+    submissions[index] = {
+      ...next,
+      ...(stored.standards ? { standards: stored.standards } : {}),
+      ...(stored.outlineCheck ? { outlineCheck: stored.outlineCheck } : {}),
+    };
     return {
       ...current,
       updatedAt: new Date().toISOString(),
@@ -283,7 +304,7 @@ export async function submitReviewAsTasks(
   const project = requireProject(projectId);
   const review = readReviewView(project, reviewId);
   const storyId = requireReviewStory(review);
-  assertStoryOpenForTasking(storyId);
+  const story = assertStoryOpenForTasking(storyId);
   assertNoTasking(review.submissions);
   const threadIds = submittableThreadIds(reviewId, review.submissions);
   if (threadIds.length === 0) {
@@ -291,10 +312,12 @@ export async function submitReviewAsTasks(
   }
   requireProjectWorkspace(project);
 
+  const outlineCheck = initialOutlineCheck(story);
   const submission: ReviewSubmission = {
     ...(await newSubmissionFields(reviewId, summary, threadIds)),
     status: "tasking",
     ...(standards ? { standards } : {}),
+    ...(outlineCheck ? { outlineCheck } : {}),
   };
 
   updateStoredReview(project, reviewId, (current) => {
@@ -317,7 +340,7 @@ async function launchTasking(
   submission: ReviewSubmission,
   conversationId: string,
   prompt: string,
-  sessions: AgentSessions,
+  sessions: ConversationMessageSessions,
   persistPrompt: boolean,
 ): Promise<void> {
   try {
@@ -345,6 +368,17 @@ function submissionNeedsCoordinator(
     submission.taskIds.length > 0 &&
     submission.coordinatorResumed !== true
   );
+}
+
+/** A submission just became done: reconcile an amended outline, then bring in the coordinator. */
+async function followUpDoneSubmission(
+  projectId: string,
+  review: Pick<ReviewRecordView, "id" | "story">,
+  submission: Extract<ReviewSubmission, { status: "done" }>,
+  sessions: ConversationMessageSessions,
+): Promise<void> {
+  await reconcileAmendedOutline(review, requireReviewStory(review), submission, sessions);
+  await bringCoordinatorForDone(projectId, review, submission, sessions);
 }
 
 async function bringCoordinatorForDone(
@@ -378,24 +412,32 @@ async function bringCoordinatorForDone(
   });
 }
 
+/** The conversation running this submission's phase: a pending outline check, else the tasker. */
+function phaseConversationId(submission: ReviewSubmission): string | undefined {
+  return outlineCheckPending(submission)
+    ? submission.outlineCheck.conversationId
+    : submission.conversationId;
+}
+
 /**
- * Create the tasker conversation if this submission does not have one, then
- * start the run. Called after the submit or retry response. A failure is
- * stored on the submission.
+ * Start the outline check while it is pending; otherwise create the tasker
+ * conversation if this submission does not have one, then start the run.
+ * Called after the submit or retry response, and when a check settles. A
+ * failure is stored on the submission.
  */
 export async function launchRecordedSubmission(
   projectId: string,
   reviewId: string,
   submissionId: string,
   kind: "start" | "retry",
-  sessions: AgentSessions,
+  sessions: ConversationMessageSessions,
 ): Promise<void> {
   const review = readReviewView(projectId, reviewId);
   const submission = review.submissions.find((item) => item.id === submissionId);
   // A second finish callback, or a launch that already attached a conversation,
-  // must not start another tasker.
+  // must not start another check or tasker.
   if (!submission || submission.status !== "tasking") return;
-  if (kind === "start" && submission.conversationId) return;
+  if (kind === "start" && phaseConversationId(submission)) return;
 
   try {
     const story = assertStoryOpenForTasking(requireReviewStory(review));
@@ -405,7 +447,11 @@ export async function launchRecordedSubmission(
     }
 
     const threadIds = linked.openThreadIds;
-    const prompt = taskingPrompt(review, threadIds);
+    if (outlineCheckPending(submission)) {
+      await launchOutlineCheck(projectId, review, story.id, submission, threadIds, sessions);
+      return;
+    }
+    const prompt = taskingPrompt(review, submission, threadIds);
     let current: ReviewSubmission = submission;
     const persisted = submission.conversationId !== undefined;
     if (!submission.conversationId) {
@@ -495,7 +541,7 @@ export async function retryReviewSubmission(
   const next = nextRetrySubmission(submission, split, sessions);
   if (next.status === "done") {
     replaceSubmission(project, reviewId, submissionId, next);
-    await bringCoordinatorForDone(project, review, next, sessions);
+    await followUpDoneSubmission(project, review, next, sessions);
     return readReviewView(project, reviewId);
   }
   requireProjectWorkspace(project);
@@ -504,8 +550,9 @@ export async function retryReviewSubmission(
 }
 
 /**
- * Handled threads become done. Leftovers return to tasking unless that
- * submission's tasker run is already active.
+ * Handled threads become done. Leftovers return to tasking unless the run
+ * that retry would restart, the outline check while it is pending or else
+ * the tasker, is already active.
  */
 function nextRetrySubmission(
   submission: Extract<ReviewSubmission, { status: "incomplete" | "failed" }>,
@@ -513,10 +560,8 @@ function nextRetrySubmission(
   sessions: AgentSessions,
 ): ReviewSubmission {
   return settledSubmission(submission, split, (taskIds) => {
-    if (
-      submission.conversationId &&
-      sessions.getActiveRun(submission.conversationId)
-    ) {
+    const conversationId = phaseConversationId(submission);
+    if (conversationId && sessions.getActiveRun(conversationId)) {
       throw new IssueError("conflict", "a tasking run is already active");
     }
     return taskingSubmission(submission, taskIds);
@@ -568,7 +613,7 @@ export async function retryOpenReviewSubmissions(
   });
 
   for (const done of finished) {
-    await bringCoordinatorForDone(project, review, done, sessions);
+    await followUpDoneSubmission(project, review, done, sessions);
   }
   return readReviewView(project, reviewId);
 }
@@ -603,13 +648,40 @@ function findTaskingSubmission(conversationId: string):
   return { projectId: meta.projectId, review, submission };
 }
 
+/**
+ * An outline check run ended. A settled check starts the tasker, and a check
+ * waiting at the outline gate holds for the human's answer. Any other end
+ * fails the submission, and Retry runs the check again.
+ */
+async function classifyOutlineCheckRun(
+  conversationId: string,
+  outcome: TaskingRunOutcome,
+  sessions: ConversationMessageSessions,
+): Promise<boolean> {
+  const found = findOutlineCheckRun(conversationId);
+  if (!found) return false;
+  const { projectId, review, submission } = found;
+  const check = submission.outlineCheck;
+  if (check.status === "settled") {
+    await launchRecordedSubmission(projectId, review.id, submission.id, "start", sessions);
+    return true;
+  }
+  if (outcome.status === "finished" && check.status === "waiting") return false;
+  const reason =
+    outcome.status === "finished"
+      ? OUTLINE_CHECK_NO_VERDICT_ERROR
+      : failureReason(outcome, "outline check run");
+  await markStartFailed(projectId, review, submission, reason);
+  return true;
+}
+
 export async function classifyReviewTaskingRun(
   conversationId: string,
   outcome: TaskingRunOutcome,
   sessions: ConversationMessageSessions,
 ): Promise<boolean> {
   const found = findTaskingSubmission(conversationId);
-  if (!found) return false;
+  if (!found) return classifyOutlineCheckRun(conversationId, outcome, sessions);
   const { projectId, review, submission } = found;
   const issues = readAll().issues;
 
@@ -638,7 +710,7 @@ export async function classifyReviewTaskingRun(
   if (!saved) return false;
 
   if (saved.status === "done") {
-    await bringCoordinatorForDone(projectId, review, saved, sessions);
+    await followUpDoneSubmission(projectId, review, saved, sessions);
   }
   return true;
 }
@@ -647,7 +719,8 @@ export function failReviewTaskingClassification(
   conversationId: string,
   message: string,
 ): boolean {
-  const found = findTaskingSubmission(conversationId);
+  const found =
+    findTaskingSubmission(conversationId) ?? findOutlineCheckRun(conversationId);
   if (!found) return false;
   const reason = message.trim() || "review tasking classification failed";
   const split = submissionThreads(found.review, found.submission, readAll().issues);
