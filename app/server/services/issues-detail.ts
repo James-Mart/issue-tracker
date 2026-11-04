@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { issuesDir } from "../config.js";
 import type { Issue, IssueDetail, IssueRecord } from "../schemas.js";
+import { readOutlineDraft } from "./outline-draft-store.js";
 
 export function descriptionPath(id: string): string {
   return join(issuesDir, id, "description.md");
@@ -44,9 +45,13 @@ export function toIssueDetail(
   jsonText: string,
   description: string,
 ): IssueDetail {
-  return {
+  const detail: IssueDetail = {
     ...(issue as IssueRecord),
     description,
     version: versionOf(jsonText, description),
   };
+  if (issue.kind !== "outline") return detail;
+  const pendingDraft = readOutlineDraft(issue.id);
+  if (pendingDraft === undefined) return detail;
+  return { ...detail, pendingDraft };
 }

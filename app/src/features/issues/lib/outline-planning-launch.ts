@@ -11,7 +11,7 @@ import {
 export const OUTLINE_PLANNING_GROK_MODEL = "cursor-grok-4.7";
 export const OUTLINE_PLANNING_OPUS_MODEL = "claude-opus-5-5-thinking-high";
 
-export type OutlinePlanningRole = "planner" | "decomposer";
+export type OutlinePlanningRole = "planner" | "decomposer" | "reconcile";
 
 /** Execution gate for one decomposer run. `off` queues the new root after polish. */
 export type OutlineExecutionGate = "on" | "off";
@@ -21,9 +21,9 @@ export function outlinePlanningSessionTitle(
   role: OutlinePlanningRole,
   outlineTitle: string,
 ): string {
-  return role === "planner"
-    ? planningSessionTitle(outlineTitle)
-    : `Decompose ${outlineTitle}`;
+  if (role === "planner") return planningSessionTitle(outlineTitle);
+  if (role === "reconcile") return `Reconcile ${outlineTitle}`;
+  return `Decompose ${outlineTitle}`;
 }
 
 /** Opus pin when `stakeholder` names an Opus model; Grok otherwise. */
@@ -56,6 +56,28 @@ export function outlineDecomposerSessionMessage(input: {
     `Execution gate: \`${input.executionGate}\`.`;
   if (!input.mergePolicy) return message;
   return `${message} Merge policy: \`${input.mergePolicy}\`.`;
+}
+
+/** First prompt for reconciling linked roots to one new outline version. */
+export function outlineReconcileSessionMessage(input: {
+  outlineId: string;
+  version: number;
+  targetStory?: string;
+  coveredBy?: readonly string[];
+}): string {
+  const message =
+    `Reconcile ${input.outlineId} in the issue tracker. ` +
+    `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
+    `Mode: \`reconcile\`. ` +
+    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`.`;
+  const target = input.targetStory
+    ? ` Target story: \`${input.targetStory}\`.`
+    : "";
+  const covered =
+    input.coveredBy && input.coveredBy.length > 0
+      ? ` Covered by: ${input.coveredBy.map((id) => `\`${id}\``).join(", ")}.`
+      : "";
+  return `${message}${target}${covered}`;
 }
 
 /** Empty planning tab on an outline. The server starts the run. */

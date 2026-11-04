@@ -386,7 +386,7 @@ export function channelPredecessors(
  * `implementing` channel this is the work-root lock: each branch has its own
  * git worktree, so what must not be shared is one work root's checkout.
  */
-function refuseIfPredecessorBusy(
+export function refuseIfPredecessorBusy(
   issueId: string,
   channel: ConversationChannel,
   predecessors: ConversationMeta[],

@@ -627,6 +627,22 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   unarchived root Epic or project-level Story whose `sourceOutline` names
   this outline. It is open when it is an Epic whose `epicStatus` is not
   `done`, or a Story that is not `merged`.
+- **`draft set`** (outline) — `issue outline draft set <id> <file>`.
+  Replaces the outline's one pending draft with the file (`-` reads stdin).
+  Does not add a version. A non-outline id is an error.
+- **`draft discard`** (outline) — `issue outline draft discard <id>`.
+  Deletes the pending draft. An outline with no pending draft is an error.
+- **`draft update`** (outline) — `issue outline draft update <id>
+  [--target-story <id>] [--covered-by <taskIds...>]`. When the draft text
+  differs from the saved body, saves it as the next version, drops the
+  draft, and starts reconciliation on the outline's planning channel at
+  that version. Prints the new version. `--target-story` is the Story that
+  receives new Tasks. `--covered-by` is one or more Task ids the triggering
+  flow already created, separated by spaces or commas. A missing draft, a
+  draft that matches the saved body, a target that is not a Story, a
+  covered-by id that is not a Task, a duplicate covered-by id, a Project
+  with no workspace, or a busy planning session is an error. A busy
+  planning session is refused before the version is saved.
 - **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
   returns `{ version, body }`. `<n>` is a positive integer through
   `bodyVersion`. The latest body is `description.md`; an older body is
@@ -634,6 +650,18 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `{ from, to, diff }` where `diff` is the same unified diff as
   `issue outline diff` (empty when the bodies match). A non-outline id, a
   missing or non-integer version, or a version past `bodyVersion` is an error.
+- **HTTP** (outline draft) — `PUT /api/issues/:id/outline-draft` with
+  `{ body }` replaces the pending draft and returns `{ body }`. It does not
+  add a version. `DELETE /api/issues/:id/outline-draft` drops it and returns
+  204. `POST /api/issues/:id/outline-draft/update` with optional
+  `{ targetStory?, coveredBy? }` saves a differing draft as the next version
+  and starts reconciliation. Unknown fields are refused. The response is
+  `201` `{ id, title, model, version }` for the planning session. While a
+  draft exists, `GET /api/issues/:id` includes `pendingDraft`. A missing
+  draft, a draft that matches the saved body, a non-outline id, a
+  `targetStory` that is not a Story, a `coveredBy` id that is not a Task, a
+  Project with no workspace, or a busy planning session is an error. The
+  busy-session refusal happens before the version is saved.
 - **`version`** (outline get) — `issue outline get <id> version` prints the
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
@@ -1114,6 +1142,8 @@ A planner session requires a source Idea. Its title is `Plan <outline title>` an
 The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off" }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `planning` channel at the latest `bodyVersion`, with that execution gate and no outline gate and no merge policy. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a body with any other field, or a Project with no workspace is an error. A busy planning session on that outline is `409`, the same refusal as any other start on that channel. The decomposer queues the new root after polish when the gate is `off`, and leaves the root unqueued when the gate is `on`.
 
 A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, and an optional `Covered by` list of Task ids the triggering flow already created. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`).
+
+`issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `planning` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. No execution gate and no merge policy are sent. A busy planning session is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Planning tab. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
 
 ### Work queue
 

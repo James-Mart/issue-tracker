@@ -1,10 +1,17 @@
 import type { Command } from "commander";
 import { linkedRootsForOutline } from "@/features/issues/lib/outline-links";
 import { assertKind } from "./cli-kind.js";
+import { readCliFileArg } from "./cli-io.js";
 import {
   outlineVersionDiff,
   parseOutlineVersion,
 } from "./server/services/outline-body.js";
+import {
+  discardOutlineDraft,
+  publishOutlineDraft,
+  setOutlineDraft,
+} from "./server/services/outline-draft.js";
+import { agentSessions } from "./server/services/agent-sessions.js";
 import { list } from "./server/services/issues.js";
 
 type Run = (action: () => unknown) => Promise<void>;
@@ -55,4 +62,59 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
         }
       }),
     );
+
+  const draft = kindCmd
+    .command("draft")
+    .description("the outline's one pending body, which is not a version until update");
+
+  draft
+    .command("set")
+    .argument("<id>", "outline id")
+    .argument("<file>", "draft body (use - for stdin)")
+    .description("replace the pending draft without adding a version")
+    .action((id: string, file: string) =>
+      run(() => setOutlineDraft(id, readCliFileArg(file))),
+    );
+
+  draft
+    .command("update")
+    .argument("<id>", "outline id")
+    .option("--target-story <id>", "story that receives new tasks")
+    .option(
+      "--covered-by <taskIds...>",
+      "tasks this flow already created (spaces or commas)",
+    )
+    .description(
+      "save the pending draft as the next version and start reconciliation",
+    )
+    .action((id: string, opts: { targetStory?: string; coveredBy?: string[] }) =>
+      run(async () => {
+        const published = await publishOutlineDraft(
+          id,
+          {
+            targetStory: opts.targetStory,
+            coveredBy: coveredByIds(opts.coveredBy),
+          },
+          agentSessions,
+        );
+        process.stdout.write(`${published.version}\n`);
+      }),
+    );
+
+  draft
+    .command("discard")
+    .argument("<id>", "outline id")
+    .description("drop the pending draft")
+    .action((id: string) => run(() => discardOutlineDraft(id)));
+}
+
+function coveredByIds(raw: string[] | undefined): string[] | undefined {
+  if (!raw || raw.length === 0) return undefined;
+  const ids = raw.flatMap((part) =>
+    part
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+  return ids.length > 0 ? ids : undefined;
 }

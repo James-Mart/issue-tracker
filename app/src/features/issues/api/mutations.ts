@@ -659,6 +659,78 @@ export function useDecomposeOutline(outlineId: string) {
   });
 }
 
+export type UpdateOutlineDraftResult = {
+  id: string;
+  title: string;
+  model: string;
+  version: number;
+};
+
+function outlineDraftApiPath(outlineId: string): string {
+  return `/api/issues/${encodeURIComponent(outlineId)}/outline-draft`;
+}
+
+/** Replace an outline's pending draft. Does not add a version. */
+export function useSetOutlineDraft(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ body: string }, Error, string>({
+    mutationFn: (body) =>
+      request<{ body: string }>(outlineDraftApiPath(outlineId), {
+        method: "PUT",
+        body: { body },
+      }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      qc.setQueryData<IssueDetail>(issuesKeys.detail(outlineId), (prev) =>
+        prev && prev.kind === "outline"
+          ? { ...prev, pendingDraft: data.body }
+          : prev,
+      );
+    },
+  });
+}
+
+/** Save the pending draft as the next version and start reconciliation. */
+export function useUpdateOutlineDraft(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<UpdateOutlineDraftResult, Error, void>({
+    mutationFn: () =>
+      request<UpdateOutlineDraftResult>(
+        `${outlineDraftApiPath(outlineId)}/update`,
+        { method: "POST", body: {} },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      rememberStartedChannelSession(qc, outlineId, "planning", data);
+    },
+    onSettled: () => {
+      invalidateStartedChannelSession(qc, outlineId, "planning");
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+    },
+  });
+}
+
+/** Drop the pending draft. */
+export function useDiscardOutlineDraft(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, void>({
+    mutationFn: () =>
+      request<void>(outlineDraftApiPath(outlineId), { method: "DELETE" }),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: () => {
+      qc.setQueryData<IssueDetail>(issuesKeys.detail(outlineId), (prev) =>
+        prev && prev.kind === "outline"
+          ? { ...prev, pendingDraft: undefined }
+          : prev,
+      );
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
+    },
+  });
+}
+
 export function useCreateChannelSession(
   issueId: string,
   channel: ConversationChannel,

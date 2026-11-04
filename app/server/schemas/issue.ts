@@ -726,6 +726,8 @@ export type IssueRecord = Issue;
 export type IssueDetail = IssueRecord & {
   description: string;
   version: string;
+  /** Set on an outline while `draft.md` holds a body that is not yet a version. */
+  pendingDraft?: string;
 };
 
 /** `GET /api/issues/:id/outline/body?version=`. */
