@@ -6,6 +6,7 @@ export {
   reviewMarksSchema,
   reviewSubmissionSchema,
   standardsAssessmentSchema,
+  type OutlineCheck,
   type ReviewMarks,
   type ReviewPrSource,
   type ReviewSubmission,

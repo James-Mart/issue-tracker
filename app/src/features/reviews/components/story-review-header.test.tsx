@@ -326,7 +326,7 @@ describe("StoryReviewHeader submit", () => {
         storyTitle={`Story review workbench ${revision}`}
         review={review()}
         merged={false}
-      />,
+      />
     );
     const container = mount(header());
     const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');

@@ -50,6 +50,7 @@ import {
 } from "./server/services/human-handoff.js";
 import { assertKind, registerKindGetSet } from "./cli-kind.js";
 import { registerBareIdOps, registerKindOps } from "./cli-ops.js";
+import { registerReviewOutlineCheckCommands } from "./cli-review-outline-check.js";
 import { registerReviewStandardsCommands } from "./cli-review-standards.js";
 import { taskHeadCommit } from "./server/services/commit-sha.js";
 import { recordTaskCommit } from "./server/services/task-commit-record.js";
@@ -377,6 +378,7 @@ function createIssueProgram(run: Run): Command {
     registerKindOps(kindCmd, kind, run);
     if (kind === "review") {
       registerReviewStandardsCommands(kindCmd, run);
+      registerReviewOutlineCheckCommands(kindCmd, run);
     }
     if (kind === "outline") {
       registerOutlineCommands(kindCmd, run);

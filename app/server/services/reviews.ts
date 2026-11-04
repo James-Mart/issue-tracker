@@ -5,7 +5,7 @@ import {
   type ReviewIssue,
   type ReviewRecordView,
 } from "../schemas/review.js";
-import type { ReviewPrSource } from "../schemas/review-state.js";
+import type { ReviewPrSource, ReviewSubmission } from "../schemas/review-state.js";
 import { collectDescendantCommits } from "./change.js";
 import { parsePrUrl } from "./delivery.js";
 import { IssueError } from "./errors.js";
@@ -464,5 +464,30 @@ export function updateStoredReview(
     if (!parsed.ok) throw new IssueError("validation", parsed.message);
     commitIssueBatch([{ issue: parsed.issue }], []);
     return toView(next, graph, byId);
+  });
+}
+
+/** Drop read-model fields so a view submission can be written back. */
+function storedSubmission(submission: ReviewSubmission): ReviewSubmission {
+  const { round: _round, openThreadIds: _openThreadIds, ...stored } =
+    submission as ReviewSubmission & { round?: number; openThreadIds?: string[] };
+  return stored;
+}
+
+/** Replace one submission under the store lock with `patch` of its stored copy. */
+export function patchStoredSubmission(
+  projectId: string,
+  reviewId: string,
+  submissionId: string,
+  patch: (stored: ReviewSubmission) => ReviewSubmission,
+): ReviewRecordView {
+  return updateStoredReview(projectId, reviewId, (current) => {
+    const index = current.submissions.findIndex((item) => item.id === submissionId);
+    if (index < 0) {
+      throw new IssueError("not_found", `unknown submission "${submissionId}"`);
+    }
+    const submissions = current.submissions.slice();
+    submissions[index] = storedSubmission(patch(current.submissions[index]!));
+    return { ...current, updatedAt: new Date().toISOString(), submissions };
   });
 }

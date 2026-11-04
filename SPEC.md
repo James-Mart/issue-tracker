@@ -597,6 +597,11 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   accepted proposals were written to the coding-standards doc and moves an
   `applying` assessment to `applied`. See
   [Standards assessment](#standards-assessment).
+- **`outline-check`** (review only) —
+  `issue review outline-check unchanged|proposed|yes|not-now <reviewId> <submissionId>`
+  records the outline check's verdict on a tasking submission and prints
+  the check's new status (`waiting`, or `settled <version>`). See
+  [Outline check](#outline-check).
 - **`human-done`** (story only) —
   `issue story human-done <storyId> [--note <text>]` posts a comment (`role`
   `human`, `type` `human-response`) with `replyTo` set to the latest
@@ -1135,7 +1140,7 @@ it. Idle or archived sessions do not hold the lock.
 
 An Outline offers the `planning` channel. Issue detail shows it as a Planning tab, the same tab an Idea uses. The tab lists sessions on that channel. It does not start them.
 
-`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner or decomposer session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
+`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner, decomposer, reconcile, or check ([Outline check](#outline-check)) session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
 
 A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`decompose`), `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
 
@@ -1730,6 +1735,45 @@ exists is `failed` without a marker.
 researcher conversation for that question and returns `204`. It refuses with
 `conflict` unless `researcherRun` is `failed`. Each researcher conversation is
 listed among the review's agent runs with role `issue-tracker-review-question`.
+
+<a id="outline-check"></a>
+
+**Outline check.** A submission on a Story whose `sourceOutline` names an
+outline records `outlineCheck` `{ outline, status: "checking" }`, and the
+server starts a check session before any tasker: `startOutlinePlanningSession`
+role `check` on that outline's `planning` channel, titled
+`Check <outline title>`, on the source Idea's model or Grok. Its first prompt
+names `_issue-tracker-outline-check.md` and states `Outline`, `Review`,
+`Submission`, `Story`, and `Threads`. A new check session is refused while
+the outline has a pending draft. The planner amends the outline only for
+threads that change what the outline states, and reports with
+`issue review outline-check <verdict> <reviewId> <submissionId>`:
+
+- `unchanged` moves `checking` to `settled` at the latest version. It is
+  refused while a pending draft exists.
+- `proposed` moves `checking` or `waiting` to `waiting` once the planner
+  has written the pending draft. The planner then asks the outline gate in
+  that session, always for the human. Amend revises the draft and asks
+  again.
+- `yes` saves the pending draft as the next version without starting
+  reconciliation, and moves `waiting` to `settled` at that version with
+  `amended: true`.
+- `not-now` discards the pending draft and moves `waiting` to `settled` at
+  the latest version.
+
+When the check session's run ends with the check `settled`, the server
+starts the tasker. Its prompt adds `Outline` and `Version` (the settled
+version), and the tasker stamps each new Task's `sourceOutline` with them. A
+run that ends while `waiting` holds for the human's answer. A run that ends
+while `checking`, or ends other than `finished`, fails the submission with
+that error. Retry resumes the recorded check conversation, or opens a new
+check session when that conversation is archived. When an amended
+submission becomes `done`, the server starts reconciliation at the settled
+version with the review's Story as `Target story` and the submission's
+Tasks as `Covered by`; a start failure is logged and leaves linked roots
+`behind`. The review header shows `Checking outline` while checking, then
+`Waiting on outline update` linking to the outline's Planning tab while
+waiting, then the tasking label.
 
 <a id="standards-assessment"></a>
 

@@ -2,10 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { describe, expect, it } from "vitest";
-import type { ReviewSubmission } from "../schemas/review.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
   AT,
+  onlySubmission,
   REVIEW_ID,
   seedReviewTasking,
   stubReviewTaskingSessions,
@@ -62,10 +62,6 @@ function commitSha(): string {
   git(["add", "auth-guard.ts"]);
   git(["commit", "-m", "guard"]);
   return git(["rev-parse", "HEAD"]).trim();
-}
-
-function submission(view: { submissions: ReviewSubmission[] }): ReviewSubmission {
-  return view.submissions[0]!;
 }
 
 async function load() {
@@ -143,7 +139,7 @@ async function seedReadyRound(proposals: SeededProposal[]): Promise<string> {
 
 async function readStandards() {
   const { readReviewView } = await load();
-  return submission(readReviewView("p", REVIEW_ID)).standards!;
+  return onlySubmission(readReviewView("p", REVIEW_ID)).standards!;
 }
 
 function recordingSessions() {
@@ -195,7 +191,7 @@ describe("standards assessment at submit", () => {
       summary: "Address the guard.",
       assessStandards: true,
     });
-    expect(submission(recorded)).toMatchObject({
+    expect(onlySubmission(recorded)).toMatchObject({
       status: "tasking",
       standards: {
         status: "assessing",
@@ -203,7 +199,7 @@ describe("standards assessment at submit", () => {
         proposals: [],
       },
     });
-    expect(submission(recorded).standards).not.toHaveProperty("conversationId");
+    expect(onlySubmission(recorded).standards).not.toHaveProperty("conversationId");
 
     await launchSubmitAgents("p", REVIEW_ID, recorded, sessions);
     expect(prompts).toHaveLength(2);
@@ -211,7 +207,7 @@ describe("standards assessment at submit", () => {
     const tasker = prompts.find((prompt) => prompt.includes("issue-tracker-review-tasker"));
     expect(tasker).toBeTruthy();
     expect(assessor).toContain(`Review: ${REVIEW_ID}`);
-    expect(assessor).toContain(`Submission: ${submission(recorded).id}`);
+    expect(assessor).toContain(`Submission: ${onlySubmission(recorded).id}`);
     expect(assessor).toContain(`Threads: ${anchored.id}`);
     expect(assessor).toContain("Summary:\nAddress the guard.");
     expect(assessor).toContain("Coding standards: attachment coding-standards.md");
@@ -223,7 +219,7 @@ describe("standards assessment at submit", () => {
     expect(assessor).toContain(`Workspace: ${workspace()}`);
 
     const { readReviewView } = await load();
-    const started = submission(readReviewView("p", REVIEW_ID));
+    const started = onlySubmission(readReviewView("p", REVIEW_ID));
     expect(started.standards?.status).toBe("assessing");
     expect(started.standards?.conversationId).toBeTruthy();
     const roles = listAgentRunsForIssue(REVIEW_ID).map((run) => run.role);
@@ -273,7 +269,7 @@ describe("standards proposal decisions and edits", () => {
 
   async function proposals() {
     const { readReviewView } = await load();
-    return submission(readReviewView("p", REVIEW_ID)).standards!.proposals;
+    return onlySubmission(readReviewView("p", REVIEW_ID)).standards!.proposals;
   }
 
   it("records a decision and an edit independently, and null clears each", async () => {
@@ -468,7 +464,7 @@ describe("iterating a standards round", () => {
 
     const after = (await load()).readReviewView("p", REVIEW_ID);
     expect(after.submissions).toHaveLength(1);
-    const round = submission(after).standards!;
+    const round = onlySubmission(after).standards!;
     expect(round.status).toBe("ready");
     expect(round.conversationId).toBe(conversationId);
     expect(round).not.toHaveProperty("error");

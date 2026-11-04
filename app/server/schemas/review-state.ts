@@ -94,6 +94,20 @@ export const standardsAssessmentSchema = z
 
 export type StandardsAssessment = z.infer<typeof standardsAssessmentSchema>;
 
+export const outlineCheckSchema = z
+  .object({
+    outline: nonEmpty,
+    status: z.enum(["checking", "waiting", "settled"]),
+    conversationId: nonEmpty.optional(),
+    // Set once settled: the outline version the tasker writes Tasks at.
+    version: z.number().int().positive().optional(),
+    // A Yes at the outline gate; reconciliation runs once tasking is done.
+    amended: z.literal(true).optional(),
+  })
+  .strict();
+
+export type OutlineCheck = z.infer<typeof outlineCheckSchema>;
+
 const reviewSubmissionIdentity = {
   id: nonEmpty,
   at: nonEmpty,
@@ -102,6 +116,7 @@ const reviewSubmissionIdentity = {
   // Set when bring-in accepts the resume prompt. Absent means it was not accepted.
   coordinatorResumed: z.literal(true).optional(),
   standards: standardsAssessmentSchema.optional(),
+  outlineCheck: outlineCheckSchema.optional(),
 };
 
 export const reviewSubmissionSchema = z.discriminatedUnion("status", [

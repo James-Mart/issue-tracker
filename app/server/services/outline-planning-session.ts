@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  outlineCheckSessionMessage,
   outlineDecomposerSessionMessage,
   outlinePlannerSessionMessage,
   outlinePlanningSessionModel,
@@ -9,7 +10,11 @@ import {
 } from "../../src/features/issues/lib/outline-planning-launch.js";
 import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
-import { startIssueChannelSession } from "./conversations.js";
+import {
+  createIssueChannelSession,
+  startFirstPrompt,
+  type FirstPrompt,
+} from "./conversations.js";
 import { IssueError } from "./errors.js";
 import { readIssueOrThrow, readOutlineOrThrow } from "./issues.js";
 
@@ -37,10 +42,20 @@ export type StartOutlineReconcileSession = {
   coveredBy?: string[];
 };
 
+export type StartOutlineCheckSession = {
+  outlineId: string;
+  role: "check";
+  reviewId: string;
+  submissionId: string;
+  storyId: string;
+  threadIds: readonly string[];
+};
+
 export type StartOutlinePlanningSessionInput =
   | StartOutlinePlannerSession
   | StartOutlineDecomposerSession
-  | StartOutlineReconcileSession;
+  | StartOutlineReconcileSession
+  | StartOutlineCheckSession;
 
 const decomposeRequestSchema = z
   .object({
@@ -61,19 +76,34 @@ export function parseDecomposeRequest(body: unknown): OutlineExecutionGate {
 }
 
 /**
- * Open a planner, decomposer, or reconcile session on an outline's planning
- * channel and start its first turn.
+ * Open a planner, decomposer, reconcile, or check session on an outline's
+ * planning channel and start its first turn.
  */
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
   sessions: ConversationMessageSessions,
 ): Promise<ConversationMeta> {
+  const { meta, firstPrompt } = await createOutlinePlanningSession(input, sessions);
+  const started = await startFirstPrompt(meta.id, firstPrompt, sessions);
+  if (!started.ok) throw new Error(started.message);
+  return meta;
+}
+
+/**
+ * Open the session and claim its first turn without starting it, so the
+ * caller can record the conversation first. The caller starts `firstPrompt`
+ * or releases its claim.
+ */
+export async function createOutlinePlanningSession(
+  input: StartOutlinePlanningSessionInput,
+  sessions: ConversationMessageSessions,
+): Promise<{ meta: ConversationMeta; firstPrompt: FirstPrompt }> {
   const outline = readOutlineOrThrow(input.outlineId);
   const sourceIdea = sourceIdeaOf(outline);
   const model = outlinePlanningSessionModel(sourceIdea?.stakeholder);
   const title = outlinePlanningSessionTitle(input.role, outline.title);
   const message = sessionMessage(input, outline, sourceIdea);
-  return startIssueChannelSession(
+  const { meta, firstPrompt } = await createIssueChannelSession(
     {
       projectId: outline.partOf,
       title,
@@ -84,6 +114,10 @@ export async function startOutlinePlanningSession(
     },
     sessions,
   );
+  if (!firstPrompt) {
+    throw new Error(`planning session "${meta.id}" was created without a prompt`);
+  }
+  return { meta, firstPrompt };
 }
 
 function sourceIdeaOf(outline: OutlineIssue): IdeaIssue | undefined {
@@ -111,6 +145,15 @@ function sessionMessage(
       );
     }
     return outlinePlannerSessionMessage(sourceIdea.id);
+  }
+  if (input.role === "check") {
+    return outlineCheckSessionMessage({
+      outlineId: outline.id,
+      reviewId: input.reviewId,
+      submissionId: input.submissionId,
+      storyId: input.storyId,
+      threadIds: input.threadIds,
+    });
   }
   requireSavedVersion(input.version, outline);
   if (input.role === "reconcile") {

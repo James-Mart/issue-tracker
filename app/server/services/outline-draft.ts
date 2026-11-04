@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { formatZodError, type ConversationMeta } from "../schemas.js";
+import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   channelPredecessors,
@@ -20,6 +20,8 @@ import {
 } from "./outline-draft-store.js";
 import { startOutlinePlanningSession } from "./outline-planning-session.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
+
+type OutlineIssue = Extract<Issue, { kind: "outline" }>;
 
 const draftBodySchema = z
   .object({
@@ -97,13 +99,7 @@ export async function publishOutlineDraft(
 ): Promise<PublishedOutlineDraft> {
   const prepared = await serialize(() => {
     const outline = readOutlineOrThrow(id);
-    const draft = readOutlineDraft(id);
-    if (draft === undefined) {
-      throw new IssueError(
-        "validation",
-        `outline "${id}" has no pending draft`,
-      );
-    }
+    const draft = requireDraft(id);
     const targetStory = resolveTargetStory(input.targetStory);
     const coveredBy = resolveCoveredBy(input.coveredBy);
     requireProjectWorkspace(outline.partOf);
@@ -113,16 +109,8 @@ export async function publishOutlineDraft(
       channelPredecessors(outline.id, "planning"),
       sessions,
     );
-    if (draft === readDescription(id)) {
-      throw new IssueError(
-        "validation",
-        `outline "${id}" draft matches the saved body`,
-      );
-    }
-    const issue = { ...outline, updatedAt: new Date().toISOString() };
-    commitIssueBatch([{ issue, description: draft }], []);
-    if (readOutlineDraft(id) === draft) removeOutlineDraft(id);
-    return { version: issue.bodyVersion, targetStory, coveredBy };
+    const version = saveDraftAsVersion(outline, draft);
+    return { version, targetStory, coveredBy };
   });
   try {
     const meta = await startOutlinePlanningSession(
@@ -145,6 +133,35 @@ export async function publishOutlineDraft(
       error instanceof IssueError ? error.details : undefined,
     );
   }
+}
+
+/**
+ * Save the pending draft as the next version without starting reconciliation.
+ * Returns the new version.
+ */
+export async function saveOutlineDraftVersion(id: string): Promise<number> {
+  return serialize(() => saveDraftAsVersion(readOutlineOrThrow(id), requireDraft(id)));
+}
+
+function requireDraft(id: string): string {
+  const draft = readOutlineDraft(id);
+  if (draft === undefined) {
+    throw new IssueError("validation", `outline "${id}" has no pending draft`);
+  }
+  return draft;
+}
+
+function saveDraftAsVersion(outline: OutlineIssue, draft: string): number {
+  if (draft === readDescription(outline.id)) {
+    throw new IssueError(
+      "validation",
+      `outline "${outline.id}" draft matches the saved body`,
+    );
+  }
+  const issue = { ...outline, updatedAt: new Date().toISOString() };
+  commitIssueBatch([{ issue, description: draft }], []);
+  if (readOutlineDraft(outline.id) === draft) removeOutlineDraft(outline.id);
+  return issue.bodyVersion;
 }
 
 function resolveTargetStory(raw: string | undefined): string | undefined {
