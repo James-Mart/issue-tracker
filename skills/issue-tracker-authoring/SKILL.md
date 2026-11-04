@@ -68,7 +68,9 @@ Doc format and field seam: [SPEC.md § `apply` doc format](../../SPEC.md#apply-d
   re-applying an edited doc mid-implementation is safe
   ([SPEC.md § Declarative/imperative field seam](../../SPEC.md#declarativeimperative-field-seam)).
   Re-`apply` the doc for plan-owned changes; do not patch plan-owned fields
-  incrementally with `issue <kind> add` or kind `set`.
+  incrementally with `issue <kind> add` or kind `set`. Reconciling a newer
+  outline version into a linked root edits in place instead (see
+  [Source outline (sourceOutline)](#source-outline-sourceoutline)).
 - **Scope the doc to a subtree.** Prune-by-default is bounded to the doc's root.
   To edit one epic or story without touching its siblings, root the doc there
   and reference the enclosing parents by id: an **epic form** (`project: <id>`
@@ -183,6 +185,19 @@ Stamp that version on every item `apply` created (each id on its stdout
 The stamp is metadata; prose never restates the version. Rules:
 [SPEC.md § Relationships](../../SPEC.md#relationships).
 
+Reconciling a newer version `<n>` into an open root stamped with that
+outline edits the root in place. An Epic is open while
+`issue epic get <id> epicStatus` is not `done`; a Story is open while
+`issue story get <id> merged` is `false`.
+
+- Set each rewritten open Epic or Story description with
+  `issue <kind> set <id> description --file <path>`, following the linking
+  rule above.
+- Land new Tasks on an open Story with `issue story append`.
+- Stamp `<n>` on each Task `issue story append` created and on each open
+  Epic and Story in the root whose `sourceOutline` names this outline.
+  Existing Tasks and merged Stories keep their stamps.
+
 ## Tasks with no diff (noDiff)
 
 Some Tasks' work produces no source-controlled diff: tracker-state edits,
@@ -280,7 +295,8 @@ Before done:
   `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
 - Outline decompositions stamp `sourceOutline` on every created item after
-  `apply`, and each Epic and Story links to the outline sections it builds on
+  `apply`, reconciliations move open Epic and Story stamps and stamp appended
+  Tasks, and each Epic and Story links to the outline sections it builds on
   (see [Source outline (sourceOutline)](#source-outline-sourceoutline)).
 - Every Task with no diff uses imperative `noDiff` after `apply` or
   `issue story append` (see

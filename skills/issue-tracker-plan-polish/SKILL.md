@@ -36,6 +36,9 @@ That Story's container may be the Project or an Epic.
 A run pointed at an append-target Story reads that Story's other Tasks
 for context and edits the Tasks whose `appended` flag is set.
 
+A run that follows an outline change also carries an **outline diff**: the
+outline id, `<from>`, and `<to>` versions.
+
 If none is given:
 
 1. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-resolve-project.md`
@@ -91,6 +94,11 @@ paste workflow instructions here.
 
 > Work root: `<rootId>` (`<title>`).
 
+**Outline-diff line** — follows the work-root context line when the run
+carries an outline diff:
+
+> Outline diff: `issue outline diff <outlineId> <from> <to>`.
+
 **Findings return line** — append to every check stub (gate-critical; stubs
 are re-read each spawn while agent injection may be frozen):
 
@@ -100,23 +108,28 @@ are re-read each spawn while agent injection may be frozen):
 
 **DRY** — `role: issue-tracker-plan-dry`
 
-> *(Work-root context line.)* *(Findings return line.)*
+> *(Work-root context line.)* *(Outline-diff line, when carried.)*
+> *(Findings return line.)*
 
 **Authoring conformance** — `role: issue-tracker-plan-authoring-conformance`
 
-> *(Work-root context line.)* *(Findings return line.)*
+> *(Work-root context line.)* *(Outline-diff line, when carried.)*
+> *(Findings return line.)*
 
 **Dependency order** — `role: issue-tracker-plan-dependency-order`
 
-> *(Work-root context line.)* *(Findings return line.)*
+> *(Work-root context line.)* *(Outline-diff line, when carried.)*
+> *(Findings return line.)*
 
 **Internal consistency** — `role: issue-tracker-plan-internal-consistency`
 
-> *(Work-root context line.)* *(Findings return line.)*
+> *(Work-root context line.)* *(Outline-diff line, when carried.)*
+> *(Findings return line.)*
 
 **Footprint** — `role: issue-tracker-plan-footprint`
 
-> *(Work-root context line.)* *(Findings return line.)*
+> *(Work-root context line.)* *(Outline-diff line, when carried.)*
+> *(Findings return line.)*
 
 ## Aggregate → apply → summary
 

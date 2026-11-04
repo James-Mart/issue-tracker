@@ -3,7 +3,7 @@ name: issue-tracker-decomposer-opus
 model: claude-opus-5-5-thinking-high
 description: >-
   Decomposes one outline version into one applied, stamped, and polished work
-  root.
+  root, or reconciles a new version into the outline's open linked roots.
 readonly: false
 ---
 

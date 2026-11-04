@@ -303,7 +303,8 @@ workflow instructions here.
 
 Both take the same prompt:
 
-> Outline: `<outlineId>`. Version: `<n>`. Execution gate: `<on|off>`.
+> Mode: `decompose`. Outline: `<outlineId>`. Version: `<n>`. Execution gate:
+> `<on|off>`.
 
 For a non-trunk merge base, append `` Merge policy: `<policy>`. `` to that
 prompt.

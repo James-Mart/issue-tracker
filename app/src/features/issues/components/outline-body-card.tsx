@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, GitCompare } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { IssueDetail } from "@server/schemas";
@@ -166,6 +166,18 @@ export function OutlineBodyCard({
   const [readVersion, setReadVersion] = useState(latest);
   const [diffFrom, setDiffFrom] = useState(Math.max(1, latest - 1));
   const [diffTo, setDiffTo] = useState(latest);
+  const latestRef = useRef(latest);
+
+  // A publish while this card is mounted moves the selection that was on the
+  // previous latest forward. An older version the reader picked stays put.
+  useEffect(() => {
+    const previous = latestRef.current;
+    if (previous === latest) return;
+    setReadVersion((current) => (current === previous ? latest : current));
+    setDiffTo((current) => (current === previous ? latest : current));
+    setDiffFrom((current) => Math.min(current, Math.max(1, latest - 1)));
+    latestRef.current = latest;
+  }, [latest]);
 
   return (
     <section

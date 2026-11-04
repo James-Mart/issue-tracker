@@ -80,6 +80,13 @@ import {
   parseDecomposeRequest,
   startOutlinePlanningSession,
 } from "../services/outline-planning-session.js";
+import {
+  discardOutlineDraft,
+  parseOutlineDraftBody,
+  parseOutlineDraftUpdate,
+  publishOutlineDraft,
+  setOutlineDraft,
+} from "../services/outline-draft.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import {
   applyArchivedListQuery,
@@ -209,6 +216,41 @@ export function createIssuesRouter(
         title: meta.title,
         model: meta.model,
       });
+    }),
+  );
+
+  router.put(
+    "/:id/outline-draft",
+    asyncRoute(async (req, res) => {
+      const body = parseOutlineDraftBody(req.body);
+      await setOutlineDraft(req.params.id, body);
+      res.json({ body });
+    }),
+  );
+
+  router.post(
+    "/:id/outline-draft/update",
+    asyncRoute(async (req, res) => {
+      const input = parseOutlineDraftUpdate(req.body);
+      const published = await publishOutlineDraft(
+        req.params.id,
+        input,
+        sessions,
+      );
+      res.status(201).json({
+        id: published.meta.id,
+        title: published.meta.title,
+        model: published.meta.model,
+        version: published.version,
+      });
+    }),
+  );
+
+  router.delete(
+    "/:id/outline-draft",
+    asyncRoute(async (req, res) => {
+      await discardOutlineDraft(req.params.id);
+      res.status(204).end();
     }),
   );
 

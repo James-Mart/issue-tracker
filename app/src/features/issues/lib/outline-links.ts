@@ -2,6 +2,7 @@ import { bySequence, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { issuesById } from "./build-tree";
+import { isIssueComplete } from "./derived";
 
 /** A root Epic or project-level Story stamped with one outline. */
 export type LinkedRoot = {
@@ -10,6 +11,7 @@ export type LinkedRoot = {
   title: string;
   version: number;
   behind: boolean;
+  open: boolean;
   order: number;
 };
 
@@ -29,7 +31,8 @@ function stampedBoardRoot(
 /**
  * Root Epics and project-level Stories whose `sourceOutline` names this
  * outline. Nested Stories, stacked Stories, and Tasks stay off the list.
- * Order matches the project board. `behind` is the derived flag.
+ * Order matches the project board. `behind` is the derived flag; `open`
+ * means the root is not yet complete (Epic not done, Story not merged).
  */
 export function linkedRootsForOutline(
   issues: IssueRecord[],
@@ -48,6 +51,7 @@ export function linkedRootsForOutline(
       title: issue.title,
       version: issue.sourceOutline.version,
       behind: derived[issue.id]?.behind === true,
+      open: !isIssueComplete(issue, derived[issue.id]),
       order: issue.order,
     });
   }
