@@ -152,9 +152,12 @@ Six relationships, each with a distinct, non-overlapping role:
   Cleared when that outline is deleted. Derived **`behind`** is separate
   (see [Derived state](#derived-state)).
 - **appendTo** — *append target*: an optional reference from an Idea to one
-  open Story **in the same Project**. When set, `issue-tracker-plan` lands
-  the Idea's plan as Tasks on that Story (`issue story append`) instead of
-  minting a new Epic or root Story. Refused when the target Story is merged.
+  open Story **in the same Project**. When set, `issue-tracker-plan` writes
+  the Idea's plan as the pending draft of that Story's outline instead of
+  minting a new Epic or root Story; Update reconciles it with that Story as
+  the target and the Idea as the source, so the Tasks land on that Story
+  (`issue story append`) and record the Idea as `sourceIdea`. Refused when
+  the target Story is merged.
   Cleared when the target Story is deleted.
 
 #### Fan-in (why a multi-parent dependency becomes a stack)
@@ -633,16 +636,19 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
 - **`draft discard`** (outline) — `issue outline draft discard <id>`.
   Deletes the pending draft. An outline with no pending draft is an error.
 - **`draft update`** (outline) — `issue outline draft update <id>
-  [--target-story <id>] [--covered-by <taskIds...>]`. When the draft text
-  differs from the saved body, saves it as the next version, drops the
-  draft, and starts reconciliation on the outline's planning channel at
-  that version. Prints the new version. `--target-story` is the Story that
-  receives new Tasks. `--covered-by` is one or more Task ids the triggering
-  flow already created, separated by spaces or commas. A missing draft, a
-  draft that matches the saved body, a target that is not a Story, a
-  covered-by id that is not a Task, a duplicate covered-by id, a Project
-  with no workspace, or a busy planning session is an error. A busy
-  planning session is refused before the version is saved.
+  [--target-story <id>] [--covered-by <taskIds...>] [--source-idea <id>]`.
+  When the draft text differs from the saved body, saves it as the next
+  version, drops the draft, and starts reconciliation on the outline's
+  planning channel at that version. Prints the new version.
+  `--target-story` is the Story that receives new Tasks. `--covered-by` is
+  one or more Task ids the triggering flow already created, separated by
+  spaces or commas. `--source-idea` is the Idea recorded as `sourceIdea` on
+  the Tasks appended to the target Story; reconciliation archives it after
+  polish. A missing draft, a draft that matches the saved body, a target
+  that is not a Story, a covered-by id that is not a Task, a duplicate
+  covered-by id, a source idea that is not an Idea, a source idea without a
+  target Story, a Project with no workspace, or a busy planning session is
+  an error. Every refusal happens before the version is saved.
 - **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
   returns `{ version, body }`. `<n>` is a positive integer through
   `bodyVersion`. The latest body is `description.md`; an older body is
@@ -654,14 +660,15 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `{ body }` replaces the pending draft and returns `{ body }`. It does not
   add a version. `DELETE /api/issues/:id/outline-draft` drops it and returns
   204. `POST /api/issues/:id/outline-draft/update` with optional
-  `{ targetStory?, coveredBy? }` saves a differing draft as the next version
-  and starts reconciliation. Unknown fields are refused. The response is
-  `201` `{ id, title, model, version }` for the planning session. While a
-  draft exists, `GET /api/issues/:id` includes `pendingDraft`. A missing
-  draft, a draft that matches the saved body, a non-outline id, a
-  `targetStory` that is not a Story, a `coveredBy` id that is not a Task, a
-  Project with no workspace, or a busy planning session is an error. The
-  busy-session refusal happens before the version is saved.
+  `{ targetStory?, coveredBy?, sourceIdea? }` saves a differing draft as the
+  next version and starts reconciliation. Unknown fields are refused. The
+  response is `201` `{ id, title, model, version }` for the planning
+  session. While a draft exists, `GET /api/issues/:id` includes
+  `pendingDraft`. A missing draft, a draft that matches the saved body, a
+  non-outline id, a `targetStory` that is not a Story, a `coveredBy` id that
+  is not a Task, a `sourceIdea` that is not an Idea or comes without
+  `targetStory`, a Project with no workspace, or a busy planning session is
+  an error. Every refusal happens before the version is saved.
 - **`version`** (outline get) — `issue outline get <id> version` prints the
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
@@ -1141,9 +1148,9 @@ A planner session requires a source Idea. Its title is `Plan <outline title>` an
 
 The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off" }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `planning` channel at the latest `bodyVersion`, with that execution gate and no outline gate and no merge policy. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a body with any other field, or a Project with no workspace is an error. A busy planning session on that outline is `409`, the same refusal as any other start on that channel. The decomposer queues the new root after polish when the gate is `off`, and leaves the root unqueued when the gate is `on`.
 
-A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, and an optional `Covered by` list of Task ids the triggering flow already created. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`).
+A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Tasks it appends to `Target story` record that Idea as `sourceIdea`, and the Idea is archived once every touched root is polished.
 
-`issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `planning` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. No execution gate and no merge policy are sent. A busy planning session is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Planning tab. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
+`issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `planning` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. A source Idea, when given, is appended as `Source idea`. No execution gate and no merge policy are sent. A busy planning session is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Planning tab. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
 
 ### Work queue
 
@@ -1384,7 +1391,7 @@ Idea — the common-to-every-kind fields plus:
 | `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create, or a review submitted as a new idea, queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
-| `appendTo` | string? | optional; names one open Story in the same Project whose tail receives this Idea's plan via `issue story append` instead of minting a new root (see [Relationships](#relationships)) |
+| `appendTo` | string? | optional; names one open Story in the same Project whose outline this Idea's plan amends and whose tail receives the reconciled Tasks instead of minting a new root (see [Relationships](#relationships)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, stored status, worktree, or comments. Derived

@@ -17,7 +17,7 @@ does), hold the grill open until every implied seam is opened, then route the
 outline gate to the human unless the Idea's outline-gate flag is unset
 and the Project's gate rubric exempts the outline, record whether the code
 needs human approval (**## Flow** step 3), resolve polish escalations, and
-finalize with an audit report on the archived source Idea.
+finalize with an audit report on the source Idea.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
 You do **not** author the outline or the plan tree yourself — the vanilla
@@ -239,7 +239,9 @@ specifics and stop; otherwise proceed to Flow.
    Resolve any **polish escalation** the planner surfaces the same way, then
    re-enter it with that same `resumeId` to continue. Repeat until the planner
    returns its final message: after Yes, the resulting root id (already
-   applied and polished); after Not now, the outline id.
+   applied and polished), or for an Idea with `appendTo` the target Story id
+   (its reconciliation runs on the outline's Planning channel); after Not
+   now, the outline id.
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
@@ -258,8 +260,9 @@ specifics and stop; otherwise proceed to Flow.
    answer the beat as you otherwise would.
 
    **Outline gate.** The planner puts this gate to you after each saved
-   outline version, with three answers: **Yes**, **Not now**, and **Amend**
-   with feedback. Run the **Coverage check** first; a push goes back to the
+   outline version, or for an Idea with `appendTo` after each saved pending
+   draft of the target Story's outline, with three answers: **Yes**,
+   **Not now**, and **Amend** with feedback. Run the **Coverage check** first; a push goes back to the
    planner and leaves the routing below unrun. Then route the gate by the
    first row that matches:
 
@@ -285,13 +288,13 @@ specifics and stop; otherwise proceed to Flow.
 
    When the human replies, re-enter the same planner with its `resumeId`
    from step 2, relaying the human's answer: Yes, Not now, or Amend with
-   the human's feedback. Amend comes back as the next outline version;
-   post it the same way as the first. Inside the turn that relays Yes or
+   the human's feedback. Amend comes back as the next outline version or
+   the revised draft; post it the same way as the first. Inside the turn that relays Yes or
    Not now and before re-entering the planner, run
    `issue idea set <issueId> approvalPending false`. The marker's
    lifecycle across Amend rounds is fixed by
    `issue:awaiting-approval-status`. After the planner returns the
-   resulting root id on the Yes path, comment on it with
+   resulting root id (or target Story id) on the Yes path, comment on it with
    `issue comment <rootId> --role human --body <text>`. The body
    records that a human approved the plan and names the Idea
    (`<issueId>`). This is your write, not the planner's: the planner

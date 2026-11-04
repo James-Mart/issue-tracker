@@ -84,6 +84,16 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
+  writeIssue("idea-append", {
+    kind: "idea",
+    title: "Append idea",
+    partOf: "p",
+    order: 3,
+    archived: false,
+    appendTo: "story-open",
+    createdAt: AT,
+    updatedAt: AT,
+  });
 
   sessions = fakeLauncherSessions().sessions;
   const { createApp } = await import("../app.js");
@@ -116,6 +126,7 @@ describe("outline draft HTTP API", () => {
     const updated = await request("POST", "/api/issues/spec/outline-draft/update", {
       targetStory: "story-open",
       coveredBy: ["task-a"],
+      sourceIdea: "idea-append",
     });
     expect(updated.status).toBe(201);
     const body = (await updated.json()) as {
@@ -160,13 +171,37 @@ describe("outline draft HTTP API", () => {
       title: "Reconcile Feature outline",
     });
     const line = readFileSync(transcriptPathOf(meta!.id), "utf8").trim();
-    expect(JSON.parse(line).text).toBe(
+    const { text } = JSON.parse(line) as { text: string };
+    expect(text).toBe(
       outlineReconcileSessionMessage({
         outlineId: "spec",
         version: 4,
         targetStory: "story-open",
         coveredBy: ["task-a"],
+        sourceIdea: "idea-append",
       }),
     );
+    expect(text).toContain("Source idea: `idea-append`.");
+  });
+
+  it("refuses a source idea without a target story before saving a version", async () => {
+    await request("PUT", "/api/issues/spec/outline-draft", { body: "next\n" });
+
+    const refused = await request(
+      "POST",
+      "/api/issues/spec/outline-draft/update",
+      { sourceIdea: "idea-append" },
+    );
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toContain(
+      "source idea requires a target story",
+    );
+
+    const detail = (await (await request("GET", "/api/issues/spec")).json()) as {
+      bodyVersion: number;
+      pendingDraft?: string;
+    };
+    expect(detail.bodyVersion).toBe(3);
+    expect(detail.pendingDraft).toBe("next\n");
   });
 });

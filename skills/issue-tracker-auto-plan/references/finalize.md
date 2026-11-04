@@ -7,8 +7,9 @@ back-and-forth transcript). Run this after Flow step 4 (Retro) completes.
 
 The seed Idea is archived once planning finishes — after Yes when polish
 finishes, after Not now by the planner — use the Bootstrap `<issueId>`.
-Write a **single** combined audit trail onto that archived Idea (one
-target). The decision-summary attachment and standout-decisions comment land
+An Idea with `appendTo` is archived by its reconciliation after that
+polish, and stays unarchived after Not now. Write a **single** combined
+audit trail onto that Idea (one target). The decision-summary attachment and standout-decisions comment land
 on that Idea, not on the resulting root — its provenance is the decomposer's
 imperative `sourceIdea` write (not part of finalize).
 

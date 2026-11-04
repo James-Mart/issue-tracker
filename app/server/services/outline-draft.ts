@@ -18,7 +18,11 @@ import {
   removeOutlineDraft,
   writeOutlineDraft,
 } from "./outline-draft-store.js";
-import { startOutlinePlanningSession } from "./outline-planning-session.js";
+import type { OutlineReconcileScope } from "../../src/features/issues/lib/outline-planning-launch.js";
+import {
+  readSourceIdeaOrThrow,
+  startOutlinePlanningSession,
+} from "./outline-planning-session.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 
 const draftBodySchema = z
@@ -31,13 +35,11 @@ const draftUpdateSchema = z
   .object({
     targetStory: z.string().optional(),
     coveredBy: z.array(z.string()).optional(),
+    sourceIdea: z.string().optional(),
   })
   .strict();
 
-export type OutlineDraftUpdate = {
-  targetStory?: string;
-  coveredBy?: string[];
-};
+export type OutlineDraftUpdate = z.infer<typeof draftUpdateSchema>;
 
 export type PublishedOutlineDraft = {
   version: number;
@@ -105,7 +107,11 @@ export async function publishOutlineDraft(
       );
     }
     const targetStory = resolveTargetStory(input.targetStory);
-    const coveredBy = resolveCoveredBy(input.coveredBy);
+    const scope: OutlineReconcileScope = {
+      targetStory,
+      coveredBy: resolveCoveredBy(input.coveredBy),
+      sourceIdea: resolveSourceIdea(input.sourceIdea, targetStory),
+    };
     requireProjectWorkspace(outline.partOf);
     refuseIfPredecessorBusy(
       outline.id,
@@ -122,7 +128,7 @@ export async function publishOutlineDraft(
     const issue = { ...outline, updatedAt: new Date().toISOString() };
     commitIssueBatch([{ issue, description: draft }], []);
     if (readOutlineDraft(id) === draft) removeOutlineDraft(id);
-    return { version: issue.bodyVersion, targetStory, coveredBy };
+    return { version: issue.bodyVersion, scope };
   });
   try {
     const meta = await startOutlinePlanningSession(
@@ -130,8 +136,7 @@ export async function publishOutlineDraft(
         outlineId: id,
         role: "reconcile",
         version: prepared.version,
-        targetStory: prepared.targetStory,
-        coveredBy: prepared.coveredBy,
+        ...prepared.scope,
       },
       sessions,
     );
@@ -186,5 +191,23 @@ function resolveCoveredBy(raw: string[] | undefined): string[] | undefined {
     ids.push(taskId);
   }
   return ids;
+}
+
+function resolveSourceIdea(
+  raw: string | undefined,
+  targetStory: string | undefined,
+): string | undefined {
+  if (raw === undefined) return undefined;
+  const id = raw.trim();
+  if (id === "") {
+    throw new IssueError("validation", "source idea is empty");
+  }
+  if (targetStory === undefined) {
+    throw new IssueError(
+      "validation",
+      "source idea requires a target story to receive its tasks",
+    );
+  }
+  return readSourceIdeaOrThrow(id).id;
 }
 
