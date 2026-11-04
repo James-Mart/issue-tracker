@@ -13,9 +13,18 @@ const state = vi.hoisted(() => ({
   submit: vi.fn(),
   retry: vi.fn(),
   postEvent: vi.fn(),
-  /** undefined while the project query has not settled. */
-  codingStandards: true as boolean | undefined,
+  createIssue: vi.fn(),
+  updateIssue: vi.fn(),
+  navigate: vi.fn(),
 }));
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => state.navigate,
+  };
+});
 
 vi.mock("@/features/issues/api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/issues/api/queries")>();
@@ -26,25 +35,6 @@ vi.mock("@/features/issues/api/queries", async (importOriginal) => {
       problems: [],
       loaded: true,
     }),
-    useIssueDetailQuery: () =>
-      state.codingStandards === undefined
-        ? { data: undefined, isLoading: true, error: null }
-        : {
-            data: {
-              id: "proj",
-              kind: "project" as const,
-              supportingDocs: state.codingStandards
-                ? {
-                    codingStandards: {
-                      type: "attachment" as const,
-                      name: "coding-standards.md",
-                    },
-                  }
-                : {},
-            },
-            isLoading: false,
-            error: null,
-          },
   };
 });
 
@@ -57,6 +47,21 @@ vi.mock("@/features/issues/api/mutations", () => ({
     mutate: state.postEvent,
     isPending: false,
     variables: undefined,
+  }),
+  useCreateIssue: () => ({
+    mutate: state.createIssue,
+    mutateAsync: async (input: unknown) => {
+      state.createIssue(input);
+      return { id: "idea-new", kind: "idea" };
+    },
+    isPending: false,
+  }),
+  useUpdateIssue: () => ({
+    mutate: state.updateIssue,
+    mutateAsync: async (input: unknown) => {
+      state.updateIssue(input);
+    },
+    isPending: false,
   }),
 }));
 
@@ -107,16 +112,6 @@ function commentThread(id: string, body: string, included: boolean): CommentThre
   };
 }
 
-function assessCheckbox(): HTMLElement | null {
-  return document.body.querySelector<HTMLElement>('[data-testid="submit-assess-standards"]');
-}
-
-function destinationRadio(destination: "story" | "idea"): HTMLInputElement | null {
-  return document.body.querySelector<HTMLInputElement>(
-    `[data-testid="submit-destination-${destination}"] input`,
-  );
-}
-
 function failedSubmission(): ReviewSubmissionView {
   return {
     id: "sub-1",
@@ -160,12 +155,12 @@ function click(element: Element | null | undefined) {
   });
 }
 
-function setTextarea(textarea: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  if (!setter) throw new Error("no textarea value setter");
+function setInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (!setter) throw new Error("no input value setter");
   act(() => {
-    setter.call(textarea, value);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
@@ -175,10 +170,12 @@ beforeAll(() => {
 
 beforeEach(() => {
   state.threads = [];
-  state.codingStandards = true;
   state.submit.mockReset();
   state.retry.mockReset();
   state.postEvent.mockReset();
+  state.createIssue.mockReset();
+  state.updateIssue.mockReset();
+  state.navigate.mockReset();
 });
 
 afterEach(async () => {
@@ -191,7 +188,7 @@ afterEach(async () => {
 });
 
 describe("StoryReviewHeader submit", () => {
-  it("posts an optional summary from the dialog", () => {
+  it("confirms only the threads being submitted", () => {
     state.threads = [readyThread(), readyThread()];
     state.threads[1] = {
       ...readyThread(),
@@ -212,19 +209,12 @@ describe("StoryReviewHeader submit", () => {
     click(button);
 
     const dialog = document.body.querySelector('[data-testid="submit-review-dialog"]');
-    expect(dialog?.textContent).toContain("Submit as tasks to story-1");
-    expect(dialog?.textContent).toContain("Submit as a new idea");
     expect(dialog?.textContent).toContain("Threads to submit (2)");
-    expect(destinationRadio("story")?.checked).toBe(true);
-    const summary = document.body.querySelector<HTMLTextAreaElement>(
-      '[data-testid="submit-review-summary"]',
-    );
-    if (!summary) throw new Error("no summary field");
-    setTextarea(summary, "  Ship the reachability check.  ");
-    expect(assessCheckbox()?.getAttribute("data-state")).toBe("unchecked");
+    expect(dialog?.textContent).not.toContain("Submit as");
+    expect(document.body.querySelector('[data-testid="submit-review-summary"]')).toBeNull();
     click(document.body.querySelector('[data-testid="submit-review-confirm"]'));
     expect(state.submit).toHaveBeenCalledWith(
-      { reviewId: "rev-1", destination: "story", summary: "Ship the reachability check." },
+      { reviewId: "rev-1" },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
     expect(document.body.querySelector('[data-testid="submit-review-dialog"]')).toBeNull();
@@ -234,11 +224,53 @@ describe("StoryReviewHeader submit", () => {
 
     const onError = state.submit.mock.calls[0]?.[1]?.onError as (() => void) | undefined;
     act(() => onError?.());
-    const restored = document.body.querySelector<HTMLTextAreaElement>(
-      '[data-testid="submit-review-summary"]',
-    );
-    expect(restored?.value).toBe("  Ship the reachability check.  ");
+    expect(document.body.querySelector('[data-testid="submit-review-dialog"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="submit-review"]')).not.toBeNull();
+  });
+
+  it("creates a blank append Idea from the follow-up control", async () => {
+    mount(
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle="Story review workbench"
+        review={review()}
+        merged={false}
+      />,
+    );
+    click(document.body.querySelector('[data-testid="review-follow-up-idea"]'));
+    const title = document.body.querySelector<HTMLInputElement>(
+      '[data-testid="review-follow-up-idea-title"]',
+    );
+    if (!title) throw new Error("no title field");
+    setInput(title, "  Grill the outline change  ");
+    await act(async () => {
+      click(document.body.querySelector('[data-testid="review-follow-up-idea-confirm"]'));
+      await Promise.resolve();
+    });
+    expect(state.createIssue).toHaveBeenCalledWith({
+      kind: "idea",
+      title: "Grill the outline change",
+      partOf: "proj",
+    });
+    expect(state.updateIssue).toHaveBeenCalledWith({
+      id: "idea-new",
+      patch: { appendTo: "story-1" },
+    });
+    expect(state.navigate).toHaveBeenCalled();
+  });
+
+  it("hides the follow-up control when the Story is merged", () => {
+    mount(
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle="Story review workbench"
+        review={review()}
+        merged={true}
+      />,
+    );
+    expect(document.body.querySelector('[data-testid="review-follow-up-idea"]')).toBeNull();
   });
 
   it("shows the failure under the branch line and retries every failed submission", () => {
@@ -287,7 +319,6 @@ describe("StoryReviewHeader submit", () => {
       commentThread("thread-2", "Held back.", false),
     ];
     let revision = 0;
-    // Equal props would skip the header render, so the title changes with the threads.
     const header = () => (
       <StoryReviewHeader
         projectId="proj"
@@ -295,7 +326,7 @@ describe("StoryReviewHeader submit", () => {
         storyTitle={`Story review workbench ${revision}`}
         review={review()}
         merged={false}
-      />
+      />,
     );
     const container = mount(header());
     const button = container.querySelector<HTMLButtonElement>('[data-testid="submit-review"]');

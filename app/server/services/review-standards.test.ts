@@ -192,7 +192,6 @@ describe("standards assessment at submit", () => {
     });
     const sessions = stubReviewTaskingSessions(prompts);
     const recorded = await submitReview("p", REVIEW_ID, {
-      destination: "story",
       summary: "Address the guard.",
       assessStandards: true,
     });

@@ -1,19 +1,11 @@
 import { useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { GitBranchPlus, MessageSquarePlus } from "lucide-react";
 import type { IssueDetail } from "@server/schemas";
 import { Button } from "@/components/ui/button";
-import {
-  useCreateIssue,
-  useUpdateFromMergeBase,
-  useUpdateIssue,
-} from "../api/mutations";
+import { useUpdateFromMergeBase } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
-import {
-  type IssueBackLocationState,
-  issueBackNavigateState,
-} from "../lib/issue-back";
-import { issuePath } from "../lib/links";
+import { useCreateAppendIdea } from "../lib/use-create-append-idea";
 import {
   ADD_IDEA_HELPER,
   appendIdeaTitle,
@@ -46,11 +38,8 @@ function ActionCopy({
 
 export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
   const { projectId = "" } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
   const { data } = useIssuesQuery();
-  const createIssue = useCreateIssue();
-  const updateIssue = useUpdateIssue();
+  const { createAppendIdea, isPending: appendIdeaPending } = useCreateAppendIdea(projectId);
   const updateFromMergeBase = useUpdateFromMergeBase(issue.id);
   const availability = storyAppendAvailability({
     merged: issue.merged,
@@ -62,41 +51,11 @@ export function StoryAppendActionsCard({ issue }: { issue: StoryDetail }) {
   });
   const mergeBase = data?.derived[issue.id]?.mergeBase;
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const pending =
-    createIssue.isPending ||
-    updateIssue.isPending ||
-    updateFromMergeBase.isPending;
+  const pending = appendIdeaPending || updateFromMergeBase.isPending;
 
   const addIdea = () => {
     if (!availability.ideaEnabled || pending || !projectId) return;
-    createIssue.mutate(
-      {
-        kind: "idea",
-        title: appendIdeaTitle(issue.title),
-        partOf: projectId,
-      },
-      {
-        onSuccess: (created) => {
-          updateIssue.mutate(
-            { id: created.id, patch: { appendTo: issue.id } },
-            {
-              onSuccess: () => {
-                const navigateState = issueBackNavigateState(
-                  location.pathname,
-                  location.search,
-                  (location.state as IssueBackLocationState | null)
-                    ?.issueBackStack,
-                );
-                navigate(
-                  issuePath(projectId, created.id),
-                  navigateState ? { state: navigateState } : undefined,
-                );
-              },
-            },
-          );
-        },
-      },
-    );
+    void createAppendIdea(issue.id, appendIdeaTitle(issue.title));
   };
 
   const openMergeBaseConfirm = () => {

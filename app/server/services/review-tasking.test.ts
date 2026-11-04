@@ -80,7 +80,6 @@ describe("review tasking", () => {
     const sessions = stubReviewTaskingSessions(prompts);
 
     const recordedView = await submitReview("p", REVIEW_ID, {
-      destination: "story",
       summary: "Ship the wording",
     });
     expect(submission(recordedView)).toMatchObject({
@@ -111,7 +110,7 @@ describe("review tasking", () => {
     );
 
     await expect(
-      submitReview("p", REVIEW_ID, { destination: "story" }),
+      submitReview("p", REVIEW_ID, {}),
     ).rejects.toThrow(SUBMISSION_TASKING_ERROR);
 
     const runs = listAgentRunsForIssue(REVIEW_ID);
@@ -139,7 +138,7 @@ describe("review tasking", () => {
     const kept = await appendComment(REVIEW_ID, { role: "human", body: "Keep" });
     const missed = await appendComment(REVIEW_ID, { role: "human", body: "Miss" });
     const sessions = stubReviewTaskingSessions(prompts);
-    const recordedView = await submitReview("p", REVIEW_ID, { destination: "story" });
+    const recordedView = await submitReview("p", REVIEW_ID, {});
     const started = await launchRecorded(
       { launchRecordedSubmission, readReviewView },
       recordedView,

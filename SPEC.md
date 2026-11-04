@@ -1123,11 +1123,11 @@ it. Idle or archived sessions do not hold the lock.
 
 ### Auto-plan queue
 
-`autonomous` (boolean, optional) on a Project opts that Project into auto-plan at Idea creation. Absent means false. Set and read it with `issue project get|set <id> autonomous true|false`. The Project settings overview shows it as a toggle labelled **Autonomous**. Only creation triggers auto-plan: creating an Idea with a `stakeholder` in an `autonomous` Project queues planning, and so does submitting a review as a new idea in any Project; setting `stakeholder` on an existing Idea never does.
+`autonomous` (boolean, optional) on a Project opts that Project into auto-plan at Idea creation. Absent means false. Set and read it with `issue project get|set <id> autonomous true|false`. The Project settings overview shows it as a toggle labelled **Autonomous**. Only creation triggers auto-plan: creating an Idea with a `stakeholder` in an `autonomous` Project queues planning; setting `stakeholder` on an existing Idea never does.
 
 `planQueuedAt` (ISO string, optional) on an Idea records that the Idea is waiting for the launcher to start auto-plan. It is a system writer: `apply` preserves it, and the only manual write is `issue idea set <id> planQueuedAt --clear`, which dequeues the Idea. `issue idea get <id> planQueuedAt` reads it.
 
-**Enqueue.** In the same write as Idea `create()`: when the new Idea carries a `stakeholder` and its Project's `autonomous` is true, stamp `planQueuedAt` with the current time. The Idea a review submission creates is stamped whether or not the Project is autonomous.
+**Enqueue.** In the same write as Idea `create()`: when the new Idea carries a `stakeholder` and its Project's `autonomous` is true, stamp `planQueuedAt` with the current time.
 
 **Launcher.** At the start of each launcher pass (before the per-Project work-root drain from [Work queue](#work-queue)), the server drains Ideas carrying `planQueuedAt` across all Projects, oldest first, with no cap. It starts each through `createIssueChannelSession` with channel `planning`, model = the Idea's `stakeholder`, and the title and first prompt that `app/src/features/issues/lib/planning-launch.ts` builds for a stakeholder. It then clears `planQueuedAt`. On failure it clears the field and posts `issue idea comment <id> --role launcher --body "Auto-plan failed to start: <message>"` through the service layer. The Idea stays `captured`, so the human can start it from the button.
 
@@ -1379,11 +1379,11 @@ Idea — the common-to-every-kind fields plus:
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
 | `outlineGate` | boolean? | absent until set; when true, the human must answer the auto-plan outline gate (see [Roles](#roles)); written by the human; legacy stores may still hold `approvePlan` until `migrate:outline-gate` rewrites them |
 | `executionGate` | boolean? | absent until set; when true, work roots planned from this Idea are not started automatically; written by the human; requires a `stakeholder` |
-| `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset, except the Idea a review submission creates, which carries the reviewed change's head branch (the pull request base for a fork); `apply` preserves |
+| `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset; `apply` preserves |
 | `approvalPending` | boolean? | absent until set; when true, an outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
 | `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
-| `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create, or a review submitted as a new idea, queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
+| `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
 | `appendTo` | string? | optional; names one open Story in the same Project whose tail receives this Idea's plan via `issue story append` instead of minting a new root (see [Relationships](#relationships)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
@@ -1666,8 +1666,7 @@ event, or, when neither has been recorded, `false` for a root whose
 on an open review thread with no linked Task. A resolved thread keeps that
 value and shows it again when reopened. A thread is submittable when it is
 ready to task, included, and no unfinished submission claims it. Both
-submission destinations take only submittable threads. An Idea submission
-resolves each thread it took. A Story submission records those ids and leaves
+submission takes only submittable threads. A submission records those ids and leaves
 the threads open. A ready thread that is not included stays open and is not
 taken. `researcherConversationId` is the last
 `researcher-session` event's `conversationId`, omitted once the thread is
@@ -1735,7 +1734,7 @@ listed among the review's agent runs with role `issue-tracker-review-question`.
 <a id="standards-assessment"></a>
 
 **Standards assessment.** `POST /api/projects/:projectId/reviews/:reviewId/submissions`
-accepts `assessStandards: true` beside `destination` and `summary`. The review
+accepts optional `assessStandards: true` and `summary`. The review
 must have a Story source and the Project must have a `codingStandards` doc;
 otherwise the request is refused. The submission then records `standards`:
 `status` `assessing`, `proposals` `[]`, and `doc` copied from that Project ref
@@ -1743,8 +1742,7 @@ otherwise the request is refused. The submission then records `standards`:
 starts [`issue-tracker-standards-assessor`](agents/issue-tracker-standards-assessor.md)
 in a review-channel conversation on the review, working directory the review
 worktree, and stores that conversation id on `standards.conversationId`. The
-run starts alongside tasking, or alongside the new Idea's auto-plan, and does
-not wait on either. Its prompt carries the submission's frozen thread ids
+run starts alongside tasking and does not wait on it. Its prompt carries the submission's frozen thread ids
 (resolved or still open), the summary, the snapshotted doc, and, for each
 anchored commit, the Task whose `commits` contain that sha, that Task's Story,
 the Story diff, and the commit diff.
@@ -2386,7 +2384,7 @@ preserves everything else from the existing same-kind issue.
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `outlineGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `executionGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
-| `mergeBase` (Idea) | stored branch; kind [`set`](#kind-scoped-get--set), the planning tab (written when a session launches from that tab), and a review submitted as a new idea (written at create); `apply` preserves |
+| `mergeBase` (Idea) | stored branch; kind [`set`](#kind-scoped-get--set), the planning tab (written when a session launches from that tab); `apply` preserves |
 | `approvalPending` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
 | `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
