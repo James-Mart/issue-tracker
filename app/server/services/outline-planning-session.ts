@@ -1,10 +1,12 @@
+import { z } from "zod";
 import {
   outlineDecomposerSessionMessage,
   outlinePlannerSessionMessage,
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
+  type OutlineExecutionGate,
 } from "../../src/features/issues/lib/outline-planning-launch.js";
-import type { Issue } from "../schemas.js";
+import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import { startIssueChannelSession } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -22,13 +24,31 @@ export type StartOutlineDecomposerSession = {
   outlineId: string;
   role: "decomposer";
   version: number;
-  executionGate: "on" | "off";
+  executionGate: OutlineExecutionGate;
   mergePolicy?: string;
 };
 
 export type StartOutlinePlanningSessionInput =
   | StartOutlinePlannerSession
   | StartOutlineDecomposerSession;
+
+const decomposeRequestSchema = z
+  .object({
+    executionGate: z.enum(["on", "off"]),
+  })
+  .strict();
+
+/** Body of `POST /outline/decompose`. Unknown fields are refused. */
+export function parseDecomposeRequest(body: unknown): OutlineExecutionGate {
+  const parsed = decomposeRequestSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    throw new IssueError(
+      "validation",
+      formatZodError(parsed.error, "invalid decompose body"),
+    );
+  }
+  return parsed.data.executionGate;
+}
 
 /**
  * Open a planner or decomposer session on an outline's planning channel
@@ -37,13 +57,13 @@ export type StartOutlinePlanningSessionInput =
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
   sessions: ConversationMessageSessions,
-): Promise<void> {
+): Promise<ConversationMeta> {
   const outline = readOutlineOrThrow(input.outlineId);
   const sourceIdea = sourceIdeaOf(outline);
   const model = outlinePlanningSessionModel(sourceIdea?.stakeholder);
   const title = outlinePlanningSessionTitle(input.role, outline.title);
   const message = sessionMessage(input, outline, sourceIdea);
-  await startIssueChannelSession(
+  return startIssueChannelSession(
     {
       projectId: outline.partOf,
       title,

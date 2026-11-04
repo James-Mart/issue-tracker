@@ -13,6 +13,9 @@ export const OUTLINE_PLANNING_OPUS_MODEL = "claude-opus-5-5-thinking-high";
 
 export type OutlinePlanningRole = "planner" | "decomposer";
 
+/** Execution gate for one decomposer run. `off` queues the new root after polish. */
+export type OutlineExecutionGate = "on" | "off";
+
 /** Session title for a planner or decomposer run on an outline. */
 export function outlinePlanningSessionTitle(
   role: OutlinePlanningRole,
@@ -42,7 +45,7 @@ export function outlinePlannerSessionMessage(ideaId: string): string {
 export function outlineDecomposerSessionMessage(input: {
   outlineId: string;
   version: number;
-  executionGate: "on" | "off";
+  executionGate: OutlineExecutionGate;
   mergePolicy?: string;
 }): string {
   const message =
