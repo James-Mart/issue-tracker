@@ -13,8 +13,13 @@ auto-commit.
 A conflicted path is discernable only when it is source text and the
 combination is unambiguous: both sides can be kept, or one side is strictly
 obsolete. A product choice, competing behavior, or uncertain intent is not
-discernable. A generated or tool-owned file, such as a lockfile, or a binary,
-is not discernable.
+discernable. A generated or tool-owned file, such as a binary, may not be
+discernable.
+
+When a lockfile is conflicted, a generally good resolution is:
+- Accept either side wholesale to clear the conflict markers.
+- Run the package manager to regenerate or update the lockfile so it includes
+  both sides of the merge.
 
 Resolve every discernable path and `git add` it. Leave every path that is not
 discernable unmerged.
