@@ -29,7 +29,7 @@ function ReviewStorySourceLink({
   return (
     <Link
       to={issuePath(projectId, storyId)}
-      className={sourceLinkClass}
+      className={`${sourceLinkClass} text-primary`}
       data-testid="review-story-link"
     >
       <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />
