@@ -14,6 +14,12 @@ import { InlineField } from "./inline-field";
 import { MergePolicySelect } from "./merge-policy-select";
 import { MetaRow } from "./meta-row";
 
+/** Issues list + derived state from `useIssuesWithArchived` (or equivalent). */
+export type IssuesSnapshot = {
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
+};
+
 /** Label beside the value on wide viewports; stacked, full-width controls below `sm`. */
 const ROOT_MERGE_ROW_CLASS =
   "grid-cols-1 gap-y-1 sm:grid-cols-[9rem_minmax(0,1fr)]";
@@ -29,11 +35,6 @@ function trunkPlaceholder(trunk: string): string {
 function inheritOptionLabel(policy: MergePolicy): string {
   return `Inherit (${MERGE_POLICY_LABELS[policy]})`;
 }
-
-type IssuesSnapshot = {
-  issues: IssueRecord[];
-  derived: Record<string, DerivedState>;
-};
 
 /**
  * Row inputs for an Epic or project-level root Story. Missing lock or a

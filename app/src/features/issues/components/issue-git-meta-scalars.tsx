@@ -50,7 +50,7 @@ function taskScalarValue(
   }
 }
 
-function storyScalarRows(
+export function storyGitScalarRows(
   scalars: GitMetaScalar[],
   issue: Extract<IssueDetail, { kind: "story" }>,
   mergeBase?: string,
@@ -64,27 +64,59 @@ function storyScalarRows(
   ));
 }
 
+/** Branch + optional merge-base rows (all git scalars except stacked on). */
+export function StoryGitHeadScalarRows({
+  issue,
+  mergeBase,
+  /** When the parent already computed `storyGitMetaScalars`, pass it to avoid duplicate work. */
+  scalars: scalarsProp,
+}: {
+  issue: Extract<IssueDetail, { kind: "story" }>;
+  mergeBase?: string;
+  scalars?: GitMetaScalar[];
+}) {
+  const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
+  return <>{storyGitScalarRows(scalars.slice(0, -1), issue, mergeBase)}</>;
+}
+
+/** Stacked-on row only (last story git scalar). */
+export function StoryGitStackedOnRow({
+  issue,
+  mergeBase,
+  scalars: scalarsProp,
+}: {
+  issue: Extract<IssueDetail, { kind: "story" }>;
+  mergeBase?: string;
+  scalars?: GitMetaScalar[];
+}) {
+  const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
+  return <>{storyGitScalarRows(scalars.slice(-1), issue, mergeBase)}</>;
+}
+
 /** Story git/spec scalar rows (no outer card — parent owns the block). */
 export function StoryGitMetaScalars({
   issue,
   mergeBase,
+  scalars: scalarsProp,
   mergeSettings,
   beforeStackedOn,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   mergeBase?: string;
+  /** When the caller already computed `storyGitMetaScalars`, pass it to avoid rebuilding. */
+  scalars?: GitMetaScalar[];
   /** Merge-base and merge-policy rows. Sits after the other git scalars, before stacked on. */
   mergeSettings?: ReactNode;
   /** Sits with Branch and Merge base. `stackedOn` is always the last scalar. */
   beforeStackedOn?: ReactNode;
 }) {
-  const scalars = storyGitMetaScalars(issue, mergeBase);
+  const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
   return (
     <>
-      {storyScalarRows(scalars.slice(0, -1), issue, mergeBase)}
+      {storyGitScalarRows(scalars.slice(0, -1), issue, mergeBase)}
       {mergeSettings}
       {beforeStackedOn}
-      {storyScalarRows(scalars.slice(-1), issue, mergeBase)}
+      {storyGitScalarRows(scalars.slice(-1), issue, mergeBase)}
     </>
   );
 }

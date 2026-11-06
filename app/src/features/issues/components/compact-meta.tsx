@@ -19,13 +19,16 @@ export function CompactMetaItem({
 export function CompactMetaBlock({
   children,
   className,
+  dataRegion = "meta-scalars",
 }: {
   children: ReactNode;
   className?: string;
+  /** Region id for tests / diagnostics; still one block even when it holds editable + fixed rows. */
+  dataRegion?: string;
 }) {
   return (
     <div
-      data-region="meta-scalars"
+      data-region={dataRegion}
       className={cn(
         "flex flex-col gap-1.5 rounded-lg border border-border bg-card px-3.5 py-3",
         className,

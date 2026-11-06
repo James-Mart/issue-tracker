@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
@@ -7,7 +7,11 @@ import { outlineIssues } from "@server/services/archived-visibility";
 import { cn } from "@/lib/utils/cn";
 import { COCKPIT_COLUMN_CLASS, PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
-import { RailNode, type RailSpine } from "@/components/ui/rail";
+import {
+  RailNode,
+  type RailPassThroughProps,
+  type RailSpine,
+} from "@/components/ui/rail";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -213,7 +217,7 @@ function CockpitFlowRail({
   queue?: boolean;
   spine?: RailSpine;
   leading?: ReactNode;
-  railProps?: Omit<HTMLAttributes<HTMLDivElement>, "className" | "style">;
+  railProps?: RailPassThroughProps;
   listClassName?: string;
   flowRow: (
     item: FlowItem,

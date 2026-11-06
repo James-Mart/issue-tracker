@@ -195,6 +195,17 @@ export interface RailProps extends React.HTMLAttributes<HTMLDivElement> {
   spine?: RailSpine;
 }
 
+/**
+ * Pass-through props for spreading onto `Rail` from callers that also set `className`
+ * / layout. `data-*` is widened so kebab-case attributes type-check.
+ */
+export type RailPassThroughProps = Omit<
+  RailProps,
+  "className" | "style" | "children"
+> & {
+  [key: `data-${string}`]: string | undefined;
+};
+
 /** Single-spine lifecycle Rail: an ordered dependency spine of state-encoded ports. */
 export function Rail({
   className,
