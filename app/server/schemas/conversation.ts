@@ -17,7 +17,6 @@ export type PipelineRunsEvent = z.infer<typeof pipelineRunsEventSchema>;
 export const CONVERSATION_CHANNELS = [
   "planning",
   "implementing",
-  "export",
   "review",
 ] as const;
 export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];

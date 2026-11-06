@@ -40,7 +40,6 @@ const ISSUE_DETAIL_TAB_LABELS = {
   outlines: "Outlines",
   planning: "Planning",
   implementing: "Implementing",
-  export: "Export",
   review: "Review",
 } as const;
 
@@ -72,13 +71,11 @@ export function diffTabForIssue(issue: Issue): boolean {
 
 /**
  * Page-level tab set for issue detail: Overview always; optional channel;
- * Export when a start has happened; Project keeps an Outlines catalog, then
- * supporting-doc preview tabs.
+ * Project keeps an Outlines catalog, then supporting-doc preview tabs.
  */
 export function tabsForIssueDetail(
   issue: Issue,
   parentKind?: IssueKind,
-  options?: { includeExport?: boolean },
 ): IssueDetailTab[] {
   const tabs: IssueDetailTab[] = [
     {
@@ -92,13 +89,6 @@ export function tabsForIssueDetail(
       key: channel,
       label: ISSUE_DETAIL_TAB_LABELS[channel],
       channel,
-    });
-  }
-  if (options?.includeExport) {
-    tabs.push({
-      key: "export",
-      label: ISSUE_DETAIL_TAB_LABELS.export,
-      channel: "export",
     });
   }
   if (agentsTabForIssue(issue, parentKind)) {
@@ -236,20 +226,13 @@ export function issueDetailTabNeedsBoundedShell(
 
 /**
  * Phone channel tabs take the viewport and hide the issue tab bar.
- * Export keeps Overview / Implementing / Export visible while the draft list
- * is closed; an open mobile draft reader clears the tab bar separately via
- * `exportDraftReaderOpen`.
  */
 export function mobileChannelChromeForTab(
   isMobile: boolean,
   active: IssueDetailTabKey,
   tabs: readonly IssueDetailTab[],
 ): boolean {
-  return (
-    isMobile &&
-    active !== "export" &&
-    issueDetailTabNeedsBoundedShell(active, tabs)
-  );
+  return isMobile && issueDetailTabNeedsBoundedShell(active, tabs);
 }
 
 /** Planning tab shows awaiting-human when the Idea awaits approval. */

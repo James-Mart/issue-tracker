@@ -1,8 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { ArrowLeft } from "lucide-react";
-import { offersExportChannel } from "@server/kind";
 import { isArchived } from "@server/services/archived-visibility";
 import type { IssueDetail, IssueKind, ProjectLabel } from "@server/schemas";
 import { ApiError } from "@/lib/api/errors";
@@ -26,7 +25,6 @@ import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
-import { exportTabIncluded, projectWorkspaceSet } from "../lib/export-tab";
 import { isImplementingWorkRoot } from "@server/services/implementing-launch";
 import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
@@ -68,7 +66,6 @@ import {
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
-import { ExportOverviewLaunch } from "./export-overview-launch";
 import { ImplementingOverviewLaunch } from "./implementing-launch-control";
 import { PlanningOverviewLaunch } from "./planning-launch-control";
 import { supportsAttachments } from "../lib/attachments";
@@ -121,16 +118,12 @@ function IssueOverviewPanel({
   catalog,
   projectId,
   parentKind,
-  showExportLaunch,
-  onExportTabVisible,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
   projectId: string;
   parentKind?: IssueKind;
-  showExportLaunch?: boolean;
-  onExportTabVisible?: (visible: boolean) => void;
 }) {
   const { data: list } = useIssuesWithArchived(isArchived(issue));
   const awaitingDirection =
@@ -160,12 +153,6 @@ function IssueOverviewPanel({
         <ImplementingOverviewLaunch
           issue={issue as ImplementingWorkRoot}
           parentKind={parentKind}
-        />
-      ) : null}
-      {showExportLaunch && onExportTabVisible ? (
-        <ExportOverviewLaunch
-          issue={issue}
-          onTabVisible={onExportTabVisible}
         />
       ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
@@ -204,24 +191,16 @@ function IssueDetailBody({
   catalog,
   projectId,
   parentKind,
+  tabs,
   compactChannelChrome,
-  exportTab,
-  showExportLaunch,
-  onExportTabVisible,
-  exportDraftReaderOpen,
-  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   upload?: UploadAttachmentMutation;
   catalog: ProjectLabel[];
   projectId: string;
   parentKind?: IssueKind;
+  tabs: readonly IssueDetailTab[];
   compactChannelChrome: boolean;
-  exportTab: boolean | "loading";
-  showExportLaunch: boolean;
-  onExportTabVisible: (visible: boolean) => void;
-  exportDraftReaderOpen: boolean;
-  onExportDraftReaderOpenChange: (open: boolean) => void;
 }) {
   return (
     <div
@@ -240,9 +219,7 @@ function IssueDetailBody({
         issue={issue}
         projectId={projectId}
         parentKind={parentKind}
-        exportTab={exportTab}
-        exportDraftReaderOpen={exportDraftReaderOpen}
-        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
+        tabs={tabs}
         overview={
           <IssueOverviewPanel
             issue={issue}
@@ -250,8 +227,6 @@ function IssueDetailBody({
             catalog={catalog}
             projectId={projectId}
             parentKind={parentKind}
-            showExportLaunch={showExportLaunch}
-            onExportTabVisible={onExportTabVisible}
           />
         }
       />
@@ -266,26 +241,18 @@ function IssueDetailAttachable({
   backLink,
   catalog,
   parentKind,
+  tabs,
   boundShell,
   compactChannelChrome,
-  exportTab,
-  showExportLaunch,
-  onExportTabVisible,
-  exportDraftReaderOpen,
-  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   projectId: string;
   backLink: ReactNode;
   catalog: ProjectLabel[];
   parentKind?: IssueKind;
+  tabs: readonly IssueDetailTab[];
   boundShell: boolean;
   compactChannelChrome: boolean;
-  exportTab: boolean | "loading";
-  showExportLaunch: boolean;
-  onExportTabVisible: (visible: boolean) => void;
-  exportDraftReaderOpen: boolean;
-  onExportDraftReaderOpenChange: (open: boolean) => void;
 }) {
   const upload = useUploadAttachment(issue.id);
   const { rootProps } = useIssueDetailFileUpload(upload);
@@ -310,12 +277,8 @@ function IssueDetailAttachable({
         catalog={catalog}
         projectId={projectId}
         parentKind={parentKind}
+        tabs={tabs}
         compactChannelChrome={compactChannelChrome}
-        exportTab={exportTab}
-        showExportLaunch={showExportLaunch}
-        onExportTabVisible={onExportTabVisible}
-        exportDraftReaderOpen={exportDraftReaderOpen}
-        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
       />
     </PageShell>
   );
@@ -325,7 +288,6 @@ function useIssueDetailShellFlags(
   issue: IssueDetail | undefined,
   tabs: readonly IssueDetailTab[],
   tabParam: string | null,
-  exportDraftReaderOpen: boolean,
 ): { boundShell: boolean; compactChannelChrome: boolean } {
   const isMobile = useIsMobile();
   return useMemo(() => {
@@ -337,14 +299,11 @@ function useIssueDetailShellFlags(
     }
     const active = resolveIssueDetailTab(tabParam, tabs);
     const boundShell = issueDetailTabNeedsBoundedShell(active, tabs);
-    const channelChrome = mobileChannelChromeForTab(isMobile, active, tabs);
     return {
       boundShell,
-      compactChannelChrome:
-        channelChrome ||
-        (isMobile && active === "export" && exportDraftReaderOpen),
+      compactChannelChrome: mobileChannelChromeForTab(isMobile, active, tabs),
     };
-  }, [exportDraftReaderOpen, issue, isMobile, tabParam, tabs]);
+  }, [issue, isMobile, tabParam, tabs]);
 }
 
 export function IssueDetailPage() {
@@ -372,49 +331,16 @@ export function IssueDetailPage() {
     [issue, projectId, byId],
   );
 
-  const kindEligible = Boolean(issue && offersExportChannel(issue, parentKind));
-  const workspaceKnown = list !== undefined;
-  const showExportLaunch =
-    kindEligible &&
-    list !== undefined &&
-    projectWorkspaceSet(list.issues, projectId);
-  const [exportReport, setExportReport] = useState<{
-    id: string;
-    visible: boolean;
-  } | null>(null);
-  const [exportDraftReaderOpen, setExportDraftReaderOpen] = useState(false);
-  const onExportTabVisible = useCallback((visible: boolean) => {
-    setExportReport((prev) =>
-      prev?.id === id && prev.visible === visible ? prev : { id, visible },
-    );
-  }, [id]);
-  const onExportDraftReaderOpenChange = useCallback((open: boolean) => {
-    setExportDraftReaderOpen((prev) => (prev === open ? prev : open));
-  }, []);
-  const exportTab: boolean | "loading" = !kindEligible
-    ? false
-    : !workspaceKnown || (showExportLaunch && exportReport?.id !== id)
-      ? "loading"
-      : showExportLaunch && exportReport
-        ? exportReport.visible
-        : false;
-
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const detailTabs = useMemo(
-    () =>
-      issue
-        ? tabsForIssueDetail(issue, parentKind, {
-            includeExport: exportTabIncluded(exportTab, tabParam),
-          })
-        : [],
-    [exportTab, issue, parentKind, tabParam],
+    () => (issue ? tabsForIssueDetail(issue, parentKind) : []),
+    [issue, parentKind],
   );
   const { boundShell, compactChannelChrome } = useIssueDetailShellFlags(
     issue,
     detailTabs,
     tabParam,
-    exportDraftReaderOpen,
   );
   useTabTitle(
     tabTitleEntityName(issue?.title, id),
@@ -468,13 +394,9 @@ export function IssueDetailPage() {
         backLink={backLink}
         catalog={catalog}
         parentKind={parentKind}
+        tabs={detailTabs}
         boundShell={boundShell}
         compactChannelChrome={compactChannelChrome}
-        exportTab={exportTab}
-        showExportLaunch={showExportLaunch}
-        onExportTabVisible={onExportTabVisible}
-        exportDraftReaderOpen={exportDraftReaderOpen}
-        onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
       />
       </>
     );
@@ -531,12 +453,8 @@ export function IssueDetailPage() {
           catalog={catalog}
           projectId={projectId}
           parentKind={parentKind}
+          tabs={detailTabs}
           compactChannelChrome={compactChannelChrome}
-          exportTab={exportTab}
-          showExportLaunch={showExportLaunch}
-          onExportTabVisible={onExportTabVisible}
-          exportDraftReaderOpen={exportDraftReaderOpen}
-          onExportDraftReaderOpenChange={onExportDraftReaderOpenChange}
         />
       ) : null}
     </PageShell>
