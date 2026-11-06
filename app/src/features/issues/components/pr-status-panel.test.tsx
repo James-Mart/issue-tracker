@@ -175,17 +175,17 @@ describe("PrStatusPanel merge control", () => {
       },
     };
     const mounted = mountPanel();
-    expect(mounted.container.textContent).toContain("Unknown");
+    expect(mounted.container.querySelector('[data-testid="pr-state"]')?.textContent).toBe(
+      "Open",
+    );
+    expect(mounted.container.textContent).not.toContain("Unknown");
     expect(
       mounted.container.querySelector('[data-testid="pr-merge-open"]'),
     ).toBeNull();
     expect(
       mounted.container.querySelector('[data-testid="pr-auto-merge-open"]'),
     ).toBeNull();
-    expect(mounted.container.textContent).not.toContain("Open on GitHub");
-    expect(mounted.container.textContent).not.toContain(
-      "Mergeability is still unknown",
-    );
+    expect(mounted.container.querySelector('[data-testid="pr-blocker"]')).toBeNull();
     expect(refreshLive).not.toHaveBeenCalled();
     act(() => {
       vi.advanceTimersByTime(UNKNOWN_MERGEABLE_REFETCH_MS);

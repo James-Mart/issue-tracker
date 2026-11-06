@@ -32,6 +32,7 @@ import {
   GitStackPanelStoryOverviewPart,
   type StoryGitStackModel,
 } from "./git-stack-panel";
+import { StoryWorktreeRowFromIssuesResponse } from "./story-worktree-row";
 import {
   RootMergeSettingsRows,
   rootMergeSettingsFor,
@@ -53,6 +54,7 @@ type RowRenderContext = {
   gitData?: IssuesResponse;
   storyGitSupplement?: IssueSupplement;
   storyGitModel?: StoryGitStackModel;
+  projectId?: string;
 };
 
 function renderOverviewPropertyRow(
@@ -206,7 +208,8 @@ function renderOverviewPropertyRow(
       if (issue.kind === "story") {
         const supplement = ctx.storyGitSupplement;
         const model = ctx.storyGitModel;
-        if (!supplement || !model) return null;
+        const projectId = ctx.projectId;
+        if (!supplement || !model || !projectId) return null;
         return (
           <GitStackPanelStoryOverviewPart
             key={`git-${gitPanel}`}
@@ -214,6 +217,16 @@ function renderOverviewPropertyRow(
             panel={gitPanel}
             supplement={supplement}
             model={model}
+            worktreeRow={
+              gitPanel === "fixed" ? (
+                <StoryWorktreeRowFromIssuesResponse
+                  issue={issue}
+                  projectId={projectId}
+                  supplement={supplement}
+                  data={data}
+                />
+              ) : undefined
+            }
           />
         );
       }
@@ -359,6 +372,7 @@ function StoryIssueMetaPanelLoaded({
         gitData: data,
         storyGitSupplement,
         storyGitModel,
+        projectId,
       }}
     />
   );

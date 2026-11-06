@@ -99,8 +99,8 @@ test.describe("PR delivery loop", () => {
 
     const panel = main.getByTestId("pr-status-panel");
     await expect(panel).toHaveAttribute("data-state", "ready");
-    await expect(panel.getByText("Ready for review")).toBeVisible();
-    await expect(panel.getByText("Mergeable")).toBeVisible();
+    await expect(panel.getByTestId("pr-state")).toHaveText("Open");
+    await expect(panel.getByTestId("pr-review")).toHaveText("Approved");
     await expect(panel.getByTestId("pr-merge-open")).toBeVisible();
 
     await panel.getByTestId("pr-merge-open").click();
@@ -132,7 +132,10 @@ test.describe("PR delivery loop", () => {
 
     const draftPanel = main.getByTestId("pr-status-panel");
     await expect(draftPanel).toHaveAttribute("data-state", "draft");
-    await expect(draftPanel.getByText("Draft", { exact: true })).toBeVisible();
+    await expect(draftPanel.getByTestId("pr-state")).toHaveText("Draft");
+    await expect(draftPanel.getByTestId("pr-review")).toHaveText(
+      "Awaiting review",
+    );
     await expect(draftPanel.getByTestId("pr-merge-open")).toHaveCount(0);
     await expect(draftPanel.getByTestId("pr-auto-merge-open")).toHaveCount(0);
     await expect(draftPanel.getByText(/mark ready|un-?draft/i)).toHaveCount(0);
@@ -140,7 +143,7 @@ test.describe("PR delivery loop", () => {
       draftPanel.getByText(
         "This pull request is a draft and must be marked ready on GitHub.",
       ),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(draftPanel.getByTestId("pr-merge-github-link")).toHaveCount(0);
     await expect(draftPanel.getByText("Open on GitHub")).toHaveCount(0);
     await expect(draftPanel.getByTestId("pr-number-link")).toHaveAttribute(

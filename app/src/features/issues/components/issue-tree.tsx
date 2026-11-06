@@ -67,7 +67,12 @@ import { issueRailNodeState } from "../lib/rail-state";
 import { RowPrStoreProvider, useRowPrData } from "../lib/row-pr-store";
 import { isRowDraggable } from "../lib/story-tree-dnd-logic";
 import { ArchiveIssueButton } from "./archive-issue-button";
-import { EpicAxisChips, StoryAxisChips } from "./axis-chips";
+import {
+  EpicAxisChips,
+  GATE_CHIP_PREFIX,
+  axisChipLabel,
+  StoryAxisChips,
+} from "./axis-chips";
 import { IssueArchiveDeleteMenuItems } from "./issue-archive-delete-menu-items";
 import {
   PrChip,
@@ -346,16 +351,16 @@ export function treeRowTouchChipLabels(
       labels.push(STORY_STATUS_LABEL[derived.storyStatus]);
     }
     if (issue.review) {
-      labels.push(`review: ${REVIEW_LABEL[issue.review]}`);
+      labels.push(axisChipLabel(GATE_CHIP_PREFIX, REVIEW_LABEL[issue.review]));
       if (derived?.reviewCurrent === false) {
-        labels.push("review: stale");
+        labels.push(axisChipLabel(GATE_CHIP_PREFIX, "stale"));
       }
     }
     if (issue.needsRebase) {
-      labels.push(`needsRebase: ${issue.needsRebase}`);
+      labels.push(axisChipLabel("needsRebase", issue.needsRebase));
     }
     if (issue.retro) {
-      labels.push(`retro: ${RETRO_LABEL[issue.retro]}`);
+      labels.push(axisChipLabel("retro", RETRO_LABEL[issue.retro]));
     }
   }
 
@@ -364,7 +369,7 @@ export function treeRowTouchChipLabels(
       labels.push(EPIC_STATUS_LABEL[derived.epicStatus]);
     }
     if (issue.retro) {
-      labels.push(`retro: ${RETRO_LABEL[issue.retro]}`);
+      labels.push(axisChipLabel("retro", RETRO_LABEL[issue.retro]));
     }
   }
 

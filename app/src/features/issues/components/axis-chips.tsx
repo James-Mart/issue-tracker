@@ -24,6 +24,16 @@ export type AxisChip = {
   prefix?: string;
 };
 
+/**
+ * Tracker review chip prefix, so the chip reads apart from the GitHub review
+ * state on the pull request row.
+ */
+export const GATE_CHIP_PREFIX = "gate";
+
+export function axisChipLabel(prefix: string, label: string): string {
+  return `${prefix}: ${label}`;
+}
+
 /** Outline stamp is older than the outline's latest version. */
 export const BEHIND_AXIS_CHIP: AxisChip = {
   variant: "warn",
@@ -48,7 +58,7 @@ export function AxisChips({
           : chip.label;
         return (
           <Badge key={key} variant={chip.variant}>
-            {chip.prefix ? `${chip.prefix}: ${chip.label}` : chip.label}
+            {chip.prefix ? axisChipLabel(chip.prefix, chip.label) : chip.label}
           </Badge>
         );
       })}
@@ -84,14 +94,14 @@ export function StoryAxisChips({
     chips.push({
       variant: REVIEW_BADGE_VARIANT[review],
       label: REVIEW_LABEL[review],
-      prefix: "review",
+      prefix: GATE_CHIP_PREFIX,
     });
   }
   if (reviewStale) {
     chips.push({
       variant: "warn",
       label: "stale",
-      prefix: "review",
+      prefix: GATE_CHIP_PREFIX,
     });
   }
   if (needsRebase) {

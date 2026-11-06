@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
+/** Continuation content under a MetaRow: aligns with the value column (label width + row gap). */
+export const META_ROW_VALUE_CONTINUATION_CLASS =
+  "pl-[calc(9rem+0.75rem)] max-sm:pl-0";
+
 /** Aligned label/value row for the detail metadata block. */
 export function MetaRow({
   label,
