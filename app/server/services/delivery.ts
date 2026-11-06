@@ -2,12 +2,10 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { IssueError } from "./errors.js";
+import { githubPullRequestUrl } from "./github-pr-url.js";
 import { readAll, readIssueOrThrow } from "./issues.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 import { subtreeIds } from "./subtree.js";
-
-const GITHUB_PR_URL =
-  /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/;
 
 /** @internal Test seam for stubbing gh spawn. */
 export type GhSpawner = (
@@ -111,18 +109,14 @@ export function parsePrUrl(prUrl: string): {
   repo: string;
   number: number;
 } {
-  const match = GITHUB_PR_URL.exec(prUrl);
-  if (!match) {
+  const parsed = githubPullRequestUrl(prUrl);
+  if (!parsed) {
     throw new IssueError(
       "not-github-pr-url",
       `not a GitHub pull request URL: ${prUrl}`,
     );
   }
-  return {
-    owner: match[1]!,
-    repo: match[2]!,
-    number: Number(match[3]!),
-  };
+  return parsed;
 }
 
 const prCommentSchema = z.object({

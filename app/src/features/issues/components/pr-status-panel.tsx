@@ -1,23 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ShellInlineFault } from "@/app/shell-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api/errors";
 import type { IssueDetail } from "@server/schemas";
-import type {
-  PrFacts,
-  PrUnavailable,
-  ProjectPrsResponse,
-  ProjectPrSyncStatus,
-} from "@server/services/delivery";
+import type { PrFacts, PrUnavailable } from "@server/services/delivery";
+import { githubPullRequestUrl } from "@server/services/github-pr-url";
 import { issuesKeys } from "../api/keys";
 import { useMergeStory } from "../api/mutations";
 import { refreshProjectPullRequestsLive } from "../api/pr-sync-live";
 import { useProjectPullRequestsQuery } from "../api/queries";
-import { formatRelativeUpdatedAt } from "../lib/format-relative-updated-at";
 import { mergeControlFor } from "../lib/merge-control";
+import {
+  pullRequestSummary,
+  type PullRequestSummary,
+} from "../lib/pull-request-summary";
 import { CompactMetaItem } from "./compact-meta";
 import { MergePrDialog } from "./merge-pr-dialog";
 import { MetaFieldActions } from "./meta-row";
@@ -29,57 +25,10 @@ type StoryWithPr = Extract<IssueDetail, { kind: "story" }> & {
   prUrl: string;
 };
 
-const GH_ERROR_CODES = [
-  "gh-missing",
-  "gh-unauthenticated",
-  "gh-failed",
-  "not-github-pr-url",
-] as const;
-
-type GhErrorCode = (typeof GH_ERROR_CODES)[number];
-
-function isGhErrorCode(code: string): code is GhErrorCode {
-  return (GH_ERROR_CODES as readonly string[]).includes(code);
-}
-
-function apiErrorCode(error: unknown): string | undefined {
-  if (!(error instanceof ApiError)) return undefined;
-  const body = error.body;
-  if (
-    body &&
-    typeof body === "object" &&
-    "code" in body &&
-    typeof (body as { code: unknown }).code === "string"
-  ) {
-    return (body as { code: string }).code;
-  }
-  return undefined;
-}
-
 function isPrUnavailable(
   value: PrFacts | PrUnavailable,
 ): value is PrUnavailable {
   return "reason" in value;
-}
-
-/** Muted sync line: last error, otherwise when the cache was written. */
-function prSyncStatusLine(
-  sync: ProjectPrSyncStatus | undefined,
-  nowMs: number = Date.now(),
-): string | null {
-  if (sync?.lastError) return sync.lastError.message;
-  if (!sync?.lastSyncedAt) return null;
-  return `Synced with GitHub ${formatRelativeUpdatedAt(sync.lastSyncedAt, nowMs)}`;
-}
-
-function PrSyncLine({ sync }: { sync: ProjectPrSyncStatus | undefined }) {
-  const text = prSyncStatusLine(sync);
-  if (!text) return null;
-  return (
-    <p className="text-[13px] text-muted-foreground" data-testid="pr-sync-line">
-      {text}
-    </p>
-  );
 }
 
 function isUnknownMergeable(
@@ -92,156 +41,9 @@ function isUnknownMergeable(
   );
 }
 
-function ghErrorCopy(code: GhErrorCode, message: string): {
-  title: string;
-  hint: string;
-} {
-  switch (code) {
-    case "gh-unauthenticated":
-      return {
-        title: message,
-        hint: "Set GH_TOKEN or run gh auth login, then refresh.",
-      };
-    case "gh-missing":
-      return {
-        title: message,
-        hint: "Install the GitHub CLI (gh) on PATH, then refresh.",
-      };
-    case "gh-failed":
-      return {
-        title: message,
-        hint: "Check that gh works in the project workspace, then refresh.",
-      };
-    case "not-github-pr-url":
-      return {
-        title: message,
-        hint: "Update the Story pull request URL to a github.com/…/pull/N link.",
-      };
-  }
-}
-
-function draftLabel(isDraft: boolean): string {
-  return isDraft ? "Draft" : "Ready for review";
-}
-
-function readinessLabel(isDraft: boolean, storyMerged: boolean): string {
-  if (storyMerged) return "Merged";
-  return draftLabel(isDraft);
-}
-
-function mergeableLabel(mergeable: PrFacts["mergeable"]): string {
-  if (mergeable === "mergeable") return "Mergeable";
-  if (mergeable === "conflicting") return "Conflicting";
-  return "Unknown";
-}
-
-function checksLabel(checks: PrFacts["checks"]): string {
-  if (checks.state === "success") {
-    return checks.total > 0 ? `Success · ${checks.total}` : "Success";
-  }
-  if (checks.state === "failure") {
-    return checks.failing > 0
-      ? `Failure · ${checks.failing} failing`
-      : "Failure";
-  }
-  if (checks.state === "pending") {
-    return checks.pending > 0
-      ? `Pending · ${checks.pending}`
-      : "Pending";
-  }
-  return "None";
-}
-
-function reviewLabel(decision: PrFacts["reviewDecision"]): string {
-  if (decision === "approved") return "Approved";
-  if (decision === "changes-requested") return "Changes requested";
-  if (decision === "review-required") return "Review required";
-  return "No review decision";
-}
-
-/** Three most recent conversation comments, newest first. */
-export function recentPrComments(
-  comments: PrFacts["comments"],
-): PrFacts["comments"] {
-  return comments.slice(-3).reverse();
-}
-
-function PrCommentEntry({ comment }: { comment: PrFacts["comments"][number] }) {
-  const author = comment.author ?? "Unknown";
-  return (
-    <li
-      className="flex flex-col gap-1 border-b border-border pb-2 last:border-b-0 last:pb-0"
-      data-testid="pr-comment-entry"
-    >
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px]">
-        <span className="font-medium text-foreground/80">{author}</span>
-        <a
-          href={comment.url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary hover:underline"
-          data-testid="pr-comment-link"
-        >
-          comment
-        </a>
-      </div>
-      <p className="whitespace-pre-wrap text-[13px] text-foreground">
-        {comment.body}
-      </p>
-    </li>
-  );
-}
-
-function PrCommentsSection({ facts }: { facts: PrFacts }) {
-  const recent = recentPrComments(facts.comments);
-  return (
-    <CompactMetaItem
-      label="Comments"
-      value={
-        <div
-          className="flex flex-col gap-2"
-          data-testid="pr-comments-section"
-        >
-          <span className="font-mono text-[13px] tabular-nums">
-            {facts.commentCount}
-          </span>
-          {facts.commentCount === 0 ? (
-            <span
-              className="text-[13px] text-muted-foreground"
-              data-testid="pr-comments-empty"
-            >
-              No conversation comments.
-            </span>
-          ) : (
-            <>
-              <ul className="flex flex-col gap-2">
-                {recent.map((comment) => (
-                  <PrCommentEntry key={comment.url} comment={comment} />
-                ))}
-              </ul>
-              {facts.commentCount > 3 ? (
-                <a
-                  href={facts.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[13px] text-primary hover:underline"
-                  data-testid="pr-comments-conversation-link"
-                >
-                  View all conversation comments
-                </a>
-              ) : null}
-            </>
-          )}
-        </div>
-      }
-    />
-  );
-}
-
-function draftBadgeVariant(
-  isDraft: boolean,
-): "warn" | "done" {
-  return isDraft ? "warn" : "done";
+/** Number from a stored Story URL when cached facts have not arrived. */
+function pullRequestNumberFromUrl(url: string): number | undefined {
+  return githubPullRequestUrl(url)?.number;
 }
 
 function RefreshControl({
@@ -252,12 +54,16 @@ function RefreshControl({
   busy?: boolean;
 }) {
   const qc = useQueryClient();
+  const label = busy
+    ? "Refreshing pull request status"
+    : "Refresh pull request status";
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="Refresh pull request status"
+      title={label}
+      aria-label={label}
       data-testid="pr-status-refresh"
       disabled={busy}
       onClick={() => {
@@ -271,43 +77,53 @@ function RefreshControl({
   );
 }
 
-function PanelHeader({
-  projectId,
-  busy,
-  trailing,
+function PrNumberLink({
+  url,
+  number,
 }: {
-  projectId: string;
-  busy?: boolean;
-  trailing?: ReactNode;
+  url: string;
+  number: number | undefined;
 }) {
-  return (
-    <CompactMetaItem
-      label="Pull request"
-      value={
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <div className="min-w-0">{trailing}</div>
-          <RefreshControl projectId={projectId} busy={busy} />
-        </div>
-      }
-    />
-  );
-}
-
-function PrNumberLink({ url, number }: { url: string; number: number }) {
+  const unresolved = number === undefined;
   return (
     <a
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="font-mono text-[13px] tabular-nums text-primary hover:underline"
+      title={unresolved ? url : undefined}
+      className={
+        unresolved
+          ? "block min-w-0 max-w-full truncate font-mono text-[13px] text-primary hover:underline"
+          : "font-mono text-[13px] tabular-nums text-primary hover:underline"
+      }
       data-testid="pr-number-link"
     >
-      #{number}
+      {unresolved ? url : `#${number}`}
     </a>
   );
 }
 
-function MergeControl({
+function PullRequestSummaryText({ summary }: { summary: PullRequestSummary }) {
+  return (
+    <span className="min-w-0" data-testid="pr-summary">
+      <PrNumberLink url={summary.url} number={summary.number} />
+      {" · "}
+      <span data-testid="pr-state">{summary.state}</span>
+      {" · "}
+      <span data-testid="pr-review">{summary.review}</span>
+      {summary.blocker ? (
+        <>
+          {" · "}
+          <span className="text-destructive" data-testid="pr-blocker">
+            {summary.blocker}
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function MergeAction({
   storyId,
   projectId,
   facts,
@@ -318,17 +134,8 @@ function MergeControl({
 }) {
   const [open, setOpen] = useState(false);
   const mergeStory = useMergeStory(projectId);
-  // Unknown mergeability is transient; the panel refetches instead of treating it as a gate.
-  if (facts.mergeable === "unknown") return null;
   const control = mergeControlFor(facts);
-
-  if (control.mode === "unavailable") {
-    return (
-      <span className="text-[13px] text-foreground" data-testid="pr-merge-unavailable">
-        {control.reason}
-      </span>
-    );
-  }
+  if (control.mode === "unavailable") return null;
 
   const auto = control.mode === "auto";
   return (
@@ -362,65 +169,53 @@ function MergeControl({
   );
 }
 
-function PrFactsRows({
-  facts,
-  storyId,
+function panelDataState(
+  loading: boolean,
+  summary: PullRequestSummary | undefined,
+): string {
+  if (loading) return "loading";
+  if (!summary) return "unavailable";
+  if (summary.state === "Draft") return "draft";
+  if (summary.blocker) return "blocked";
+  if (summary.state === "Open") return "ready";
+  return summary.state.toLowerCase();
+}
+
+function PullRequestRow({
   projectId,
-  storyMerged,
+  busy,
+  summary,
+  fallbackUrl,
+  merge,
 }: {
-  facts: PrFacts;
-  storyId: string;
   projectId: string;
-  storyMerged: boolean;
+  busy: boolean;
+  summary: PullRequestSummary | undefined;
+  fallbackUrl: string;
+  merge: ReactNode;
 }) {
   return (
-    <>
-      <CompactMetaItem
-        label="Readiness"
-        value={
-          <Badge variant={draftBadgeVariant(facts.isDraft)}>
-            {readinessLabel(facts.isDraft, storyMerged)}
-          </Badge>
-        }
-      />
-      {storyMerged ? null : (
-        <CompactMetaItem
-          label="Mergeability"
-          value={
-            <MetaFieldActions>
-              <span>{mergeableLabel(facts.mergeable)}</span>
-              {facts.mergeStateStatus ? (
-                <span className="font-mono text-[12px] text-muted-foreground">
-                  {facts.mergeStateStatus}
-                </span>
-              ) : null}
-              <MergeControl
-                storyId={storyId}
-                projectId={projectId}
-                facts={facts}
-              />
-            </MetaFieldActions>
-          }
-        />
-      )}
-      <CompactMetaItem label="Checks" value={checksLabel(facts.checks)} />
-      <CompactMetaItem
-        label="Review"
-        value={reviewLabel(facts.reviewDecision)}
-      />
-      <PrCommentsSection facts={facts} />
-    </>
+    <CompactMetaItem
+      label="Pull request"
+      value={
+        <MetaFieldActions>
+          {summary ? (
+            <PullRequestSummaryText summary={summary} />
+          ) : (
+            <PrNumberLink
+              url={fallbackUrl}
+              number={pullRequestNumberFromUrl(fallbackUrl)}
+            />
+          )}
+          <RefreshControl projectId={projectId} busy={busy} />
+          {merge}
+        </MetaFieldActions>
+      }
+    />
   );
 }
 
-function entryForStory(
-  data: ProjectPrsResponse | undefined,
-  storyId: string,
-): PrFacts | PrUnavailable | undefined {
-  return data?.prs[storyId];
-}
-
-/** Live PR status rows for a Story that already has a stored `prUrl`. */
+/** One fixed-panel pull request row for a Story that already has a stored `prUrl`. */
 export function PrStatusPanel({
   story,
   projectId,
@@ -429,9 +224,13 @@ export function PrStatusPanel({
   projectId: string;
 }) {
   const qc = useQueryClient();
-  const { data, error, isLoading, isFetching } =
+  const { data, isLoading, isFetching } =
     useProjectPullRequestsQuery(projectId);
-  const entry = entryForStory(data, story.id);
+  const entry = data?.prs[story.id];
+  const facts = entry && !isPrUnavailable(entry) ? entry : undefined;
+  const summary = facts
+    ? pullRequestSummary(facts, story.merged)
+    : undefined;
   const pollUnknown = isUnknownMergeable(entry);
 
   useEffect(() => {
@@ -442,97 +241,26 @@ export function PrStatusPanel({
     return () => window.clearInterval(id);
   }, [pollUnknown, projectId, qc]);
 
-  if (isLoading) {
-    return (
-      <div data-testid="pr-status-panel" data-state="loading">
-        <PanelHeader
-          projectId={projectId}
-          busy
-          trailing={
-            <span className="text-muted-foreground">Loading pull request…</span>
-          }
-        />
-      </div>
-    );
-  }
-
-  if (error) {
-    const code = apiErrorCode(error);
-    const copy =
-      code && isGhErrorCode(code)
-        ? ghErrorCopy(code, error.message)
-        : {
-            title: error.message,
-            hint: "Refresh to try again.",
-          };
-    return (
-      <div
-        data-testid="pr-status-panel"
-        data-state="error"
-        data-error-code={code ?? "unknown"}
-      >
-        <PanelHeader projectId={projectId} busy={isFetching} />
-        <ShellInlineFault message={copy.title} hint={copy.hint} />
-        <PrSyncLine sync={data?.sync} />
-      </div>
-    );
-  }
-
-  if (!entry) {
-    return (
-      <div data-testid="pr-status-panel" data-state="missing">
-        <PanelHeader projectId={projectId} busy={isFetching} />
-        <ShellInlineFault
-          message="No cached pull request facts for this Story."
-          hint="Facts appear when a sync pass matches this pull request."
-        />
-        <PrSyncLine sync={data?.sync} />
-      </div>
-    );
-  }
-
-  if (isPrUnavailable(entry)) {
-    return (
-      <div data-testid="pr-status-panel" data-state="not-found">
-        <PanelHeader
-          projectId={projectId}
-          busy={isFetching}
-          trailing={
-            <Badge variant="blocked">Unavailable</Badge>
-          }
-        />
-        <ShellInlineFault
-          message="The recorded pull request URL no longer resolves on GitHub."
-          hint="Confirm the PR still exists, or update the Story pull request URL."
-        />
-        <PrSyncLine sync={data?.sync} />
-      </div>
-    );
-  }
-
-  const blocked =
-    entry.mergeable === "conflicting" ||
-    entry.checks.state === "failure" ||
-    entry.reviewDecision === "changes-requested" ||
-    entry.mergeStateStatus.toUpperCase() === "BLOCKED";
-
   return (
     <div
       data-testid="pr-status-panel"
-      data-state={entry.isDraft ? "draft" : blocked ? "blocked" : "ready"}
+      data-state={panelDataState(isLoading, summary)}
     >
-      <PanelHeader
+      <PullRequestRow
         projectId={projectId}
-        busy={isFetching}
-        trailing={<PrNumberLink url={entry.url} number={entry.number} />}
+        busy={isLoading || isFetching}
+        summary={summary}
+        fallbackUrl={story.prUrl}
+        merge={
+          facts && summary?.merge ? (
+            <MergeAction
+              storyId={story.id}
+              projectId={projectId}
+              facts={facts}
+            />
+          ) : null
+        }
       />
-      <PrFactsRows
-        facts={entry}
-        storyId={story.id}
-        projectId={projectId}
-        storyMerged={story.merged}
-      />
-      <PrSyncLine sync={data?.sync} />
     </div>
   );
 }
