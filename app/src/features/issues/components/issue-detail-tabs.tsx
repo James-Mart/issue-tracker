@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { ConversationChannel, IdeaStatus, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
 import { TabButton } from "@/components/ui/tab-button";
+import { TabCountPill } from "@/components/ui/tab-count-pill";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
 import { isArchived } from "@server/services/archived-visibility";
@@ -416,12 +417,7 @@ function IssueTabButton({
     >
       {children}
       {count != null ? (
-        <span
-          className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold tabular-nums leading-none text-muted-foreground"
-          data-tab-count={count}
-        >
-          {count}
-        </span>
+        <TabCountPill data-tab-count={count}>{count}</TabCountPill>
       ) : null}
       <RosterActiveRunIndicator activeRun={indicator === "active-run"} />
     </TabButton>
