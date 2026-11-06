@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
@@ -83,27 +83,18 @@ function MetaLine({ clauses }: { clauses: ReviewMetaPart[][] }) {
   );
 }
 
-function reviewSourceId(item: ReviewHomeReview | ReviewHomeArchived): string {
-  const id = [item.review.story, item.review.pr ? `#${item.review.pr.number}` : undefined]
-    .filter((part): part is string => Boolean(part))
-    .join(" ");
-  // A persisted review can omit both sources; the row still needs a label.
-  return id || item.review.id;
-}
-
-function reviewHomeIdentity(item: ReviewHomeReview | ReviewHomeArchived): {
+/** Story/PR title for a review home row — secondary id line is omitted in the UI. */
+function reviewHomeTitle(item: ReviewHomeReview | ReviewHomeArchived): {
   title: string;
-  id: string;
   missing: boolean;
 } {
-  const id = reviewSourceId(item);
   if (item.review.story && item.story) {
-    return { title: item.story.title, id, missing: false };
+    return { title: item.story.title, missing: false };
   }
   if (isPullRequestOnlyReview(item.review)) {
-    return { title: item.review.title, id, missing: false };
+    return { title: item.review.title, missing: false };
   }
-  return { title: "Story missing", id, missing: true };
+  return { title: "Story missing", missing: true };
 }
 
 function useReviewHomeProgress(
@@ -111,8 +102,10 @@ function useReviewHomeProgress(
   review: ReviewRecordView,
   pending: ReviewMetaPart[][],
   loaded: (progress: ReviewProgress) => ReviewMetaPart[][],
+  options: { loadProgress?: boolean } = {},
 ) {
-  const progress = useReviewProgressQuery(projectId, review.id);
+  const loadProgress = options.loadProgress ?? true;
+  const progress = useReviewProgressQuery(projectId, review.id, { enabled: loadProgress });
   return {
     clauses: progress.data ? loaded(progress.data) : pending,
     error: progress.error,
@@ -126,7 +119,7 @@ function OpenReviewRow({
   projectId: string;
   item: ReviewHomeReview;
 }) {
-  const identity = reviewHomeIdentity(item);
+  const rowTitle = reviewHomeTitle(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
@@ -141,11 +134,7 @@ function OpenReviewRow({
           data-testid="review-home-open-row"
           className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ReviewIdentity
-            title={identity.title}
-            id={identity.id}
-            missing={identity.missing}
-          />
+          <ReviewIdentity title={rowTitle.title} missing={rowTitle.missing} />
           <MetaLine clauses={clauses} />
         </Link>
         {error ? <ReviewProgressFault /> : null}
@@ -193,18 +182,21 @@ function ArchivedReviewRow({
   item,
   reopening,
   onReopen,
+  loadProgress,
 }: {
   projectId: string;
   item: ReviewHomeArchived;
   reopening: boolean;
   onReopen: () => void;
+  loadProgress: boolean;
 }) {
-  const identity = reviewHomeIdentity(item);
+  const rowTitle = reviewHomeTitle(item);
   const { clauses, error } = useReviewHomeProgress(
     projectId,
     item.review,
     archivedReviewPendingMeta(item.review),
     (progress) => archivedReviewMeta(item.review, progress),
+    { loadProgress },
   );
 
   return (
@@ -217,11 +209,7 @@ function ArchivedReviewRow({
           to={reviewIssuePath(projectId, item.review.id)}
           className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ReviewIdentity
-            title={identity.title}
-            id={identity.id}
-            missing={identity.missing}
-          />
+          <ReviewIdentity title={rowTitle.title} missing={rowTitle.missing} />
         </Link>
         <MetaLine clauses={clauses} />
         {error ? <ReviewProgressFault /> : null}
@@ -256,6 +244,7 @@ function ReviewHomeLists({
     () => reviewHomeLists(projectId, issues, reviews),
     [issues, projectId, reviews],
   );
+  const [archivedSectionOpen, setArchivedSectionOpen] = useState(false);
 
   const startReview = (storyId: string) => {
     void open.mutateAsync(storyId).then(
@@ -318,7 +307,11 @@ function ReviewHomeLists({
       </section>
 
       <section aria-labelledby="review-home-archived-heading">
-        <details data-testid="review-home-archived" className="group">
+        <details
+          data-testid="review-home-archived"
+          className="group"
+          onToggle={(event) => setArchivedSectionOpen(event.currentTarget.open)}
+        >
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 marker:content-none [&::-webkit-details-marker]:hidden">
             <ChevronRight
               aria-hidden
@@ -345,6 +338,7 @@ function ReviewHomeLists({
                     item={item}
                     reopening={reopen.isPending && reopen.variables === item.review.id}
                     onReopen={() => reopen.mutate(item.review.id)}
+                    loadProgress={archivedSectionOpen}
                   />
                 ))}
               </ul>
