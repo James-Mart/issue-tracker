@@ -20,6 +20,7 @@ import {
   TaskGitMetaScalars,
 } from "./issue-git-meta-scalars";
 import { PrStatusPanel } from "./pr-status-panel";
+import { StoryWorktreeRowFromIssuesResponse } from "./story-worktree-row";
 import {
   RootMergeSettingsRows,
   rootMergeSettingsFor,
@@ -76,6 +77,7 @@ function renderStoryGitPanel(
   panel: GitStackPanelSection,
   supplement: IssueSupplement,
   model: StoryGitStackModel,
+  worktreeRow: ReactNode,
 ): ReactNode {
   const {
     mergeBase,
@@ -108,6 +110,7 @@ function renderStoryGitPanel(
           supplement={supplement}
         />
         {prNode}
+        {worktreeRow}
       </>
     );
   }
@@ -151,6 +154,7 @@ function renderStoryGitPanel(
       />
       {hasMergeSettings && locked ? settingsNode : null}
       {prNode}
+      {worktreeRow}
     </>
   );
 }
@@ -161,13 +165,22 @@ export function GitStackPanelStoryOverviewPart({
   panel,
   supplement,
   model,
+  worktreeRow,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   panel: "editable" | "fixed";
   supplement: IssueSupplement;
   model: StoryGitStackModel;
+  /** When set, rendered after the pull request row for `panel="fixed"` only. */
+  worktreeRow?: ReactNode;
 }) {
-  return renderStoryGitPanel(issue, panel, supplement, model);
+  return renderStoryGitPanel(
+    issue,
+    panel,
+    supplement,
+    model,
+    worktreeRow ?? null,
+  );
 }
 
 function GitStackPanelStoryWithHook({
@@ -186,7 +199,15 @@ function GitStackPanelStoryWithHook({
     () => buildStoryGitStackModel(issue, data, projectId),
     [issue, data, projectId],
   );
-  return renderStoryGitPanel(issue, panel, supplement, model);
+  const worktreeRow = (
+    <StoryWorktreeRowFromIssuesResponse
+      issue={issue}
+      projectId={projectId}
+      supplement={supplement}
+      data={data}
+    />
+  );
+  return renderStoryGitPanel(issue, panel, supplement, model, worktreeRow);
 }
 
 function GitStackPanelTask({

@@ -8,7 +8,7 @@ import {
   WORKTREE_REMOVE_DISABLED_REASON,
   worktreeRemoveRetainedConfirm,
 } from "../lib/worktree-card";
-import { StoryWorktreeCard } from "./story-worktree-card";
+import { StoryWorktreeRow } from "./story-worktree-row";
 
 const queryState = vi.hoisted(() => ({
   issues: [] as IssueRecord[],
@@ -16,12 +16,21 @@ const queryState = vi.hoisted(() => ({
   worktrees: {} as Record<string, DerivedWorktree>,
 }));
 
+function testSupplement(issues: IssueRecord[]) {
+  return {
+    byId: new Map(issues.map((i) => [i.id, i])),
+    missingIds: [] as const,
+    failedIds: new Set<string>(),
+    accept: vi.fn(),
+    reject: vi.fn(),
+    listReady: true,
+    messageFor: () => undefined as string | undefined,
+  };
+}
+
 const removeMutate = vi.fn();
 
 vi.mock("../api/queries", () => ({
-  useIssuesQuery: () => ({
-    data: { issues: queryState.issues, derived: queryState.derived },
-  }),
   useProjectWorktreesQuery: () => ({
     data: { worktrees: queryState.worktrees },
     isError: false,
@@ -96,7 +105,7 @@ function actionButton(
   return root.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement;
 }
 
-function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
+function mountRow(issue: Extract<IssueDetail, { kind: "story" }>): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -112,7 +121,12 @@ function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
           <Route
             path="/projects/:projectId/issues/:id"
             element={
-              <StoryWorktreeCard issue={issue} projectId="issue-tracker" />
+              <StoryWorktreeRow
+                issue={issue}
+                projectId="issue-tracker"
+                supplement={testSupplement(queryState.issues)}
+                liveRun={queryState.derived[issue.id]?.liveRun === true}
+              />
             }
           />
         </Routes>
@@ -130,7 +144,7 @@ afterEach(() => {
   removeMutate.mockReset();
 });
 
-describe("StoryWorktreeCard", () => {
+describe("StoryWorktreeRow", () => {
   it("confirms retained remove with discard and the named counts", () => {
     const issue = story({ merged: true });
     seed(
@@ -143,7 +157,7 @@ describe("StoryWorktreeCard", () => {
         atRiskCommitCount: 1,
       }),
     );
-    const { container } = mountCard(issue);
+    const { container } = mountRow(issue);
 
     act(() => {
       actionButton(container, "story-worktree-remove").click();
@@ -166,7 +180,7 @@ describe("StoryWorktreeCard", () => {
   it("disables remove beside a readable reason while a live run holds the Story", () => {
     const issue = story();
     seed(issue, worktree({ exists: true, path: PATH }), true);
-    const { container } = mountCard(issue);
+    const { container } = mountRow(issue);
 
     const remove = actionButton(container, "story-worktree-remove");
     expect(remove.disabled).toBe(true);

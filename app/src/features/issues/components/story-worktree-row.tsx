@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, FolderGit2, RotateCw } from "lucide-react";
+import { Check, Copy, RotateCw } from "lucide-react";
 import { toast } from "sonner";
-import type { IssueDetail, IssueRecord } from "@server/schemas";
+import type { IssueDetail, IssuesResponse } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/errors";
+import { cn } from "@/lib/utils/cn";
 import {
   useRemoveStoryWorktree,
   useSetupStoryWorktree,
 } from "../api/mutations";
-import { useIssuesQuery, useProjectWorktreesQuery } from "../api/queries";
-import {
-  IssueLinkResolution,
-  type IssueSupplement,
-  useSupplementedById,
-} from "../hooks/use-supplemented-by-id";
+import { useProjectWorktreesQuery } from "../api/queries";
+import { type IssueSupplement } from "../hooks/use-supplemented-by-id";
 import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
@@ -27,8 +24,9 @@ import {
   type WorktreeCardKind,
   type WorktreeCardModel,
 } from "../lib/worktree-card";
-import { DetailEyebrow } from "./detail-section";
+import { CompactMetaItem } from "./compact-meta";
 import { IssueLink } from "./issue-link";
+import { MetaFieldActions, META_ROW_VALUE_CONTINUATION_CLASS } from "./meta-row";
 import { RemoveWorktreeConfirmDialog } from "./remove-worktree-confirm-dialog";
 
 type StoryDetail = Extract<IssueDetail, { kind: "story" }>;
@@ -108,29 +106,27 @@ function WorktreePath({ path }: { path: string }) {
 
 function parentStoryTitle(
   stackedOn: string | undefined,
-  issues: IssueRecord[],
+  supplement: IssueSupplement,
 ): string | undefined {
   if (!stackedOn) return undefined;
-  return issues.find((issue) => issue.id === stackedOn)?.title ?? stackedOn;
+  return supplement.byId.get(stackedOn)?.title ?? stackedOn;
 }
 
-function CardBody({
+function RowBody({
   model,
   issue,
-  issues,
   supplement,
 }: {
   model: WorktreeCardModel;
   issue: StoryDetail;
-  issues: IssueRecord[];
   supplement: IssueSupplement;
 }) {
   if (model.kind === "parent-branch") {
-    const title = parentStoryTitle(issue.stackedOn, issues);
+    const title = parentStoryTitle(issue.stackedOn, supplement);
     return (
-      <p
+      <span
         data-testid="story-worktree-parent-branch"
-        className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground"
+        className="min-w-0 text-sm leading-snug text-muted-foreground"
       >
         {issue.stackedOn ? (
           <IssueLink
@@ -144,44 +140,25 @@ function CardBody({
           "The Story this one is stacked on"
         )}{" "}
         {WORKTREE_PARENT_BRANCH_SUFFIX}
-      </p>
+      </span>
     );
   }
 
   if (model.kind === "setup-failed") {
     return (
-      <div className="flex flex-col gap-3">
-        <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          {WORKTREE_SETUP_FAILED_COPY}
-        </p>
-        {model.path ? <WorktreePath path={model.path} /> : null}
-        {model.setupOutput ? (
-          <pre
-            data-testid="story-worktree-setup-output"
-            className="overflow-x-auto rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-[12.5px] leading-relaxed"
-          >
-            {model.setupOutput}
-          </pre>
-        ) : null}
-        {model.setupLogPath ? (
-          <p
-            data-testid="story-worktree-setup-log-path"
-            className="font-mono text-[12px] tabular-nums text-muted-foreground"
-          >
-            {model.setupLogPath}
-          </p>
-        ) : null}
-      </div>
+      <span className="min-w-0 text-sm leading-snug text-muted-foreground">
+        {WORKTREE_SETUP_FAILED_COPY}
+      </span>
     );
   }
 
   if (model.kind === "retained") {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-1">
         {model.path ? <WorktreePath path={model.path} /> : null}
         <p
           data-testid="story-worktree-retained-copy"
-          className="max-w-[52ch] text-sm leading-relaxed [color:hsl(var(--warning))]"
+          className="text-sm leading-snug [color:hsl(var(--warning))]"
         >
           {worktreeRetainedCopy(
             model.uncommittedCount,
@@ -196,21 +173,48 @@ function CardBody({
   return <WorktreePath path={model.path} />;
 }
 
+function SetupFailedDetails({ model }: { model: Extract<WorktreeCardModel, { kind: "setup-failed" }> }) {
+  return (
+    <div
+      className={cn(
+        "grid gap-3 border-t border-border pt-2",
+        META_ROW_VALUE_CONTINUATION_CLASS,
+      )}
+    >
+      {model.path ? <WorktreePath path={model.path} /> : null}
+      {model.setupOutput ? (
+        <pre
+          data-testid="story-worktree-setup-output"
+          className="overflow-x-auto rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-[12.5px] leading-relaxed"
+        >
+          {model.setupOutput}
+        </pre>
+      ) : null}
+      {model.setupLogPath ? (
+        <p
+          data-testid="story-worktree-setup-log-path"
+          className="font-mono text-[12px] tabular-nums text-muted-foreground"
+        >
+          {model.setupLogPath}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function conflictMessage(err: unknown): string | null {
   if (err instanceof ApiError && err.status === 409) return err.message;
   return null;
 }
 
-function StoryWorktreeCardInner({
+function StoryWorktreeRowInner({
   issue,
   model,
-  issues,
   liveRun,
   supplement,
 }: {
   issue: StoryDetail;
   model: WorktreeCardModel;
-  issues: IssueRecord[];
   liveRun: boolean;
   supplement: IssueSupplement;
 }) {
@@ -257,82 +261,81 @@ function StoryWorktreeCardInner({
     });
   };
 
-  return (
-    <section
-      data-region="worktree"
-      data-testid="story-worktree-card"
-      data-state={model.kind}
-      className="flex min-w-0 flex-col rounded-lg border border-border bg-card px-4 py-3.5"
-    >
-      <div className="grid gap-x-4 gap-y-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-        <div className="order-1 flex min-h-8 items-center gap-2">
-          <FolderGit2
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          <DetailEyebrow>Worktree</DetailEyebrow>
-          <Badge variant={BADGE_VARIANT[model.kind]}>
-            {BADGE_LABEL[model.kind]}
-          </Badge>
-        </div>
-        {canRemove ? (
-          <div className="order-3 flex flex-col items-start gap-1 sm:order-none sm:col-start-2 sm:row-start-1 sm:items-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-fit text-destructive"
-              data-testid="story-worktree-remove"
-              disabled={removeHeld || pending}
-              aria-describedby={
-                removeHeld ? "story-worktree-remove-reason" : undefined
-              }
-              onClick={() => {
-                if (removeHeld || pending) return;
-                setConfirmOpen(true);
-              }}
-            >
-              Remove worktree
-            </Button>
-            {removeHeld ? (
-              <p
-                id="story-worktree-remove-reason"
-                data-testid="story-worktree-remove-reason"
-                className="max-w-[36ch] text-sm leading-relaxed text-muted-foreground sm:text-right"
-              >
-                {WORKTREE_REMOVE_DISABLED_REASON}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="order-2 min-w-0 sm:col-start-1">
-          <CardBody
-            model={model}
-            issue={issue}
-            issues={issues}
-            supplement={supplement}
-          />
-        </div>
-      </div>
-      {model.kind === "setup-failed" ? (
+  const removeControl =
+    canRemove ? (
+      <div className="flex flex-col items-end gap-1">
         <Button
           type="button"
-          variant="default"
+          variant="ghost"
           size="sm"
-          className="mt-3 w-fit"
-          data-testid="story-worktree-retry"
-          disabled={pending}
-          onClick={retrySetup}
+          className="w-fit text-destructive"
+          data-testid="story-worktree-remove"
+          disabled={removeHeld || pending}
+          aria-describedby={
+            removeHeld ? "story-worktree-remove-reason" : undefined
+          }
+          onClick={() => {
+            if (removeHeld || pending) return;
+            setConfirmOpen(true);
+          }}
         >
-          <RotateCw className="h-3.5 w-3.5" />
-          Retry setup
+          Remove worktree
         </Button>
-      ) : null}
+        {removeHeld ? (
+          <p
+            id="story-worktree-remove-reason"
+            data-testid="story-worktree-remove-reason"
+            className="max-w-[36ch] text-right text-sm leading-relaxed text-muted-foreground"
+          >
+            {WORKTREE_REMOVE_DISABLED_REASON}
+          </p>
+        ) : null}
+      </div>
+    ) : null;
+
+  const retryControl =
+    model.kind === "setup-failed" ? (
+      <Button
+        type="button"
+        variant="default"
+        size="sm"
+        data-testid="story-worktree-retry"
+        disabled={pending}
+        onClick={retrySetup}
+      >
+        <RotateCw className="h-3.5 w-3.5" />
+        Retry setup
+      </Button>
+    ) : null;
+
+  return (
+    <div
+      data-region="worktree"
+      data-testid="story-worktree-row"
+      data-state={model.kind}
+      className="flex flex-col gap-2"
+    >
+      <CompactMetaItem
+        label="Worktree"
+        value={
+          <MetaFieldActions>
+            <Badge variant={BADGE_VARIANT[model.kind]} className="shrink-0">
+              {BADGE_LABEL[model.kind]}
+            </Badge>
+            <span className="min-w-0 flex-1">
+              <RowBody model={model} issue={issue} supplement={supplement} />
+            </span>
+            {retryControl}
+            {removeControl}
+          </MetaFieldActions>
+        }
+      />
+      {model.kind === "setup-failed" ? <SetupFailedDetails model={model} /> : null}
       {alertCopy ? (
         <p
           role="alert"
           data-testid="story-worktree-conflict"
-          className="mt-3 text-sm text-destructive"
+          className="text-sm text-destructive"
         >
           {alertCopy}
         </p>
@@ -347,22 +350,47 @@ function StoryWorktreeCardInner({
           onConfirm={postRemove}
         />
       ) : null}
-    </section>
+    </div>
   );
 }
 
-export function StoryWorktreeCard({
+/**
+ * Worktree row with `liveRun` derived from `data.derived` — shared wiring for
+ * Overview fixed panel and `GitStackPanel`.
+ */
+export function StoryWorktreeRowFromIssuesResponse({
   issue,
   projectId,
+  supplement,
+  data,
 }: {
   issue: StoryDetail;
   projectId: string;
+  supplement: IssueSupplement;
+  data: IssuesResponse;
 }) {
-  const { data } = useIssuesQuery();
-  const supplement = useSupplementedById(
-    issue.stackedOn ? [issue.stackedOn] : [],
+  return (
+    <StoryWorktreeRow
+      issue={issue}
+      projectId={projectId}
+      supplement={supplement}
+      liveRun={data.derived[issue.id]?.liveRun === true}
+    />
   );
-  const { byId, missingIds, accept, reject } = supplement;
+}
+
+/** Worktree checkout status and actions as one `CompactMetaItem` row. */
+export function StoryWorktreeRow({
+  issue,
+  projectId,
+  supplement,
+  liveRun,
+}: {
+  issue: StoryDetail;
+  projectId: string;
+  supplement: IssueSupplement;
+  liveRun: boolean;
+}) {
   const { data: worktrees, isError } = useProjectWorktreesQuery(projectId);
   const storyHasCheckout =
     issue.worktreePath !== undefined ||
@@ -370,45 +398,31 @@ export function StoryWorktreeCard({
     issue.worktreeBlockedReason !== undefined;
   if (isError && storyHasCheckout) {
     return (
-      <section
-        data-region="worktree"
-        data-testid="story-worktree-card"
-        className="flex min-w-0 flex-col rounded-lg border border-border bg-card px-4 py-3.5"
-      >
-        <div className="flex min-h-8 items-center gap-2">
-          <FolderGit2
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          <DetailEyebrow>Worktree</DetailEyebrow>
-        </div>
-        <p
-          role="alert"
-          data-testid="story-worktree-error"
-          className="mt-3 text-sm text-destructive"
-        >
-          Could not load worktree state. Reload the page.
-        </p>
-      </section>
+      <div data-region="worktree" data-testid="story-worktree-row" className="flex flex-col gap-2">
+        <CompactMetaItem
+          label="Worktree"
+          value={
+            <span
+              role="alert"
+              data-testid="story-worktree-error"
+              className="text-destructive"
+            >
+              Could not load worktree state. Reload the page.
+            </span>
+          }
+        />
+      </div>
     );
   }
   const model = worktreeCardModel(worktrees?.worktrees[issue.id]);
-  if (!data || !model) return null;
+  if (!model) return null;
 
   return (
-    <>
-      <IssueLinkResolution
-        missingIds={missingIds}
-        accept={accept}
-        reject={reject}
-      />
-      <StoryWorktreeCardInner
-        issue={issue}
-        model={model}
-        issues={[...byId.values()]}
-        liveRun={data.derived[issue.id]?.liveRun === true}
-        supplement={supplement}
-      />
-    </>
+    <StoryWorktreeRowInner
+      issue={issue}
+      model={model}
+      liveRun={liveRun}
+      supplement={supplement}
+    />
   );
 }

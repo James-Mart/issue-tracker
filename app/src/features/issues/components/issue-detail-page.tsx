@@ -53,7 +53,6 @@ import { IssueDetailTabs } from "./issue-detail-tabs";
 import { StoryAppendActionsCard } from "./story-append-actions-card";
 import { StoryHumanRequestCard } from "./story-human-request-card";
 import { StoryTaskRail } from "./story-task-rail";
-import { StoryWorktreeCard } from "./story-worktree-card";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
@@ -138,9 +137,6 @@ function IssueOverviewPanel({
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
       {issue.kind === "story" ? <StoryHumanRequestCard issue={issue} /> : null}
-      {issue.kind === "story" ? (
-        <StoryWorktreeCard issue={issue} projectId={projectId} />
-      ) : null}
       <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (
         <DeletePartialPlanDetailAction issue={issue} />
