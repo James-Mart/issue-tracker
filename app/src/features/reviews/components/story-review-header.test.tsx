@@ -406,3 +406,21 @@ describe("StoryReviewHeader submit", () => {
     ).toContain("1 not included");
   });
 });
+
+describe("StoryReviewHeader source line", () => {
+  it("uses the primary link color for the story head when commits are absent", () => {
+    const container = mount(
+      <StoryReviewHeader
+        projectId="proj"
+        storyId="story-1"
+        storyTitle="Story review workbench"
+        review={review()}
+        merged={false}
+      />,
+    );
+    const storyLink = container.querySelector('[data-testid="review-story-link"]');
+    expect(storyLink?.classList.contains("text-primary")).toBe(true);
+    expect(storyLink?.textContent).toContain("story-1");
+    expect(container.querySelector('[data-testid="review-merge-range"]')).toBeNull();
+  });
+});

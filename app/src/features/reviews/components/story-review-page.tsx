@@ -19,6 +19,7 @@ import {
 import { PageShell } from "@/components/page-shell";
 import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { TabButton } from "@/components/ui/tab-button";
+import { TabCountPill } from "@/components/ui/tab-count-pill";
 import { ApiError } from "@/lib/api/errors";
 import { useIssueDetailQuery } from "@/features/issues/api/queries";
 import { useReviewAgentRunsQuery, useReviewDiffQuery } from "../api/queries";
@@ -130,6 +131,7 @@ function DiffTabPanel({
 function StoryReviewWorkbench({
   projectId,
   storyId,
+  storyBranchName,
   storyTitle,
   review,
   commits,
@@ -140,6 +142,7 @@ function StoryReviewWorkbench({
 }: {
   projectId: string;
   storyId: string;
+  storyBranchName?: string;
   storyTitle: string;
   review: ReviewView;
   commits: UseQueryResult<ReviewCommits, Error>;
@@ -178,6 +181,7 @@ function StoryReviewWorkbench({
   const location = useLocation();
   const agentRuns = useReviewAgentRunsQuery(projectId, review.id);
   const runCount = agentRuns.data?.runs.length ?? 0;
+  const commitCount = commits.data?.commits.length;
   const closeTranscript = useCallback(() => {
     const returnTo = reviewRunReturnFromState(location.state);
     if (returnTo?.surface === "conversation" || returnTo?.surface === "standards") {
@@ -215,6 +219,7 @@ function StoryReviewWorkbench({
       <StoryReviewHeader
         projectId={projectId}
         storyId={storyId}
+        storyBranchName={storyBranchName}
         storyTitle={storyTitle}
         review={review}
         commits={commits.data}
@@ -234,13 +239,16 @@ function StoryReviewWorkbench({
             data-review-tab={tab.key}
           >
             {tab.label}
-            {tab.key === "agents" && runCount > 0 ? (
+            {tab.key === "commits" && commitCount !== undefined ? (
               <span
-                className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold tabular-nums leading-none text-muted-foreground"
-                data-tab-count={runCount}
+                className="font-mono text-[10px] font-semibold tabular-nums text-muted-foreground normal-case tracking-normal"
+                data-tab-count={commitCount}
               >
-                {runCount}
+                ({commitCount})
               </span>
+            ) : null}
+            {tab.key === "agents" && runCount > 0 ? (
+              <TabCountPill data-tab-count={runCount}>{runCount}</TabCountPill>
             ) : null}
           </TabButton>
         ))}
@@ -393,6 +401,7 @@ function StoryReviewBody({
     prOnly && review.data
       ? {
           storyId: "",
+          storyBranchName: undefined,
           storyTitle: review.data.title,
           review: review.data,
           merged: false,
@@ -400,6 +409,7 @@ function StoryReviewBody({
       : review.data && story.data?.kind === "story"
         ? {
             storyId: story.data.id,
+            storyBranchName: story.data.branchName,
             storyTitle: story.data.title,
             review: review.data,
             merged: story.data.merged,
@@ -410,6 +420,7 @@ function StoryReviewBody({
     <StoryReviewWorkbench
       projectId={projectId}
       storyId={ready.storyId}
+      storyBranchName={ready.storyBranchName}
       storyTitle={ready.storyTitle}
       review={ready.review}
       commits={commits}

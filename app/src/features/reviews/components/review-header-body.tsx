@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleAlert, GitBranch } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ReviewCommits, ReviewPrSource, ReviewView } from "@server/schemas";
@@ -29,11 +29,11 @@ function ReviewStorySourceLink({
   return (
     <Link
       to={issuePath(projectId, storyId)}
-      className={sourceLinkClass}
+      className={`${sourceLinkClass} text-primary`}
       data-testid="review-story-link"
     >
       <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="text-foreground">{storyId}</span>
+      <span>{storyId}</span>
     </Link>
   );
 }
@@ -53,33 +53,63 @@ function ReviewPrSourceLink({ pr }: { pr: ReviewPrSource }) {
   );
 }
 
-function CommitMeta({ commits }: { commits: ReviewCommits }) {
-  const count = commits.commits.length;
-  return (
-    <>
-      <span data-testid="review-merge-base">
-        base <span className="text-foreground">{commits.mergeBaseRef}</span>
+/** Renders `baseRef` ← head (merge target then candidate). PR-only reviews show the PR head ref as plain text. */
+function ReviewMergeRangeLine({
+  projectId,
+  storyId,
+  storyBranchName,
+  pr,
+  commits,
+}: {
+  projectId: string;
+  storyId: string;
+  storyBranchName?: string;
+  pr?: ReviewPrSource;
+  commits: ReviewCommits;
+}) {
+  const baseRef = pr ? pr.baseRef : commits.mergeBaseRef;
+  const prOnly = Boolean(pr) && !storyId;
+
+  let head: ReactNode;
+  if (prOnly && pr) {
+    head = <span className="text-foreground">{pr.headRef}</span>;
+  } else if (storyId) {
+    head = (
+      <Link
+        to={issuePath(projectId, storyId)}
+        className="text-primary hover:underline"
+        data-testid="review-merge-range-head-link"
+      >
+        {storyBranchName ?? storyId}
+      </Link>
+    );
+  } else {
+    head = (
+      <span className="text-foreground" title={commits.tip}>
+        {shortSha(commits.tip)}
       </span>
-      {count > 0 ? (
-        <>
-          <span>{count === 1 ? "1 commit" : `${count} commits`}</span>
-          <span title={commits.tip}>
-            tip <span className="text-foreground">{shortSha(commits.tip)}</span>
-          </span>
-        </>
-      ) : null}
-    </>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5"
+      data-testid="review-merge-range"
+    >
+      <span className="text-foreground">{baseRef}</span>
+      <span className="text-muted-foreground" aria-hidden>
+        {"←"}
+      </span>
+      {head}
+    </span>
   );
 }
 
-/**
- * Title and actions stay above the branch line. The held-tip row sits on that
- * line. Failures and the open-thread disclosure render after it, so expanding
- * the list does not move them.
- */
+/** Open-thread expansion sits below failures so tasking errors stay fixed while the list grows. */
 export function ReviewHeaderBody({
   projectId,
   storyId,
+  storyBranchName,
   title,
   review,
   commits,
@@ -88,6 +118,8 @@ export function ReviewHeaderBody({
 }: {
   projectId: string;
   storyId: string;
+  /** Story git branch for the merge-range head; omitted for PR-only reviews. */
+  storyBranchName?: string;
   title: string;
   review?: ReviewView;
   commits?: ReviewCommits;
@@ -137,9 +169,17 @@ export function ReviewHeaderBody({
         ) : null}
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs tabular-nums text-muted-foreground">
-        {storyId ? <ReviewStorySourceLink projectId={projectId} storyId={storyId} /> : null}
         {review?.pr ? <ReviewPrSourceLink pr={review.pr} /> : null}
-        {commits ? <CommitMeta commits={commits} /> : null}
+        {commits ? (
+          <ReviewMergeRangeLine
+            projectId={projectId}
+            storyId={storyId}
+            storyBranchName={storyBranchName}
+            pr={review?.pr}
+            commits={commits}
+          />
+        ) : null}
+        {!commits && storyId ? <ReviewStorySourceLink projectId={projectId} storyId={storyId} /> : null}
       </p>
       {review ? <ReviewRuntimePanel projectId={projectId} reviewId={review.id} /> : null}
       {review?.worktreeSync ? (

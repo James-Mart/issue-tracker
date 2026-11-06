@@ -8,6 +8,7 @@ import { ReviewHeaderBody } from "./review-header-body";
 export function StoryReviewHeader({
   projectId,
   storyId,
+  storyBranchName,
   storyTitle,
   review,
   commits,
@@ -16,6 +17,7 @@ export function StoryReviewHeader({
 }: {
   projectId: string;
   storyId: string;
+  storyBranchName?: string;
   storyTitle: string;
   review?: ReviewView;
   commits?: ReviewCommits;
@@ -39,6 +41,7 @@ export function StoryReviewHeader({
       <ReviewHeaderBody
         projectId={projectId}
         storyId={storyId}
+        storyBranchName={storyBranchName}
         title={storyTitle}
         review={review}
         commits={commits}

@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   DiffLineAnnotation,
   FileDiffMetadata,
@@ -121,7 +122,7 @@ vi.mock("@/features/issues/api/mutations", async (importOriginal) => ({
 vi.mock("@/features/issues/api/queries", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useIssueDetailQuery: () => ({
-    data: { id: STORY, kind: "story", title: "Code review surface" },
+    data: { id: STORY, kind: "story", title: "Code review surface", branchName: "feature/x" },
     error: null,
     isLoading: false,
   }),
@@ -167,6 +168,10 @@ vi.mock("../api/queries", () => ({
     error: null,
     isPending: false,
     isLoading: false,
+  }),
+  useReviewRuntimeLogQuery: () => ({
+    data: undefined,
+    isPending: false,
   }),
   useReviewAgentRunsQuery: () => ({
     data: { runs: state.agentRuns },
@@ -317,14 +322,16 @@ function mountPage(search?: string): HTMLDivElement {
   act(() => {
     root!.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[search ? `${path}?${search}` : path]}>
-          <Routes>
-            <Route
-              path="/projects/:projectId/review/issues/:id"
-              element={<StoryReviewPage />}
-            />
-          </Routes>
-        </MemoryRouter>
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter initialEntries={[search ? `${path}?${search}` : path]}>
+            <Routes>
+              <Route
+                path="/projects/:projectId/review/issues/:id"
+                element={<StoryReviewPage />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
       </QueryClientProvider>,
     );
   });
