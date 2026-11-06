@@ -105,6 +105,7 @@ function renderStoryGitPanel(
           scalars={storyScalars}
           mergeSettings={settingsNode}
           beforeStackedOn={beforeStackedOn}
+          supplement={supplement}
         />
         {prNode}
       </>
@@ -121,6 +122,7 @@ function renderStoryGitPanel(
             issue={issue}
             mergeBase={mergeBase}
             scalars={storyScalars}
+            supplement={supplement}
           />
         </>
       );
@@ -134,6 +136,7 @@ function renderStoryGitPanel(
           issue={issue}
           mergeBase={mergeBase}
           scalars={storyScalars}
+          supplement={supplement}
         />
       </>
     );

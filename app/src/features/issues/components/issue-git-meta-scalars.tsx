@@ -8,9 +8,25 @@ import {
   type GitMetaScalar,
   type GitMetaScalarKey,
 } from "../lib/git-meta-scalars";
+import type { IssueSupplement } from "../hooks/use-supplemented-by-id";
 import { CompactMetaItem } from "./compact-meta";
 import { IssueStackedOnField } from "./issue-stacked-on-field";
 import { BranchNameDisplay, CommitShaDisplay } from "./readonly-git-fields";
+
+function stackedOnMetaRow(
+  issue: Extract<IssueDetail, { kind: "story" }>,
+  tail: GitMetaScalar | undefined,
+  supplement?: IssueSupplement,
+) {
+  if (!tail || tail.key !== "stackedOn") return null;
+  return (
+    <CompactMetaItem
+      key={tail.key}
+      label={tail.label}
+      value={<IssueStackedOnField issue={issue} supplement={supplement} />}
+    />
+  );
+}
 
 function Mono({ children }: { children: string }) {
   return <span className="font-mono text-[13px] tabular-nums">{children}</span>;
@@ -26,8 +42,6 @@ function storyScalarValue(
       return <BranchNameDisplay branchName={issue.branchName} />;
     case "mergeBase":
       return <Mono>{mergeBase ?? CHIP_UNSET}</Mono>;
-    case "stackedOn":
-      return <IssueStackedOnField issue={issue} />;
     default:
       return null;
   }
@@ -76,7 +90,8 @@ export function StoryGitHeadScalarRows({
   scalars?: GitMetaScalar[];
 }) {
   const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
-  return <>{storyGitScalarRows(scalars.slice(0, -1), issue, mergeBase)}</>;
+  const head = scalars.slice(0, -1);
+  return <>{storyGitScalarRows(head, issue, mergeBase)}</>;
 }
 
 /** Stacked-on row only (last story git scalar). */
@@ -84,13 +99,16 @@ export function StoryGitStackedOnRow({
   issue,
   mergeBase,
   scalars: scalarsProp,
+  supplement,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   mergeBase?: string;
   scalars?: GitMetaScalar[];
+  supplement?: IssueSupplement;
 }) {
   const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
-  return <>{storyGitScalarRows(scalars.slice(-1), issue, mergeBase)}</>;
+  const tail = scalars.at(-1);
+  return stackedOnMetaRow(issue, tail, supplement);
 }
 
 /** Story git/spec scalar rows (no outer card — parent owns the block). */
@@ -100,6 +118,7 @@ export function StoryGitMetaScalars({
   scalars: scalarsProp,
   mergeSettings,
   beforeStackedOn,
+  supplement,
 }: {
   issue: Extract<IssueDetail, { kind: "story" }>;
   mergeBase?: string;
@@ -109,14 +128,17 @@ export function StoryGitMetaScalars({
   mergeSettings?: ReactNode;
   /** Sits with Branch and Merge base. `stackedOn` is always the last scalar. */
   beforeStackedOn?: ReactNode;
+  supplement?: IssueSupplement;
 }) {
   const scalars = scalarsProp ?? storyGitMetaScalars(issue, mergeBase);
+  const head = scalars.slice(0, -1);
+  const tail = scalars.at(-1);
   return (
     <>
-      {storyGitScalarRows(scalars.slice(0, -1), issue, mergeBase)}
+      {storyGitScalarRows(head, issue, mergeBase)}
       {mergeSettings}
       {beforeStackedOn}
-      {storyGitScalarRows(scalars.slice(-1), issue, mergeBase)}
+      {stackedOnMetaRow(issue, tail, supplement)}
     </>
   );
 }
