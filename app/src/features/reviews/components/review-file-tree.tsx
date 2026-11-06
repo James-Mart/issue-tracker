@@ -63,13 +63,13 @@ function ReviewFileTreeRow({
         <ReviewPathScroll pathKey={file.path} title={file.path}>
           {file.path}
         </ReviewPathScroll>
+        {changedSinceReviewed ? <ChangedSinceReviewedBadge /> : null}
         <DiffLineCounts
           additions={file.additions}
           deletions={file.deletions}
           className="ml-auto shrink-0"
         />
       </span>
-      {changedSinceReviewed ? <ChangedSinceReviewedBadge /> : null}
     </div>
   );
 }
