@@ -328,7 +328,6 @@ export function ReviewFileDiff({
           <MarkedPathText text={file.path} needle={searchNeedle} occurrence={pathOccurrence} />
         </ReviewPathScroll>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 shell:gap-2">
-          {changedSinceReviewed ? <ChangedSinceReviewedHeaderMark /> : null}
           <Button
             variant="ghost"
             size="icon-sm"
@@ -343,6 +342,7 @@ export function ReviewFileDiff({
           >
             <MessageSquare />
           </Button>
+          {changedSinceReviewed ? <ChangedSinceReviewedHeaderMark /> : null}
           <DiffLineCounts
             additions={file.additions}
             deletions={file.deletions}
