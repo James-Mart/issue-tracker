@@ -25,8 +25,6 @@ import {
   useIssueDetailFileUpload,
   type UploadAttachmentMutation,
 } from "../hooks/use-issue-detail-file-upload";
-import { isImplementingWorkRoot } from "@server/services/implementing-launch";
-import type { ImplementingWorkRoot } from "@server/services/implementing-launch";
 import { kindHasOwnFlow } from "../lib/own-flow";
 import { issueBelongsToProject } from "../lib/build-tree";
 import {
@@ -50,7 +48,6 @@ import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
 import { IssueDetailTabs } from "./issue-detail-tabs";
-import { StoryAppendActionsCard } from "./story-append-actions-card";
 import { StoryHumanRequestCard } from "./story-human-request-card";
 import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
@@ -65,7 +62,7 @@ import {
 import { IssueCommentsSection } from "./comments/comments-section";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
-import { ImplementingOverviewLaunch } from "./implementing-launch-control";
+import { OverviewIconToolbar } from "./overview-icon-toolbar";
 import { PlanningOverviewLaunch } from "./planning-launch-control";
 import { supportsAttachments } from "../lib/attachments";
 
@@ -136,21 +133,15 @@ function IssueOverviewPanel({
   return (
     <div className="flex flex-col gap-4">
       <IssueMetaPanel issue={issue} catalog={catalog} />
+      {issue.kind === "story" || issue.kind === "epic" ? (
+        <OverviewIconToolbar issue={issue} parentKind={parentKind} />
+      ) : null}
       {issue.kind === "story" ? <StoryHumanRequestCard issue={issue} /> : null}
       <IssueOverviewLaunch issue={issue} parentKind={parentKind} />
       {awaitingDirection ? (
         <DeletePartialPlanDetailAction issue={issue} />
       ) : null}
-      {issue.kind === "story" ? (
-        <StoryAppendActionsCard issue={issue} />
-      ) : null}
       <OwnFlowSlot issue={issue} />
-      {isImplementingWorkRoot("implementing", issue, parentKind) ? (
-        <ImplementingOverviewLaunch
-          issue={issue as ImplementingWorkRoot}
-          parentKind={parentKind}
-        />
-      ) : null}
       <IssueAttachmentsSection issue={issue} upload={upload} />
       {issue.kind === "outline" ? (
         <OutlineLinkedWorkCard key={`${issue.id}-linked`} issue={issue} />

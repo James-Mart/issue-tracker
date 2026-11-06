@@ -1,5 +1,5 @@
-import { ListEnd, Loader2 } from "lucide-react";
-import type { IssueKind, IssueRecord } from "@server/schemas";
+import { ListEnd, Loader2, Play } from "lucide-react";
+import type { ChannelSessionListItem, IssueKind, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useSendConversationMessage } from "@/features/agents/api/mutations";
@@ -13,28 +13,30 @@ import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import {
   implementingLaunchCopy,
   implementingResumePrompt,
-  isImplementingWorkRoot,
   type ImplementingWorkRoot,
 } from "@server/services/implementing-launch";
-import { overviewWorkLoopAction } from "../lib/overview-work-loop-action";
 import { issuesById } from "../lib/build-tree";
-import { isWorkRootFinished, leafTasksOf } from "../lib/derived";
-import { ParkedResumeControl } from "./queue-park-control";
-import { WorkLoopOverviewControl } from "./work-loop-overview-control";
+import { isWorkRootFinished } from "../lib/derived";
+import {
+  resolveImplementingOverviewWorkLoop,
+  type WorkRootLaunchFactsForOverview,
+} from "../lib/overview-implementing-work-loop";
+import { formatRelativeUpdatedAt } from "../lib/format-relative-updated-at";
+import type { OverviewWorkLoopAction } from "../lib/overview-work-loop-action";
 
 type ImplementingWorkRootRecord = Extract<
   IssueRecord,
   { kind: "epic" | "story" }
 >;
 
-function enqueueFault(err: Error): { status?: number; errorMessage: string } {
+export function enqueueFault(err: Error): { status?: number; errorMessage: string } {
   return {
     status: err instanceof ApiError ? err.status : undefined,
     errorMessage: err.message,
   };
 }
 
-function QueueWorkButton({
+export function QueueWorkButton({
   issue,
   optimistic,
   testId,
@@ -72,13 +74,15 @@ function QueueWorkButton({
     enqueue.mutate();
   };
 
+  const queueLabel = busy ? "Queuing" : "Queue";
+
   return (
     <Button
       type="button"
       variant="default"
       size="icon-sm"
-      title={busy ? "Queuing" : "Queue"}
-      aria-label={busy ? "Queuing" : "Queue"}
+      title={queueLabel}
+      aria-label={queueLabel}
       aria-busy={busy || undefined}
       data-testid={busy ? `${testId}-pending` : testId}
       disabled={busy}
@@ -93,7 +97,72 @@ function QueueWorkButton({
   );
 }
 
-function useWorkRootLaunchFacts(issueId: string) {
+export function ResumeWorkLoopIconButton({
+  issue,
+  resumeSession,
+  testId,
+}: {
+  issue: ImplementingWorkRoot;
+  resumeSession: ChannelSessionListItem;
+  testId: string;
+}) {
+  const sendMessage = useSendConversationMessage();
+  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
+  const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
+  const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
+  const pending = useCockpitLaunchStore((s) => s.pending);
+  const launching = pending?.issueId === issue.id;
+  const resumePending = sendMessage.isPending || launching;
+  const sessionRef = `${resumeSession.id} · ${resumeSession.title} · ${formatRelativeUpdatedAt(resumeSession.updatedAt)}`;
+  const idleLabel = `Resume work loop — ${sessionRef}`;
+  const busyLabel = "Resuming work loop…";
+  const resumeAccessibilityLabel = resumePending ? busyLabel : idleLabel;
+
+  const resumeWorkLoop = () => {
+    if (sendMessage.isPending || launching) return;
+    beginLaunch(issue.id, "work", { resumeSession });
+    sendMessage.mutate(
+      {
+        id: resumeSession.id,
+        body: { prompt: implementingResumePrompt() },
+      },
+      {
+        onSuccess: () => {
+          ackLaunch(issue.id, "work", {
+            id: resumeSession.id,
+            title: resumeSession.title,
+            model: resumeSession.model,
+          });
+        },
+        onError: (err) => {
+          failLaunch(issue.id, "work", enqueueFault(err));
+        },
+      },
+    );
+  };
+
+  return (
+    <Button
+      type="button"
+      variant="default"
+      size="icon-sm"
+      title={resumeAccessibilityLabel}
+      aria-label={resumeAccessibilityLabel}
+      aria-busy={resumePending || undefined}
+      data-testid={resumePending ? `${testId}-pending` : testId}
+      disabled={resumePending}
+      onClick={resumeWorkLoop}
+    >
+      {resumePending ? (
+        <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+      ) : (
+        <Play className="h-3.5 w-3.5" />
+      )}
+    </Button>
+  );
+}
+
+export function useWorkRootLaunchFacts(issueId: string): WorkRootLaunchFactsForOverview {
   const { data: list } = useIssuesWithArchived(true);
   const { data: sessions, isLoading: sessionsLoading } = useChannelSessionsQuery(
     issueId,
@@ -131,6 +200,22 @@ function useWorkRootLaunchFacts(issueId: string) {
   }, [issueId, list, sessions]);
 }
 
+export function useImplementingOverviewWorkLoop(
+  issue: ImplementingWorkRoot,
+  parentKind: IssueKind | undefined,
+): {
+  sessionsLoading: boolean;
+  workLoopAction: OverviewWorkLoopAction;
+} {
+  const facts = useWorkRootLaunchFacts(issue.id);
+  const workLoopAction = useMemo(
+    (): OverviewWorkLoopAction =>
+      resolveImplementingOverviewWorkLoop(issue, parentKind, facts),
+    [facts, issue, parentKind],
+  );
+  return { sessionsLoading: facts.sessionsLoading, workLoopAction };
+}
+
 /** Icon-only queue control for a Ready cockpit row. */
 export function ImplementingFlowRowLaunch({
   issue,
@@ -139,99 +224,6 @@ export function ImplementingFlowRowLaunch({
 }) {
   return (
     <QueueWorkButton issue={issue} optimistic testId="flow-row-queue" />
-  );
-}
-
-/** Post-rail Overview control: queue, or resume a slot-holding coordinator. */
-export function ImplementingOverviewLaunch({
-  issue,
-  parentKind,
-}: {
-  issue: ImplementingWorkRoot;
-  parentKind?: IssueKind;
-}) {
-  const facts = useWorkRootLaunchFacts(issue.id);
-  const sendMessage = useSendConversationMessage();
-  const failLaunch = useCockpitLaunchStore((s) => s.failLaunch);
-  const beginLaunch = useCockpitLaunchStore((s) => s.beginLaunch);
-  const ackLaunch = useCockpitLaunchStore((s) => s.ackLaunch);
-  const pending = useCockpitLaunchStore((s) => s.pending);
-  const launching = pending?.issueId === issue.id;
-
-  const workLoopAction = useMemo(() => {
-    if (!isImplementingWorkRoot("implementing", issue, parentKind)) {
-      return { action: "hidden" as const };
-    }
-    if (!facts.record) return { action: "hidden" as const };
-    const issues = facts.list?.issues ?? [];
-    return overviewWorkLoopAction({
-      liveRun: facts.liveRun,
-      leafTasks: leafTasksOf(facts.record, issues),
-      currentSession: facts.currentSession,
-      queued: facts.queued || Boolean(issue.workQueuedAt),
-      holdsSlot: facts.holdsSlot,
-      parked: facts.parked || Boolean(issue.workParkedAt),
-      finished: facts.finished,
-      archived: Boolean(facts.record.archived),
-    });
-  }, [facts, issue, parentKind]);
-
-  if (facts.sessionsLoading || workLoopAction.action === "hidden") {
-    return null;
-  }
-
-  if (workLoopAction.action === "unpark") {
-    return (
-      <ParkedResumeControl
-        issueId={issue.id}
-        testId="implementing-overview-parked-resume"
-      />
-    );
-  }
-
-  if (workLoopAction.action === "queue") {
-    return (
-      <QueueWorkButton
-        issue={issue}
-        optimistic
-        testId="implementing-overview-queue"
-      />
-    );
-  }
-
-  const resumePending = sendMessage.isPending || launching;
-  const resumeWorkLoop = () => {
-    if (sendMessage.isPending || launching) return;
-    const { resumeSession } = workLoopAction;
-    beginLaunch(issue.id, "work", { resumeSession });
-    sendMessage.mutate(
-      {
-        id: resumeSession.id,
-        body: { prompt: implementingResumePrompt() },
-      },
-      {
-        onSuccess: () => {
-          ackLaunch(issue.id, "work", {
-            id: resumeSession.id,
-            title: resumeSession.title,
-            model: resumeSession.model,
-          });
-        },
-        onError: (err) => {
-          failLaunch(issue.id, "work", enqueueFault(err));
-        },
-      },
-    );
-  };
-
-  return (
-    <WorkLoopOverviewControl
-      session={workLoopAction.resumeSession}
-      actionTestId="implementing-overview-resume-session"
-      disabled={resumePending}
-      pending={resumePending}
-      onAction={resumeWorkLoop}
-    />
   );
 }
 

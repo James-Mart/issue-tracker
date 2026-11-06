@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, IssueDetail } from "@server/schemas";
-import { StoryAppendActionsCard } from "./story-append-actions-card";
+import { OverviewIconToolbar } from "./overview-icon-toolbar";
 
 const updateFromMergeBaseMutate = vi.fn();
 
@@ -27,12 +27,45 @@ vi.mock("../api/mutations", () => ({
     mutate: updateFromMergeBaseMutate,
     isPending: false,
   }),
+  useEnqueueWorkRoot: () => ({ mutate: vi.fn(), isPending: false }),
+  useParkWorkRoot: () => ({ mutate: vi.fn(), isPending: false }),
+  useResumeParkedWorkRoot: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/features/agents/api/mutations", () => ({
+  useSendConversationMessage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
     data: { issues: [], derived: derivedState.value },
   }),
+  useChannelSessionsQuery: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("../hooks/use-issues-with-archived", () => ({
+  useIssuesWithArchived: () => ({
+    data: {
+      issues: [],
+      derived: {},
+    },
+  }),
+}));
+
+const noop = () => {};
+vi.mock("../store/use-cockpit-launch-store", () => ({
+  useCockpitLaunchStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      pending: null,
+      beginLaunch: noop,
+      ackLaunch: noop,
+      failLaunch: noop,
+      abandonLaunch: noop,
+    }),
 }));
 
 const t0 = "2026-07-01T00:00:00.000Z";
@@ -60,7 +93,7 @@ function story(
   };
 }
 
-function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
+function mountToolbar(issue: Extract<IssueDetail, { kind: "story" }>): {
   container: HTMLDivElement;
   root: Root;
 } {
@@ -75,7 +108,9 @@ function mountCard(issue: Extract<IssueDetail, { kind: "story" }>): {
         <Routes>
           <Route
             path="/projects/:projectId/issues/:id"
-            element={<StoryAppendActionsCard issue={issue} />}
+            element={
+              <OverviewIconToolbar issue={issue} parentKind="epic" />
+            }
           />
         </Routes>
       </MemoryRouter>,
@@ -88,7 +123,9 @@ function actionButton(
   container: ParentNode,
   testId: string,
 ): HTMLButtonElement {
-  return container.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement;
+  return container.querySelector(
+    `[data-testid="${testId}"]`,
+  ) as HTMLButtonElement;
 }
 
 afterEach(() => {
@@ -97,7 +134,7 @@ afterEach(() => {
   derivedState.value = {};
 });
 
-describe("StoryAppendActionsCard actions", () => {
+describe("OverviewIconToolbar merge base", () => {
   it("does not call update-from-merge-base when the confirm dialog is cancelled", () => {
     derivedState.value = {
       "story-oauth-hardening": {
@@ -106,12 +143,12 @@ describe("StoryAppendActionsCard actions", () => {
         mergeBase: "main @ c4d91e2",
       },
     };
-    const { container } = mountCard(
+    const { container } = mountToolbar(
       story({ branchName: "story/oauth-hardening" }),
     );
 
     act(() => {
-      actionButton(container, "story-append-update-merge-base").click();
+      actionButton(container, "overview-icon-toolbar-update-merge-base").click();
     });
     act(() => {
       const cancel = [...document.body.querySelectorAll("button")].find(
