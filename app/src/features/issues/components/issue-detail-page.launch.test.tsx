@@ -94,7 +94,7 @@ describe("Issue detail launch — Epic implementing", () => {
     act(() => {
       (
         document.querySelector(
-          '[data-testid="implementing-overview-resume-session"]',
+          '[data-testid="overview-icon-toolbar-resume-work-loop"]',
         ) as HTMLButtonElement
       ).click();
     });
