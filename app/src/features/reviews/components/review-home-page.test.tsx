@@ -256,27 +256,27 @@ describe("ReviewHomePage", () => {
     expect(openRows).toHaveLength(4);
 
     const storyRow = openCard(openRows.find((row) => row.textContent?.includes("Comment threads"))!);
-    expect(storyRow.textContent).toContain("story-only");
+    expect(storyRow.textContent).not.toContain("story-only");
     expect(storyRow.textContent).not.toMatch(/#\d+/);
     expect(storyRow.querySelector('[data-testid="review-row-story-link"]')?.getAttribute("href")).toBe(
       "/projects/proj/issues/story-only",
     );
 
     const prRow = openCard(openRows.find((row) => row.textContent?.includes("Bump the sdk"))!);
-    expect(prRow.textContent).toContain("#318");
+    expect(prRow.textContent).not.toContain("#318");
     expect(prRow.querySelector('[data-testid="review-row-story-slot"]')).not.toBeNull();
     expect(prRow.querySelector('[data-testid="review-row-story-link"]')).toBeNull();
 
     const bothRow = openCard(openRows.find((row) => row.textContent?.includes("External import"))!);
-    expect(bothRow.textContent).toContain("both-sources");
-    expect(bothRow.textContent).toContain("#482");
+    expect(bothRow.textContent).not.toContain("both-sources");
+    expect(bothRow.textContent).not.toContain("#482");
     expect(bothRow.querySelector('[data-testid="review-row-story-link"]')?.getAttribute("href")).toBe(
       "/projects/proj/issues/both-sources",
     );
 
     const missingRow = openCard(openRows.find((row) => row.textContent?.includes("Story missing"))!);
-    expect(missingRow.textContent).toContain("gone");
-    expect(missingRow.textContent).toContain("#9");
+    expect(missingRow.textContent).not.toContain("gone");
+    expect(missingRow.textContent).not.toContain("#9");
     expect(missingRow.querySelector('[data-testid="review-row-story-link"]')?.getAttribute("href")).toBe(
       "/projects/proj/issues/gone",
     );
@@ -286,7 +286,7 @@ describe("ReviewHomePage", () => {
     const archivedRows = [...(archived?.querySelectorAll('[data-testid="review-home-archived-row"]') ?? [])];
     expect(archivedRows).toHaveLength(2);
     const archivedPr = archivedRows.find((row) => row.textContent?.includes("Capture presets"));
-    expect(archivedPr?.textContent).toContain("#401");
+    expect(archivedPr?.textContent).not.toContain("#401");
     expect(archivedPr?.querySelector('[data-testid="review-row-story-link"]')).toBeNull();
     expect(archivedPr?.querySelector('[data-testid="review-row-story-slot"]')).not.toBeNull();
     const archivedStory = archivedRows.find((row) => row.textContent?.includes("Story detail"));

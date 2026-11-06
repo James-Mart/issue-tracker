@@ -2,6 +2,7 @@ import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/sche
 import { filterToProject } from "@/features/issues/lib/build-tree";
 import { formatRelativeUpdatedAt } from "@/features/issues/lib/format-relative-updated-at";
 import { storyTasksForRail } from "@/features/issues/lib/story-task-rail";
+import { REVIEW_HOME_FILE_PROGRESS_SUFFIX } from "./review-progress-copy";
 
 type StoryRecord = Extract<IssueRecord, { kind: "story" }>;
 type ArchivedReview = Extract<ReviewRecordView, { status: "archived" }>;
@@ -109,7 +110,7 @@ function updatedClause(iso: string, nowMs: number): ReviewMetaPart[] {
 function progressClause(reviewed: number, total: number): ReviewMetaPart[] {
   return [
     { text: `${reviewed} / ${total}`, tone: "mono" },
-    { text: " files reviewed" },
+    { text: REVIEW_HOME_FILE_PROGRESS_SUFFIX },
   ];
 }
 
@@ -143,7 +144,7 @@ export function openReviewMeta(
   if (changedSinceReviewed.length > 0) {
     clauses.push([
       { text: String(changedSinceReviewed.length), tone: "warn" },
-      { text: " changed since reviewed", tone: "warn" },
+      { text: " changed", tone: "warn" },
     ]);
   }
   return [...clauses, ...openReviewPendingMeta(review.updatedAt, nowMs)];

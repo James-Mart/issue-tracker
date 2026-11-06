@@ -8,6 +8,7 @@ import { useOpenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
 import { useGoToReviewIssue } from "../hooks/use-go-to-review-issue";
 import { reviewIssuePath } from "../lib/links";
+import { REVIEW_HOME_FILE_PROGRESS_SUFFIX } from "../lib/review-progress-copy";
 import {
   storyCodeReviewLink,
   storyHasTaskCommits,
@@ -40,14 +41,17 @@ function StoryCodeReviewLinkText({
   if (link.kind === "archived") {
     return (
       <>
-        Archived · {count} · Open
+        Archived · {count}
+        {REVIEW_HOME_FILE_PROGRESS_SUFFIX} · Open
       </>
     );
   }
   return (
     <>
       {count}
-      <span className="whitespace-nowrap"> files reviewed · Open</span>
+      <span className="whitespace-nowrap">
+        {REVIEW_HOME_FILE_PROGRESS_SUFFIX} · Open
+      </span>
     </>
   );
 }

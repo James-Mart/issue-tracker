@@ -9,9 +9,11 @@ export function ReviewIdentity({
   missing,
 }: {
   title: string;
-  id: string;
+  /** Branch id, issue id, PR number, etc. Omit for title-only rows (e.g. review home list). */
+  id?: string;
   missing?: boolean;
 }) {
+  const showSecondaryId = id !== undefined && id.length > 0;
   return (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
       <span
@@ -23,7 +25,9 @@ export function ReviewIdentity({
       >
         {title}
       </span>
-      <span className="font-mono text-xs tabular-nums text-muted-foreground">{id}</span>
+      {showSecondaryId ? (
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">{id}</span>
+      ) : null}
     </div>
   );
 }
