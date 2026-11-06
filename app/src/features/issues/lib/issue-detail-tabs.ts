@@ -1,4 +1,3 @@
-import { SUPPORTING_DOC_KEYS } from "@server/issue-constants";
 import { channelForIssue } from "@server/kind";
 import type {
   ConversationChannel,
@@ -7,37 +6,27 @@ import type {
   IssueKind,
 } from "@server/schemas";
 import type { ChannelTabIndicator } from "./channel-tab-indicator";
-import {
-  previewableSupportingDocs,
-  type SupportingDocPreviewTab,
-} from "./supporting-docs";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
 export const AGENTS_DETAIL_TAB = "agents" as const;
 export const DIFF_DETAIL_TAB = "diff" as const;
-export const OUTLINES_DETAIL_TAB = "outlines" as const;
 
 export type IssueDetailTabKey =
   | typeof DEFAULT_ISSUE_DETAIL_TAB
   | typeof AGENTS_DETAIL_TAB
   | typeof DIFF_DETAIL_TAB
-  | typeof OUTLINES_DETAIL_TAB
-  | ConversationChannel
-  | SupportingDocPreviewTab["key"];
+  | ConversationChannel;
 
 export type IssueDetailTab =
   | { key: typeof DEFAULT_ISSUE_DETAIL_TAB; label: "Overview" }
   | { key: typeof AGENTS_DETAIL_TAB; label: "Agents" }
   | { key: typeof DIFF_DETAIL_TAB; label: "Diff" }
-  | { key: typeof OUTLINES_DETAIL_TAB; label: "Outlines" }
-  | { key: ConversationChannel; label: string; channel: ConversationChannel }
-  | SupportingDocPreviewTab;
+  | { key: ConversationChannel; label: string; channel: ConversationChannel };
 
 const ISSUE_DETAIL_TAB_LABELS = {
   overview: "Overview",
   agents: "Agents",
   diff: "Diff",
-  outlines: "Outlines",
   planning: "Planning",
   implementing: "Implementing",
   review: "Review",
@@ -70,8 +59,8 @@ export function diffTabForIssue(issue: Issue): boolean {
 }
 
 /**
- * Page-level tab set for issue detail: Overview always; optional channel;
- * Project keeps an Outlines catalog, then supporting-doc preview tabs.
+ * Page-level tab set for issue detail: Overview always; optional channel,
+ * Agents, and Diff. The project issue uses the home bar instead of this set.
  */
 export function tabsForIssueDetail(
   issue: Issue,
@@ -100,29 +89,16 @@ export function tabsForIssueDetail(
   if (diffTabForIssue(issue)) {
     tabs.push({ key: DIFF_DETAIL_TAB, label: ISSUE_DETAIL_TAB_LABELS.diff });
   }
-  if (issue.kind === "project") {
-    tabs.push({
-      key: OUTLINES_DETAIL_TAB,
-      label: ISSUE_DETAIL_TAB_LABELS.outlines,
-    });
-    tabs.push(...previewableSupportingDocs(issue.supportingDocs));
-  }
   return tabs;
 }
 
 function tabTitleSuffix(tab: IssueDetailTab): string | undefined {
   if (tab.key === DEFAULT_ISSUE_DETAIL_TAB) return undefined;
-  if ("ref" in tab) return "Doc";
   return tab.label;
-}
-
-function isUnloadedSupportingDocKey(tabParam: string): boolean {
-  return (SUPPORTING_DOC_KEYS as readonly string[]).includes(tabParam);
 }
 
 function suffixForUnloadedTabKey(tabParam: string): string | undefined {
   if (tabParam === DEFAULT_ISSUE_DETAIL_TAB) return undefined;
-  if (isUnloadedSupportingDocKey(tabParam)) return "Doc";
   if (Object.hasOwn(ISSUE_DETAIL_TAB_LABELS, tabParam)) {
     return ISSUE_DETAIL_TAB_LABELS[
       tabParam as keyof typeof ISSUE_DETAIL_TAB_LABELS
@@ -132,9 +108,9 @@ function suffixForUnloadedTabKey(tabParam: string): string | undefined {
 }
 
 /**
- * Suffix for the issue-detail tab title. Overview has none. A supporting-doc
- * preview uses `Doc`; every other eligible tab uses its label. Without
- * `tabs`, only static tab keys and supporting-doc keys produce a suffix.
+ * Suffix for the issue-detail tab title. Overview has none. Every other
+ * eligible tab uses its label. Without `tabs`, only static tab keys produce
+ * a suffix.
  */
 export function issueDetailTabTitleSuffix(
   tabParam: string | null,

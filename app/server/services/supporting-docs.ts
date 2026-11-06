@@ -22,9 +22,7 @@ export const WELL_KNOWN_SUPPORTING_DOC_BASENAMES: Record<
   verification: "verification.md",
 };
 
-export function isSupportingDocKey(value: string): value is SupportingDocKey {
-  return (SUPPORTING_DOC_KEYS as readonly string[]).includes(value);
-}
+export { isSupportingDocKey } from "../issue-constants.js";
 
 function validateRef(
   projectId: string,

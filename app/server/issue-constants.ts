@@ -18,6 +18,12 @@ export const SUPPORTING_DOC_KEYS = [
 ] as const;
 export type SupportingDocKey = (typeof SUPPORTING_DOC_KEYS)[number];
 
+const SUPPORTING_DOC_KEY_SET = new Set<string>(SUPPORTING_DOC_KEYS);
+
+export function isSupportingDocKey(value: string): value is SupportingDocKey {
+  return SUPPORTING_DOC_KEY_SET.has(value);
+}
+
 export const RUNTIME_PHASE_KEYS = [
   "build",
   "start",

@@ -18,7 +18,6 @@ import { channelForLaunchKind } from "../lib/detail-launch-sync";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
-  OUTLINES_DETAIL_TAB,
   mobileChannelChromeForTab,
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
@@ -28,16 +27,9 @@ import {
 } from "../lib/issue-detail-tabs";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
-import type { SupportingDocPreviewTab } from "../lib/supporting-docs";
 import { AgentRunsPanel } from "./agent-runs-panel";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 import { IssueChangePanel } from "./issue-change-panel";
-import { ProjectOutlinesTab } from "./project-outlines-tab";
-import { SupportingDocPreview } from "./supporting-doc-preview";
-
-function isDocTab(tab: IssueDetailTab): tab is SupportingDocPreviewTab {
-  return "ref" in tab;
-}
 
 function isAgentsTab(
   tab: IssueDetailTab,
@@ -51,12 +43,6 @@ function isDiffTab(
   return tab.key === DIFF_DETAIL_TAB;
 }
 
-function isOutlinesTab(
-  tab: IssueDetailTab,
-): tab is Extract<IssueDetailTab, { key: typeof OUTLINES_DETAIL_TAB }> {
-  return tab.key === OUTLINES_DETAIL_TAB;
-}
-
 function isChannelTab(
   tab: IssueDetailTab,
 ): tab is Extract<IssueDetailTab, { channel: string }> {
@@ -65,8 +51,8 @@ function isChannelTab(
 
 /**
  * Page-level tab bar below the persistent header. Overview always; optional
- * channel from `channelForIssue`; Project keeps an Outlines catalog and
- * supporting-doc preview tabs. With Overview alone, no bar renders.
+ * channel from `channelForIssue`, plus Agents and Diff. With Overview alone,
+ * no bar renders. The project issue uses the home bar instead.
  */
 export function IssueDetailTabs({
   issue,
@@ -137,8 +123,6 @@ export function IssueDetailTabs({
   const channelTabs = tabs.filter(isChannelTab);
   const agentsTabs = tabs.filter(isAgentsTab);
   const diffTabs = tabs.filter(isDiffTab);
-  const outlinesTabs = tabs.filter(isOutlinesTab);
-  const docTabs = tabs.filter(isDocTab);
   const showBar = tabs.length > 1;
   const overviewSelected = active === "overview";
 
@@ -205,23 +189,6 @@ export function IssueDetailTabs({
       >
         {overview}
       </div>
-
-      {outlinesTabs.map((tab) => {
-        const selected = active === tab.key;
-        return (
-          <div
-            key={tab.key}
-            role="tabpanel"
-            className={cn(
-              "min-h-0 min-w-0 flex-1 overflow-y-auto",
-              !selected && "hidden",
-            )}
-            {...tabPanelVisibility(selected)}
-          >
-            <ProjectOutlinesTab projectId={projectId} />
-          </div>
-        );
-      })}
 
       {channelTabs.map((tab) => {
         const selected = active === tab.key;
@@ -290,24 +257,6 @@ export function IssueDetailTabs({
         );
       })}
 
-      {docTabs.map((tab) => {
-        const selected = active === tab.key;
-        const fillsReadingArea = tab.format === "html";
-        return (
-          <div
-            key={tab.key}
-            role="tabpanel"
-            className={cn(
-              "min-h-0 min-w-0 flex-1",
-              fillsReadingArea ? "flex flex-col" : "overflow-y-auto",
-              !selected && "hidden",
-            )}
-            {...tabPanelVisibility(selected)}
-          >
-            <SupportingDocPreview projectId={projectId} tab={tab} />
-          </div>
-        );
-      })}
     </div>
   );
 }

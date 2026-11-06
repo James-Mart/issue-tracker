@@ -19,7 +19,7 @@ export function issuePath(projectId: string, id: string): string {
 export const PROJECT_SECRETS_CARD_ID = "secrets";
 
 export function projectSecretsCardPath(projectId: string): string {
-  return `${issuePath(projectId, projectId)}#${PROJECT_SECRETS_CARD_ID}`;
+  return `${issuePath(projectId, projectId)}?tab=overview#${PROJECT_SECRETS_CARD_ID}`;
 }
 
 export function issueChannelPath(

@@ -28,10 +28,6 @@ vi.mock("./channel-transcript-panel", () => ({
   ChannelTranscriptPanel: () => <div data-testid="channel-transcript-panel" />,
 }));
 
-vi.mock("./supporting-doc-preview", () => ({
-  SupportingDocPreview: () => <div data-testid="supporting-doc-preview" />,
-}));
-
 const t0 = "2026-08-01T00:00:00.000Z";
 
 function idea(): IssueDetail {
