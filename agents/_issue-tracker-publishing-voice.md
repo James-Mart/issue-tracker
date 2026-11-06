@@ -1,8 +1,7 @@
 # Publishing voice
 
 Not a spawnable agent (no frontmatter). Cross-cutting voice rules for prose
-published for a reader outside the tracker's agents: GitHub export drafts and
-outlines. Callers **Read** this file from disk — a markdown link alone is not
+published for a reader outside the tracker's agents: outlines. Callers **Read** this file from disk — a markdown link alone is not
 enough.
 
 Absolute path for this file (Read this exact path):

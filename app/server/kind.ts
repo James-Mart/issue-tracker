@@ -133,21 +133,6 @@ export function channelForIssue(
   }
 }
 
-/**
- * Export channel beside the workflow channel. Unarchived Epic or
- * project-level Story only.
- */
-export function offersExportChannel(
-  issue: Issue,
-  parentKind?: IssueKind,
-): boolean {
-  if (issue.kind === "epic") return issue.archived !== true;
-  if (issue.kind === "story" && parentKind === "project") {
-    return issue.archived !== true;
-  }
-  return false;
-}
-
 /** Review conversations (review taskers, question researchers) anchor to the review issue. */
 export function offersReviewChannel(issue: Issue): boolean {
   return issue.kind === "review";

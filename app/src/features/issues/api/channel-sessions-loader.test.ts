@@ -59,7 +59,7 @@ describe("loadChannelSessions", () => {
     expect(beta[0]?.id).toBe("beta-implementing");
     expect(alphaAgain).toEqual(alpha);
 
-    await loadChannelSessions("gamma", "export");
+    await loadChannelSessions("gamma", "review");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -72,7 +72,7 @@ describe("loadChannelSessions", () => {
     );
 
     const first = loadChannelSessions("alpha", "planning");
-    const second = loadChannelSessions("beta", "export");
+    const second = loadChannelSessions("beta", "review");
     await expect(first).rejects.toThrow("pairs must be an array");
     await expect(second).rejects.toThrow("pairs must be an array");
   });

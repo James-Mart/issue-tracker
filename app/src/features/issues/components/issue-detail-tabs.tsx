@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ConversationChannel, IdeaStatus, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
@@ -15,7 +15,6 @@ import {
   overlayCockpitLaunchAck,
 } from "../lib/cockpit-launch-sync";
 import { channelForLaunchKind } from "../lib/detail-launch-sync";
-import { exportTabIncluded } from "../lib/export-tab";
 import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
@@ -23,7 +22,6 @@ import {
   mobileChannelChromeForTab,
   resolveChannelTabIndicator,
   resolveIssueDetailTab,
-  tabsForIssueDetail,
   writeIssueDetailTabParam,
   type IssueDetailTab,
   type IssueDetailTabKey,
@@ -74,26 +72,16 @@ export function IssueDetailTabs({
   issue,
   projectId,
   parentKind,
+  tabs,
   overview,
-  exportTab = false,
-  exportDraftReaderOpen = false,
-  onExportDraftReaderOpenChange,
 }: {
   issue: IssueDetail;
   projectId: string;
   parentKind?: IssueKind;
+  tabs: readonly IssueDetailTab[];
   overview: ReactNode;
-  /** `loading` keeps an existing `?tab=export` from being stripped. */
-  exportTab?: boolean | "loading";
-  exportDraftReaderOpen?: boolean;
-  onExportDraftReaderOpenChange?: (open: boolean) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const includeExport = exportTabIncluded(exportTab, searchParams.get("tab"));
-  const tabs = useMemo(
-    () => tabsForIssueDetail(issue, parentKind, { includeExport }),
-    [includeExport, issue, parentKind],
-  );
   const { data: list } = useIssuesWithArchived(isArchived(issue));
   const pending = useCockpitLaunchStore((s) => s.pending);
   const ack = useCockpitLaunchStore((s) => s.ack);
@@ -109,23 +97,15 @@ export function IssueDetailTabs({
     issue.kind === "idea" ? derived?.[issue.id]?.ideaStatus : undefined;
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
   const isMobile = useIsMobile();
-  const mobileChannelChrome = mobileChannelChromeForTab(
-    isMobile,
-    active,
-    tabs,
-  );
-  const compactChrome =
-    mobileChannelChrome ||
-    (isMobile && active === "export" && exportDraftReaderOpen);
+  const mobileChannelChrome = mobileChannelChromeForTab(isMobile, active, tabs);
 
   useEffect(() => {
     const raw = searchParams.get("tab");
     if (raw == null || tabs.some((tab) => tab.key === raw)) return;
-    if (exportTab === "loading" && raw === "export") return;
     setSearchParams((prev) => writeIssueDetailTabParam(prev, active), {
       replace: true,
     });
-  }, [active, exportTab, searchParams, setSearchParams, tabs]);
+  }, [active, searchParams, setSearchParams, tabs]);
 
   useEffect(() => {
     return useCockpitLaunchStore.subscribe((state, prev) => {
@@ -172,10 +152,10 @@ export function IssueDetailTabs({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col",
-        compactChrome ? "gap-0" : "gap-4",
+        mobileChannelChrome ? "gap-0" : "gap-4",
       )}
     >
-      {compactChrome ? null : (
+      {mobileChannelChrome ? null : (
         <div
           role="tablist"
           aria-label="Issue detail"
@@ -262,11 +242,6 @@ export function IssueDetailTabs({
               mobileFullViewport={mobileChannelChrome}
               onBackToOverview={
                 mobileChannelChrome ? onBackToOverview : undefined
-              }
-              onExportDraftReaderOpenChange={
-                tab.channel === "export"
-                  ? onExportDraftReaderOpenChange
-                  : undefined
               }
             />
           </div>

@@ -8,6 +8,7 @@ import {
   resetCockpitLaunchStore,
   useCockpitLaunchStore,
 } from "../store/use-cockpit-launch-store";
+import { tabsForIssueDetail } from "../lib/issue-detail-tabs";
 import { IssueDetailTabs } from "./issue-detail-tabs";
 
 vi.mock("../hooks/use-channel-tab-indicator", () => ({
@@ -50,6 +51,7 @@ function idea(): IssueDetail {
 }
 
 function mountTabs(): HTMLDivElement {
+  const issue = idea();
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -57,8 +59,9 @@ function mountTabs(): HTMLDivElement {
     root.render(
       <MemoryRouter>
         <IssueDetailTabs
-          issue={idea()}
+          issue={issue}
           projectId="issue-tracker"
+          tabs={tabsForIssueDetail(issue)}
           overview={<div>Overview body</div>}
         />
       </MemoryRouter>,

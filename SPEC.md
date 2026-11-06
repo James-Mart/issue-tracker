@@ -1906,9 +1906,7 @@ Malformed lines are skipped into `problems` on read, never thrown.
 and prose under `issues/`, shared by the HTTP routes and the CLI.
 `app/server/services/attachments.ts` is the sibling writer for
 `issues/<id>/attachments/` (per-file get/put/remove share the same `serialize`
-chain; `listAttachments` does not).
-`app/server/services/export-drafts.ts` writes the reserved `github-export-*`
-set on that same chain. All misconfiguration is prevented here, so
+chain; `listAttachments` does not). All misconfiguration is prevented here, so
 no consumer can persist a broken file.
 
 ### Writer contract
@@ -1980,10 +1978,6 @@ no consumer can persist a broken file.
 - Attachment bytes (`attachments.ts`): `listAttachments` / `getAttachment` /
   `putAttachment` (unique name on collision) / `removeAttachment` — see
   [Attachments](#attachments). Not part of `read(id)` payloads.
-- Reserved GitHub export drafts (`export-drafts.ts`): `replaceExportDrafts`
-  replaces the issue's `github-export-*` set in one write;
-  `overwriteExportDraft` writes one reserved basename. A failed replace
-  leaves the previous set unchanged.
 
 ### Cross-cutting guarantees
 
@@ -2119,20 +2113,6 @@ Removal is explicit (`removeAttachment` / `issue <kind> detach` / `DELETE`).
 There is no rename verb — attach under the desired basename and detach the
 old name, or use replace when overwriting in place.
 
-**GitHub export drafts.** Basenames matching `^github-export-.+\.md$` are
-reserved. Each file is YAML frontmatter with a required `title` string, then
-a markdown body. A write that omits `title`, or whose basename does not
-match, is refused — these names are not suffixed or rewritten.
-`PUT /api/issues/:id/export-drafts` with
-`{ files: { name, content }[] }` replaces that issue's whole reserved set:
-every name in `files` is written, and any existing reserved name absent from
-`files` is deleted. Other attachments stay. A failed write leaves the
-previous reserved set unchanged. `200` returns `Attachment[]` for the new
-set. `PUT /api/issues/:id/attachments/:name` with a raw body (`Content-Type`
-`text/markdown` or `text/plain`) creates or overwrites that exact reserved
-basename. Any other name is refused; those stay create-only on `POST`.
-`200` returns one `Attachment`.
-
 **HTTP** (thin adapter over the service; payloads are not embedded in
 `GET /api/issues/:id`):
 
@@ -2140,25 +2120,8 @@ basename. Any other name is refused; those stay create-only on `POST`.
 | --- | --- | --- |
 | `GET` | `/api/issues/:id/attachments` | list metadata |
 | `POST` | `/api/issues/:id/attachments` | multipart `file` upload; requested name = basename of uploaded filename; on collision store under a unique name; `201` returns the stored name; `?replace=true` overwrites that exact basename and returns `200`, or `404` when missing |
-| `PUT` | `/api/issues/:id/attachments/:name` | raw `text/markdown` or `text/plain` body; overwrite only when `:name` matches `^github-export-.+\.md$`; `200` one `Attachment` |
 | `GET` | `/api/issues/:id/attachments/:name` | download bytes + `Content-Type` |
 | `DELETE` | `/api/issues/:id/attachments/:name` | remove one file |
-| `PUT` | `/api/issues/:id/export-drafts` | JSON `{ files: { name, content }[] }` replaces the reserved set; `200` `Attachment[]` |
-
-**Export channel.** `export` sits beside `planning` and `implementing`.
-Session lists are `POST /api/channel-sessions` with
-`{ pairs: [{ issueId, channel }] }`, returning
-`{ sessions: { "<issueId>:<channel>": ChannelSessionListItem[] } }`.
-Create stays `POST /api/issues/:id/channels/:channel/sessions`. POST body stays
-`{ model, title?, message? }` and still archives prior non-archived sessions
-on the same issue and channel before creating the new one, refusing with `409`
-while one of them is busy. `export` is
-offered on an unarchived Epic or project-level Story, in addition to that
-issue's `implementing` channel. The session message tells the coordinator to
-read [issue-tracker-github-export](skills/issue-tracker-github-export/SKILL.md)
-and follow it for that root. The skill's first run takes file names and order
-from the draft script, authors publishing prose, and calls
-`PUT /api/issues/:id/export-drafts` once with that full set.
 
 **Description links.** Issue-local relative Markdown only. A link like
 `[foo](foo.tsx)` means that issue's `attachments/foo.tsx`. Arbitrary external
@@ -2684,8 +2647,7 @@ absolute-path **Read**. Among them, `_issue-tracker-ikigai.md` carries the
 universal framing for pipeline agents. Every spawnable role and every
 coordinator skill (`issue-tracker-work`, `issue-tracker-plan`,
 `issue-tracker-auto-plan`, `issue-tracker-plan-polish`, `issue-tracker-retro`,
-`issue-tracker-mockup`, `issue-tracker-project-docs`,
-`issue-tracker-github-export`) **Read**s it. The coding standard that
+`issue-tracker-mockup`, `issue-tracker-project-docs`) **Read**s it. The coding standard that
 sanctions this prose lives in a Project attachment outside version control;
 this SPEC entry is where the invariant is durable.
 

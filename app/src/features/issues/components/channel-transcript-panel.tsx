@@ -20,7 +20,7 @@ import {
   currentChannelSession,
   defaultChannelSession,
 } from "../api/channel-sessions";
-import { useAttachmentsQuery, useChannelSessionsQuery } from "../api/queries";
+import { useChannelSessionsQuery } from "../api/queries";
 import {
   cockpitLaunchOverlayForIssue,
   type CockpitLaunchFault,
@@ -31,15 +31,12 @@ import {
   launchOverlaysChannel,
   launchTranscriptSession,
 } from "../lib/detail-launch-sync";
-import { exportDraftCount } from "../lib/export-tab";
 import { useParkedRootResume } from "../hooks/use-parked-root-resume";
 import { isImplementingWorkRoot } from "@server/services/implementing-launch";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelSessionOverflowMenu } from "./channel-session-overflow-menu";
 import { ChannelSessionSwitcher } from "./channel-session-switcher";
 import { ChannelRetroControl } from "./channel-retro-control";
-import { useExportTranscriptChrome } from "./export-transcript-chrome";
-import { ExportReviewWorkbench } from "./export-review-workbench";
 import {
   ImplementingChannelEmptyState,
   ImplementingNewRunControl,
@@ -136,7 +133,7 @@ function ChannelPanelFrame({
  * Full-width channel panel: Agents transcript for the channel's current
  * session, or an empty state naming what the channel is for.
  */
-function ChannelTranscriptBody({
+export function ChannelTranscriptPanel({
   issueId,
   issue,
   channel,
@@ -145,10 +142,6 @@ function ChannelTranscriptBody({
   parentKind,
   mobileFullViewport = false,
   onBackToOverview,
-  composerDisabled = false,
-  composerDisabledPlaceholder,
-  extraHeaderActions,
-  preferredSessionId,
 }: {
   issueId: string;
   issue?: IssueDetail;
@@ -159,10 +152,6 @@ function ChannelTranscriptBody({
   /** Phone-width issue channel: compact chrome under TopBar. */
   mobileFullViewport?: boolean;
   onBackToOverview?: () => void;
-  composerDisabled?: boolean;
-  composerDisabledPlaceholder?: string;
-  extraHeaderActions?: ReactNode;
-  preferredSessionId?: string;
 }) {
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [pendingStart, setPendingStart] = useState<StartedSession | undefined>();
@@ -199,10 +188,6 @@ function ChannelTranscriptBody({
   const launchId = launchFromList?.id ?? pendingLaunch?.resumeSession?.id;
 
   const sawLaunchOverlay = useRef(false);
-  useEffect(() => {
-    if (!preferredSessionId) return;
-    setSelectedId(preferredSessionId);
-  }, [preferredSessionId]);
 
   useEffect(() => {
     if (!launchId) return;
@@ -409,11 +394,10 @@ function ChannelTranscriptBody({
       />
     ) : null;
   const channelHeaderActions =
-    retroControl || channelNewRun || extraHeaderActions ? (
+    retroControl || channelNewRun ? (
       <>
         {retroControl}
         {channelNewRun}
-        {extraHeaderActions}
       </>
     ) : null;
 
@@ -466,8 +450,6 @@ function ChannelTranscriptBody({
         conversationId={selectedSession.id}
         meta={{ title: selectedSession.title, model: selectedSession.model }}
         hideComposer={selectedSession.archived}
-        composerDisabled={composerDisabled}
-        composerDisabledPlaceholder={composerDisabledPlaceholder}
         pauseCancel={channel === "implementing"}
         parkedResume={parkedResume}
         onBack={mobileBack?.onBack}
@@ -477,69 +459,4 @@ function ChannelTranscriptBody({
       />
     </ChannelPanelFrame>
   );
-}
-
-/** Export tab: composer lock and Retry follow the current export session. */
-function ExportChannelTranscript(props: {
-  issueId: string;
-  issue?: IssueDetail;
-  channel: ConversationChannel;
-  label: string;
-  projectId?: string;
-  parentKind?: IssueKind;
-  mobileFullViewport?: boolean;
-  onBackToOverview?: () => void;
-  onExportDraftReaderOpenChange?: (open: boolean) => void;
-}) {
-  const [retriedId, setRetriedId] = useState<string | undefined>();
-  const { data } = useChannelSessionsQuery(props.issueId, "export");
-  const attachments = useAttachmentsQuery(props.issueId);
-  const current = currentChannelSession(data ?? []);
-  const chrome = useExportTranscriptChrome(
-    { id: props.issueId, title: props.issue?.title ?? "" },
-    current,
-    ({ id }) => setRetriedId(id),
-  );
-  const transcript = (
-    <ChannelTranscriptBody
-      {...props}
-      composerDisabled={chrome.composerDisabled}
-      composerDisabledPlaceholder={chrome.composerDisabledPlaceholder}
-      extraHeaderActions={chrome.retry}
-      preferredSessionId={retriedId}
-    />
-  );
-  const draftCount = exportDraftCount(
-    (attachments.data ?? []).map((item) => item.name),
-  );
-  if (attachments.isLoading && attachments.data === undefined) {
-    return <ShellLoadingState label="Loading export…" />;
-  }
-  if (draftCount > 0 && props.issue) {
-    return (
-      <ExportReviewWorkbench
-        issue={props.issue}
-        session={current}
-        transcript={transcript}
-        onExportDraftReaderOpenChange={props.onExportDraftReaderOpenChange}
-      />
-    );
-  }
-  return transcript;
-}
-
-/** Full-width channel panel. Export adds rewrite chrome around the transcript. */
-export function ChannelTranscriptPanel(props: {
-  issueId: string;
-  issue?: IssueDetail;
-  channel: ConversationChannel;
-  label: string;
-  projectId?: string;
-  parentKind?: IssueKind;
-  mobileFullViewport?: boolean;
-  onBackToOverview?: () => void;
-  onExportDraftReaderOpenChange?: (open: boolean) => void;
-}) {
-  if (props.channel === "export") return <ExportChannelTranscript {...props} />;
-  return <ChannelTranscriptBody {...props} />;
 }
