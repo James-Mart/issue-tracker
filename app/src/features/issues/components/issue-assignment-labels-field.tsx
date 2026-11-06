@@ -1,4 +1,5 @@
 import type { ProjectLabel } from "@server/schemas";
+import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +11,7 @@ import { useUpdateIssue } from "../api/mutations";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 import {
   assignmentLabelsEqual,
+  resolveAssignedLabels,
   sanitizeAssignmentIds,
   toggleAssignmentId,
   type LabelAssignableIssue,
@@ -26,7 +28,8 @@ export function IssueAssignmentLabelsField({
 }) {
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
-  const selected = sanitizeAssignmentIds(issue.labels, catalog);
+  const assignedLabels = resolveAssignedLabels(issue.labels, catalog);
+  const selected = assignedLabels.map((label) => label.id);
 
   const onChange = (next: string[]) => {
     const sanitized = sanitizeAssignmentIds(next, catalog);
@@ -40,18 +43,18 @@ export function IssueAssignmentLabelsField({
   };
 
   const editTrigger =
-    catalog.length === 0 ? undefined : (
+    catalog.length === 0 ? null : (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
-            variant="link"
-            size="sm"
-            className="h-auto px-0 py-0 text-sm font-normal"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground"
             aria-label="Edit labels"
             disabled={saving}
           >
-            Edit labels
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -77,7 +80,7 @@ export function IssueAssignmentLabelsField({
     <div className="flex min-w-0 flex-col gap-1">
       <OverviewLabelsRow
         catalog={catalog}
-        assignmentIds={issue.labels}
+        assigned={assignedLabels}
         editTrigger={editTrigger}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
