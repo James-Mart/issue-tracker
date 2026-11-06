@@ -1,5 +1,4 @@
 import { FIELD_LABELS, MERGE_POLICY_LABELS } from "@server/fields";
-import { isArchived } from "@server/services/archived-visibility";
 import type {
   DerivedState,
   IssueDetail,
@@ -9,10 +8,15 @@ import type {
 } from "@server/schemas";
 import { useUpdateIssue } from "../api/mutations";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
-import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import { InlineField } from "./inline-field";
 import { MergePolicySelect } from "./merge-policy-select";
 import { MetaRow } from "./meta-row";
+
+/** Issues list + derived state for merge-settings resolution. */
+export type IssuesSnapshot = {
+  issues: IssueRecord[];
+  derived: Record<string, DerivedState>;
+};
 
 /** Label beside the value on wide viewports; stacked, full-width controls below `sm`. */
 const ROOT_MERGE_ROW_CLASS =
@@ -29,11 +33,6 @@ function trunkPlaceholder(trunk: string): string {
 function inheritOptionLabel(policy: MergePolicy): string {
   return `Inherit (${MERGE_POLICY_LABELS[policy]})`;
 }
-
-type IssuesSnapshot = {
-  issues: IssueRecord[];
-  derived: Record<string, DerivedState>;
-};
 
 /**
  * Row inputs for an Epic or project-level root Story. Missing lock or a
@@ -194,15 +193,4 @@ export function RootMergeSettingsRows({
       />
     </>
   );
-}
-
-/**
- * Merge base and merge policy on Epic and project-level root Story detail.
- * Other issues omit `mergeSettingsLock`, and this renders nothing for them.
- */
-export function RootMergeSettingsMeta({ issue }: { issue: RootIssue }) {
-  const { data } = useIssuesWithArchived(isArchived(issue));
-  const settings = rootMergeSettingsFor(issue, data);
-  if (!settings) return null;
-  return <RootMergeSettingsRows issue={issue} {...settings} />;
 }

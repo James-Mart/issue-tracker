@@ -141,13 +141,26 @@ export function useSupplementedById(
     const ids = rootKey ? rootKey.split("\0") : [];
     return missingChainIds(ids, byId, ancestors);
   }, [ancestors, data, baseIssues, rootKey, byId]);
-  return {
-    byId,
-    missingIds,
-    failedIds,
-    accept,
-    reject,
-    listReady: Boolean(data) || baseIssues !== undefined,
-    messageFor,
-  };
+  const listReady = Boolean(data) || baseIssues !== undefined;
+
+  return useMemo(
+    () => ({
+      byId,
+      missingIds,
+      failedIds,
+      accept,
+      reject,
+      listReady,
+      messageFor,
+    }),
+    [
+      byId,
+      missingIds,
+      failedIds,
+      accept,
+      reject,
+      listReady,
+      messageFor,
+    ],
+  );
 }

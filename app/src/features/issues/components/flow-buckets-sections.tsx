@@ -3,14 +3,13 @@ import {
   isValidElement,
   useMemo,
   useState,
-  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { IssueRecord } from "@server/schemas";
 import { Button } from "@/components/ui/button";
-import { Rail, type RailSpine } from "@/components/ui/rail";
+import { Rail, type RailPassThroughProps, type RailSpine } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import { issueRailNodeState } from "../lib/rail-state";
 import { parentOf } from "../lib/build-tree";
@@ -304,7 +303,7 @@ export function FlowPreviewedItems({
   /** Headed groups clip the spine to the first and last ports. */
   spine?: RailSpine;
   /** Extra attributes on the rail element (data attributes, labels). */
-  railProps?: Omit<HTMLAttributes<HTMLDivElement>, "className" | "style">;
+  railProps?: RailPassThroughProps;
 }) {
   const [showAll, setShowAll] = useState(false);
   const rowIndexes = useMemo(

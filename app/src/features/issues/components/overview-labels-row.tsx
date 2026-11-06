@@ -1,47 +1,42 @@
 import type { ReactNode } from "react";
 import type { ProjectLabel } from "@server/schemas";
-import { Button } from "@/components/ui/button";
-import { sanitizeAssignmentIds } from "../lib/project-labels";
 import { MetaFieldActions } from "./meta-row";
 import { ProjectLabelChip } from "./project-label-chip";
 
-const EMPTY_CATALOG_COPY =
-  "No labels in the catalog. Add them in project settings, then assign them here.";
+const LABELS_NONE = (
+  <span className="text-sm text-muted-foreground">None</span>
+);
 
-/** Overview labels value: assigned chips, Edit labels control, or empty-catalog copy. */
+/**
+ * Overview labels value: assigned chips or a neutral “None”, plus optional
+ * `editTrigger` when the Project has at least one catalog label (picker is hidden
+ * when there is nothing to assign—see Epic contract: hidden, not disabled).
+ */
 export function OverviewLabelsRow({
   catalog,
-  assignmentIds,
+  assigned,
   editTrigger,
 }: {
   catalog: ProjectLabel[];
-  assignmentIds: string[] | undefined;
-  /** When set, replaces the default Edit labels button (e.g. dropdown trigger). */
+  /** Resolved against `catalog` in the parent (`resolveAssignedLabels`). */
+  assigned: ProjectLabel[];
+  /** Opens the label editor (e.g. checklist in a dropdown); shown only when `catalog` is non-empty. */
   editTrigger?: ReactNode;
 }) {
-  if (catalog.length === 0) {
-    return <p className="text-sm text-muted-foreground">{EMPTY_CATALOG_COPY}</p>;
-  }
+  const showCatalog = catalog.length > 0;
 
-  const selected = new Set(sanitizeAssignmentIds(assignmentIds, catalog));
-  const assigned = catalog.filter((label) => selected.has(label.id));
+  // With no catalog entries, the issue detail surface offers no label picker; "None" is the whole empty state.
+  const value =
+    showCatalog && assigned.length > 0 ? (
+      assigned.map((label) => <ProjectLabelChip key={label.id} label={label} />)
+    ) : (
+      LABELS_NONE
+    );
 
   return (
     <MetaFieldActions>
-      {assigned.map((label) => (
-        <ProjectLabelChip key={label.id} label={label} />
-      ))}
-      {editTrigger ?? (
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto px-0 py-0 text-sm font-normal"
-          aria-label="Edit labels"
-        >
-          Edit labels
-        </Button>
-      )}
+      {value}
+      {showCatalog ? editTrigger : null}
     </MetaFieldActions>
   );
 }

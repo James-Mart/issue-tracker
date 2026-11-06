@@ -103,6 +103,15 @@ afterEach(async () => {
 });
 
 describe("IssueAssignmentLabelsField", () => {
+  it("shows None with no edit control when the label catalog is empty", () => {
+    const { container } = mount(
+      <IssueAssignmentLabelsField issue={story} catalog={[]} />,
+    );
+
+    expect(container.textContent).toContain("None");
+    expect(editLabelsTrigger(container)).toBeNull();
+  });
+
   it("does not send a second PATCH while a save is in flight", async () => {
     let resolveFirst: (() => void) | undefined;
     mutateAsync.mockImplementation(
