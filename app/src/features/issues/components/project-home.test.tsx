@@ -123,6 +123,17 @@ describe("ProjectHome supporting docs", () => {
     );
   });
 
+  it("drops a doc that is not previewable and shows the first doc", () => {
+    const view = mount(
+      "/projects/platform/issues/platform?tab=supportingDocs&doc=gateRubric&stay=1#section",
+      project(docs),
+    );
+    expect(text(view, "search")).toBe("?tab=supportingDocs&stay=1");
+    expect(text(view, "hash")).toBe("#section");
+    expect(text(view, "doc-preview")).toBe("vision");
+    expect(currentPeer(view)).toBe("Supporting docs");
+  });
+
   it("sets doc when a document is chosen and keeps the hash", () => {
     const view = mount(
       "/projects/platform/issues/platform?tab=supportingDocs&stay=1#section",

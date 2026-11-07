@@ -46,8 +46,10 @@ export function resolveProjectHomeTab(
  * Canonical project-home search. A previewable supporting-doc key becomes
  * `tab=supportingDocs` with `doc` set to that key. A supporting-doc key that
  * is not previewable becomes Supporting docs with no `doc` when any doc
- * previews, and Structure when none do. `doc` is removed on every other
- * peer. Other parameters stay. `null` means `params` is already canonical.
+ * previews, and Structure when none do. On Supporting docs, `doc` stays when
+ * it names a previewable doc and is removed otherwise. `doc` is removed on
+ * every other peer. Other parameters stay. `null` means `params` is already
+ * canonical.
  */
 export function projectHomeSearchAfterResolve(
   params: URLSearchParams,
@@ -86,6 +88,14 @@ export function projectHomeSearchAfterResolve(
   } else if (!onSupportingDocs) {
     assign("tab", null);
     assign("doc", null);
+  } else {
+    const doc = next.get("doc");
+    if (
+      doc != null &&
+      (!isSupportingDocKey(doc) || !previewableKeys.includes(doc))
+    ) {
+      assign("doc", null);
+    }
   }
 
   return changed ? next : null;
