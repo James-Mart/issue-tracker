@@ -10,4 +10,13 @@ describe("legacyProjectHomeRedirectTarget", () => {
       ),
     ).toBe("/projects/issue-tracker/issues/issue-tracker?tab=overview");
   });
+
+  it("maps structure lens to the project issue without tab", () => {
+    expect(
+      legacyProjectHomeRedirectTarget(
+        "issue-tracker",
+        new URLSearchParams("lens=structure"),
+      ),
+    ).toBe("/projects/issue-tracker/issues/issue-tracker");
+  });
 });

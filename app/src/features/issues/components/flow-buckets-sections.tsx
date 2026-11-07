@@ -22,7 +22,7 @@ import {
   type FlowBuckets,
   type FlowItem,
 } from "../lib/flow";
-import { projectLensPath } from "../lib/links";
+import { projectHomePeerHref } from "../lib/project-home";
 
 export type FlowBucketKey = keyof FlowBuckets | "needsAttention";
 
@@ -49,7 +49,7 @@ export function readyEmptyCopy(blocked: FlowItem[]): {
   if (projectIds.length === 1) {
     return {
       text: "Nothing ready. Blocked work is waiting in Structure.",
-      href: projectLensPath(projectIds[0]!, "structure"),
+      href: projectHomePeerHref(projectIds[0]!, "structure"),
     };
   }
   if (projectIds.length > 1) {

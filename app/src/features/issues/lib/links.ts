@@ -1,25 +1,18 @@
 export const ISSUE_LINK_PREFIX = "issue:";
 
-export function projectPath(projectId: string): string {
-  return `/projects/${projectId}`;
-}
-
-export function projectLensPath(
-  projectId: string,
-  lens: "structure" | "overview",
-): string {
-  return `${projectPath(projectId)}?lens=${lens}`;
-}
-
 export function issuePath(projectId: string, id: string): string {
   return `/projects/${projectId}/issues/${id}`;
+}
+
+export function projectPath(projectId: string): string {
+  return issuePath(projectId, projectId);
 }
 
 /** Hash target for the Project settings Secrets card. */
 export const PROJECT_SECRETS_CARD_ID = "secrets";
 
 export function projectSecretsCardPath(projectId: string): string {
-  return `${issuePath(projectId, projectId)}?tab=overview#${PROJECT_SECRETS_CARD_ID}`;
+  return `${projectPath(projectId)}?tab=overview#${PROJECT_SECRETS_CARD_ID}`;
 }
 
 export function issueChannelPath(
