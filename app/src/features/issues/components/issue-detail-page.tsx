@@ -36,6 +36,7 @@ import {
   tabsForIssueDetail,
   type IssueDetailTab,
 } from "../lib/issue-detail-tabs";
+import { projectHomeTitleSuffix } from "../lib/project-home";
 import { projectPath } from "../lib/links";
 import { reviewIssuePath } from "@/features/reviews/lib/links";
 import {
@@ -48,6 +49,7 @@ import { projectCatalogLabels } from "../lib/project-labels";
 import { IssueMetaPanel } from "./issue-meta-panel";
 import { IssueDetailHeader } from "./issue-detail-header";
 import { IssueDetailTabs } from "./issue-detail-tabs";
+import { ProjectHome } from "./project-home";
 import { StoryHumanRequestCard } from "./story-human-request-card";
 import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
@@ -60,7 +62,6 @@ import {
   type OutlineWithDraft,
 } from "./outline-pending-draft-card";
 import { IssueCommentsSection } from "./comments/comments-section";
-import { ProjectSettingsOverview } from "./project-settings-overview";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
 import { OverviewIconToolbar } from "./overview-icon-toolbar";
 import { PlanningOverviewLaunch } from "./planning-launch-control";
@@ -125,10 +126,6 @@ function IssueOverviewPanel({
   const awaitingDirection =
     issue.kind === "idea" &&
     list?.derived?.[issue.id]?.ideaStatus === "awaiting-direction";
-
-  if (issue.kind === "project") {
-    return <ProjectSettingsOverview issue={issue} upload={upload} />;
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -202,21 +199,30 @@ function IssueDetailBody({
         </div>
       )}
 
-      <IssueDetailTabs
-        issue={issue}
-        projectId={projectId}
-        parentKind={parentKind}
-        tabs={tabs}
-        overview={
-          <IssueOverviewPanel
-            issue={issue}
-            upload={upload}
-            catalog={catalog}
-            projectId={projectId}
-            parentKind={parentKind}
-          />
-        }
-      />
+      {issue.kind === "project" ? (
+        <ProjectHome
+          issue={issue}
+          projectId={projectId}
+          catalog={catalog}
+          upload={upload}
+        />
+      ) : (
+        <IssueDetailTabs
+          issue={issue}
+          projectId={projectId}
+          parentKind={parentKind}
+          tabs={tabs}
+          overview={
+            <IssueOverviewPanel
+              issue={issue}
+              upload={upload}
+              catalog={catalog}
+              projectId={projectId}
+              parentKind={parentKind}
+            />
+          }
+        />
+      )}
     </div>
   );
 }
@@ -279,8 +285,8 @@ function useIssueDetailShellFlags(
   const isMobile = useIsMobile();
   return useMemo(() => {
     if (!issue) return { boundShell: false, compactChannelChrome: false };
-    // Project docs (esp. Design system iframe) need a bounded shell so the
-    // reading area can fill and scroll internally.
+    // The project home, including a supporting-doc iframe, scrolls inside
+    // the page so the reading area can fill.
     if (issue.kind === "project") {
       return { boundShell: true, compactChannelChrome: false };
     }
@@ -331,7 +337,9 @@ export function IssueDetailPage() {
   );
   useTabTitle(
     tabTitleEntityName(issue?.title, id),
-    issueDetailTabTitleSuffix(tabParam, issue ? detailTabs : undefined),
+    id === projectId
+      ? projectHomeTitleSuffix(tabParam)
+      : issueDetailTabTitleSuffix(tabParam, issue ? detailTabs : undefined),
   );
 
   const missing = error instanceof ApiError && error.status === 404;
