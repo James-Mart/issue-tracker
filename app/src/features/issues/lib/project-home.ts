@@ -13,9 +13,8 @@ export type ProjectHomePeer =
 export type ProjectHomeSelection = {
   peer: ProjectHomePeer;
   /**
-   * Set when `tab` is a supporting-doc key. That key is not an unknown home
-   * tab, so it is not rewritten to Structure; the Supporting docs peer owns
-   * the redirect.
+   * Set when `tab` is still a supporting-doc key. That address belongs to
+   * Supporting docs, which rewrites it to `tab=supportingDocs`.
    */
   legacyDocKey?: SupportingDocKey;
 };
@@ -44,21 +43,79 @@ export function resolveProjectHomeTab(
 }
 
 /**
- * Search params to write when `tab` is not a canonical home address.
- * Supporting-doc keys are left unchanged. `null` means the URL already is.
+ * Canonical project-home search. A previewable supporting-doc key becomes
+ * `tab=supportingDocs` with `doc` set to that key. A supporting-doc key that
+ * is not previewable becomes Supporting docs with no `doc` when any doc
+ * previews, and Structure when none do. `doc` is removed on every other
+ * peer. Other parameters stay. `null` means `params` is already canonical.
  */
 export function projectHomeSearchAfterResolve(
   params: URLSearchParams,
   previewableKeys: readonly SupportingDocKey[],
 ): URLSearchParams | null {
   const raw = params.get("tab");
-  if (raw == null) return null;
-  if (isSupportingDocKey(raw)) return null;
-  if (raw === "overview" || raw === "outlines") return null;
-  if (raw === "supportingDocs" && previewableKeys.length > 0) return null;
   const next = new URLSearchParams(params);
-  next.delete("tab");
+  let changed = false;
+  const assign = (key: string, value: string | null) => {
+    if (value == null) {
+      if (!next.has(key)) return;
+      next.delete(key);
+      changed = true;
+      return;
+    }
+    if (next.get(key) === value) return;
+    next.set(key, value);
+    changed = true;
+  };
+
+  const onSupportingDocs =
+    raw === "supportingDocs" && previewableKeys.length > 0;
+  if (raw != null && isSupportingDocKey(raw)) {
+    if (previewableKeys.includes(raw)) {
+      assign("tab", "supportingDocs");
+      assign("doc", raw);
+    } else if (previewableKeys.length > 0) {
+      assign("tab", "supportingDocs");
+      assign("doc", null);
+    } else {
+      assign("tab", null);
+      assign("doc", null);
+    }
+  } else if (raw === "overview" || raw === "outlines") {
+    assign("doc", null);
+  } else if (!onSupportingDocs) {
+    assign("tab", null);
+    assign("doc", null);
+  }
+
+  return changed ? next : null;
+}
+
+/** Supporting docs search with `doc` set to `key`. Other parameters stay. */
+export function supportingDocSearch(
+  params: URLSearchParams,
+  key: SupportingDocKey,
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  next.set("tab", "supportingDocs");
+  next.set("doc", key);
   return next;
+}
+
+/**
+ * Same path and hash, with the query taken from `params`.
+ * Callers use this where a search-only navigation would drop the hash.
+ */
+export function locationWithSearch(
+  location: { pathname: string; hash: string },
+  params: URLSearchParams,
+): { pathname: string; search: string; hash: string } {
+  const search = params.toString();
+  return {
+    pathname: location.pathname,
+    search: search ? `?${search}` : "",
+    hash: location.hash,
+  };
 }
 
 /**
@@ -97,7 +154,8 @@ export function projectHomeTitleSuffix(
   if (tabParam == null || tabParam === "structure") return undefined;
   if (tabParam === "overview") return "Overview";
   if (tabParam === "outlines") return "Outlines";
-  if (tabParam === "supportingDocs") return "Supporting docs";
-  if (isSupportingDocKey(tabParam)) return "Doc";
+  if (tabParam === "supportingDocs" || isSupportingDocKey(tabParam)) {
+    return "Supporting docs";
+  }
   return undefined;
 }

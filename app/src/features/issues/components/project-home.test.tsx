@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { act } from "react";
-import { createRoot } from "react-dom/client";
-import { MemoryRouter, useSearchParams } from "react-router-dom";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
+import { SUPPORTING_DOC_KEY_LABELS } from "../lib/supporting-docs";
 import { ProjectHome } from "./project-home";
 
 vi.mock("./project-structure-lens", () => ({
@@ -31,6 +32,12 @@ vi.mock("./supporting-doc-preview", () => ({
 
 const t0 = "2026-08-01T00:00:00.000Z";
 
+const docs: Extract<IssueDetail, { kind: "project" }>["supportingDocs"] = {
+  vision: { type: "attachment", name: "vision.md" },
+  codingStandards: { type: "attachment", name: "standards.md" },
+  designSystem: { type: "workspace", path: "design.html" },
+};
+
 function project(
   supportingDocs?: Extract<IssueDetail, { kind: "project" }>["supportingDocs"],
 ): Extract<IssueDetail, { kind: "project" }> {
@@ -51,10 +58,17 @@ function project(
   };
 }
 
-function SearchProbe() {
-  const [params] = useSearchParams();
-  return <div data-testid="search">{params.toString()}</div>;
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <>
+      <div data-testid="search">{location.search}</div>
+      <div data-testid="hash">{location.hash}</div>
+    </>
+  );
 }
+
+const mounts: { root: Root; container: HTMLDivElement }[] = [];
 
 function mount(entry: string, issue = project()): HTMLDivElement {
   const container = document.createElement("div");
@@ -64,38 +78,69 @@ function mount(entry: string, issue = project()): HTMLDivElement {
     root.render(
       <MemoryRouter initialEntries={[entry]}>
         <ProjectHome issue={issue} projectId="platform" catalog={[]} />
-        <SearchProbe />
+        <LocationProbe />
       </MemoryRouter>,
     );
   });
+  mounts.push({ root, container });
   return container;
 }
 
+function text(container: ParentNode, testId: string): string | undefined {
+  return container.querySelector(`[data-testid='${testId}']`)?.textContent ?? undefined;
+}
+
+function homeNav(container: ParentNode): HTMLElement {
+  const nav = container.querySelector("nav[aria-label='Project home']");
+  if (!(nav instanceof HTMLElement)) throw new Error("missing home nav");
+  return nav;
+}
+
 function currentPeer(container: ParentNode): string | undefined {
-  return (
-    container.querySelector("nav a[aria-current='page']")?.textContent ??
-    undefined
-  );
+  return homeNav(container).querySelector("a[aria-current='page']")?.textContent ?? undefined;
 }
 
 afterEach(() => {
+  for (const { root } of mounts) {
+    act(() => root.unmount());
+  }
+  mounts.length = 0;
   document.body.innerHTML = "";
 });
 
-describe("ProjectHome", () => {
-  it("leaves a supporting-doc key in place and shows that doc", () => {
-    const legacy = mount(
-      "/projects/platform/issues/platform?tab=vision",
-      project({
-        vision: { type: "attachment", name: "vision.md" },
-      }),
+describe("ProjectHome supporting docs", () => {
+  it("redirects a doc tab onto Supporting docs and keeps the rest of the address", () => {
+    const view = mount(
+      "/projects/platform/issues/platform?tab=vision&stay=1#section",
+      project(docs),
     );
-    expect(legacy.querySelector("[data-testid='search']")?.textContent).toBe(
-      "tab=vision",
+    expect(text(view, "search")).toBe("?tab=supportingDocs&stay=1&doc=vision");
+    expect(text(view, "hash")).toBe("#section");
+    expect(text(view, "doc-preview")).toBe("vision");
+    expect(currentPeer(view)).toBe("Supporting docs");
+    expect(homeNav(view).textContent).toBe(
+      "StructureOverviewOutlinesSupporting docsCode review",
     );
-    expect(
-      legacy.querySelector("[data-testid='doc-preview']")?.textContent,
-    ).toBe("vision");
-    expect(currentPeer(legacy)).toBe("Supporting docs");
+  });
+
+  it("sets doc when a document is chosen and keeps the hash", () => {
+    const view = mount(
+      "/projects/platform/issues/platform?tab=supportingDocs&stay=1#section",
+      project(docs),
+    );
+    const link = Array.from(
+      view.querySelectorAll("nav[aria-label='Supporting documents'] a"),
+    ).find(
+      (anchor) =>
+        anchor.textContent === SUPPORTING_DOC_KEY_LABELS.codingStandards,
+    );
+    act(() => {
+      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(text(view, "search")).toBe(
+      "?tab=supportingDocs&stay=1&doc=codingStandards",
+    );
+    expect(text(view, "hash")).toBe("#section");
+    expect(text(view, "doc-preview")).toBe("codingStandards");
   });
 });

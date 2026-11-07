@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { tabTriggerClassName } from "@/components/ui/tab-button";
 import { cn } from "@/lib/utils/cn";
@@ -7,6 +7,7 @@ import { projectReviewPath } from "@/features/reviews/lib/links";
 import type { UploadAttachmentMutation } from "../hooks/use-issue-detail-file-upload";
 import { issuePath } from "../lib/links";
 import {
+  locationWithSearch,
   projectHomeSearchAfterResolve,
   resolveProjectHomeTab,
   supportingDocForHome,
@@ -16,7 +17,7 @@ import { previewableSupportingDocs } from "../lib/supporting-docs";
 import { ProjectStructureSection } from "./project-structure-lens";
 import { ProjectOutlinesTab } from "./project-outlines-tab";
 import { ProjectSettingsOverview } from "./project-settings-overview";
-import { SupportingDocPreview } from "./supporting-doc-preview";
+import { SupportingDocsHome } from "./supporting-docs-home";
 
 type HomePeerLink = {
   id: ProjectHomePeer | "review";
@@ -47,7 +48,12 @@ export function ProjectHome({
   catalog: ProjectLabel[];
   upload?: UploadAttachmentMutation;
 }) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
   const previewable = useMemo(
     () => previewableSupportingDocs(issue.supportingDocs),
     [issue.supportingDocs],
@@ -64,15 +70,23 @@ export function ProjectHome({
     searchParams.get("doc"),
   );
 
-  const searchKey = searchParams.toString();
   useEffect(() => {
-    const next = projectHomeSearchAfterResolve(
-      new URLSearchParams(searchKey),
-      previewableKeys,
-    );
+    const next = projectHomeSearchAfterResolve(searchParams, previewableKeys);
     if (!next) return;
-    setSearchParams(next, { replace: true });
-  }, [previewableKeys, searchKey, setSearchParams]);
+    navigate(
+      locationWithSearch(
+        { pathname: location.pathname, hash: location.hash },
+        next,
+      ),
+      { replace: true },
+    );
+  }, [
+    location.hash,
+    location.pathname,
+    navigate,
+    previewableKeys,
+    searchParams,
+  ]);
 
   const peers: HomePeerLink[] = [
     {
@@ -109,9 +123,6 @@ export function ProjectHome({
     replace: false,
   });
 
-  const fillsReadingArea =
-    selection.peer === "supportingDocs" && doc?.format === "html";
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       <nav
@@ -137,7 +148,9 @@ export function ProjectHome({
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col",
-          fillsReadingArea ? "" : "overflow-y-auto",
+          selection.peer === "supportingDocs"
+            ? "overflow-hidden"
+            : "overflow-y-auto",
         )}
       >
         {selection.peer === "overview" ? (
@@ -147,7 +160,12 @@ export function ProjectHome({
           <ProjectOutlinesTab projectId={projectId} />
         ) : null}
         {selection.peer === "supportingDocs" && doc ? (
-          <SupportingDocPreview projectId={projectId} tab={doc} />
+          <SupportingDocsHome
+            projectId={projectId}
+            docs={previewable}
+            selected={doc}
+            searchParams={searchParams}
+          />
         ) : null}
         {selection.peer === "structure" ? (
           <ProjectStructureSection projectId={projectId} catalog={catalog} />
