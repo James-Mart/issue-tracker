@@ -2,6 +2,7 @@ import {
   isSupportingDocKey,
   type SupportingDocKey,
 } from "@server/issue-constants";
+import { issuePath } from "./links";
 import type { SupportingDocPreviewTab } from "./supporting-docs";
 
 export type ProjectHomePeer =
@@ -9,6 +10,24 @@ export type ProjectHomePeer =
   | "overview"
   | "outlines"
   | "supportingDocs";
+
+export type ProjectHomeBarActive = ProjectHomePeer | "review";
+
+export const PROJECT_HOME_PEER_LABELS: Record<ProjectHomePeer, string> = {
+  structure: "Structure",
+  overview: "Overview",
+  outlines: "Outlines",
+  supportingDocs: "Supporting docs",
+};
+
+export function projectHomePeerHref(
+  projectId: string,
+  peer: ProjectHomePeer,
+): string {
+  const base = issuePath(projectId, projectId);
+  if (peer === "structure") return base;
+  return `${base}?tab=${peer}`;
+}
 
 export type ProjectHomeSelection = {
   peer: ProjectHomePeer;

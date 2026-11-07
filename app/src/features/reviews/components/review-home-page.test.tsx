@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { IssueRecord, ReviewPrSource, ReviewRecordView } from "@server/schemas";
 import { reviewIssuePath } from "../lib/links";
+import { homeNav } from "@/features/issues/components/project-home-bar.test-helpers";
 import { ReviewHomePage } from "./review-home-page";
 
 const PROJECT = "proj";
@@ -64,7 +65,9 @@ vi.mock("../api/mutations", () => ({
   }),
 }));
 
-function project(): IssueRecord {
+function project(
+  supportingDocs?: Extract<IssueRecord, { kind: "project" }>["supportingDocs"],
+): IssueRecord {
   return {
     id: PROJECT,
     kind: "project",
@@ -75,6 +78,7 @@ function project(): IssueRecord {
     order: 0,
     createdAt: t0,
     updatedAt: t0,
+    ...(supportingDocs ? { supportingDocs } : {}),
   };
 }
 
@@ -207,6 +211,17 @@ function openCard(row: Element): HTMLElement {
 }
 
 describe("ReviewHomePage", () => {
+  it("shows the home bar above the lists with Code review selected", () => {
+    state.issues = [project()];
+    const container = mount();
+    const page = container.querySelector('[data-testid="review-home-page"]');
+    const bar = homeNav(container);
+    const header = page?.querySelector("header");
+    expect(bar.compareDocumentPosition(header!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar.querySelector('a[aria-current="page"]')?.textContent).toBe("Code review");
+    expect(page?.querySelector("#review-home-open-heading")).not.toBeNull();
+  });
+
   it("starts a review and navigates to it", async () => {
     state.issues = [
       project(),

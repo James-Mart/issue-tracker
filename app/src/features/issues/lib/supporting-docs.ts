@@ -37,6 +37,18 @@ export function supportingDocPreviewFormat(
   return null;
 }
 
+export function hasPreviewableSupportingDocs(
+  docs: SupportingDocs | undefined,
+): boolean {
+  if (!docs) return false;
+  for (const key of SUPPORTING_DOC_KEYS) {
+    const ref = docs[key];
+    if (!ref) continue;
+    if (supportingDocPreviewFormat(ref)) return true;
+  }
+  return false;
+}
+
 /** Preview tabs for set docs whose target ends in `.md` or `.html`. */
 export function previewableSupportingDocs(
   docs: SupportingDocs | undefined,

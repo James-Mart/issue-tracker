@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueDetail } from "@server/schemas";
 import { SUPPORTING_DOC_KEY_LABELS } from "../lib/supporting-docs";
+import { currentHomePeer, homeNav } from "./project-home-bar.test-helpers";
 import { ProjectHome } from "./project-home";
 
 vi.mock("./project-structure-lens", () => ({
@@ -90,16 +91,6 @@ function text(container: ParentNode, testId: string): string | undefined {
   return container.querySelector(`[data-testid='${testId}']`)?.textContent ?? undefined;
 }
 
-function homeNav(container: ParentNode): HTMLElement {
-  const nav = container.querySelector("nav[aria-label='Project home']");
-  if (!(nav instanceof HTMLElement)) throw new Error("missing home nav");
-  return nav;
-}
-
-function currentPeer(container: ParentNode): string | undefined {
-  return homeNav(container).querySelector("a[aria-current='page']")?.textContent ?? undefined;
-}
-
 afterEach(() => {
   for (const { root } of mounts) {
     act(() => root.unmount());
@@ -117,7 +108,7 @@ describe("ProjectHome supporting docs", () => {
     expect(text(view, "search")).toBe("?tab=supportingDocs&stay=1&doc=vision");
     expect(text(view, "hash")).toBe("#section");
     expect(text(view, "doc-preview")).toBe("vision");
-    expect(currentPeer(view)).toBe("Supporting docs");
+    expect(currentHomePeer(view)).toBe("Supporting docs");
     expect(homeNav(view).textContent).toBe(
       "StructureOverviewOutlinesSupporting docsCode review",
     );
@@ -131,7 +122,7 @@ describe("ProjectHome supporting docs", () => {
     expect(text(view, "search")).toBe("?tab=supportingDocs&stay=1");
     expect(text(view, "hash")).toBe("#section");
     expect(text(view, "doc-preview")).toBe("vision");
-    expect(currentPeer(view)).toBe("Supporting docs");
+    expect(currentHomePeer(view)).toBe("Supporting docs");
   });
 
   it("sets doc when a document is chosen and keeps the hash", () => {
