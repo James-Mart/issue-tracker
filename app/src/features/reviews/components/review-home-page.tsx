@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { hasPreviewableSupportingDocs } from "@/features/issues/lib/supporting-docs";
 import { Link, useParams } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import type { IssueRecord, ReviewProgress, ReviewRecordView } from "@server/schemas";
@@ -10,7 +11,7 @@ import {
 import { PageShell } from "@/components/page-shell";
 import { tabTitleEntityName, useTabTitle } from "@/lib/tab-title/use-tab-title";
 import { Button } from "@/components/ui/button";
-import { ProjectLensSwitcher } from "@/features/issues/components/project-lens-switcher";
+import { ProjectHomeBar } from "@/features/issues/components/project-home-bar";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { useOpenReview, useReopenReview } from "../api/mutations";
 import { useReviewProgressQuery, useReviewsQuery } from "../api/queries";
@@ -36,9 +37,6 @@ import {
 function ReviewHomeHeader({ title }: { title: string }) {
   return (
     <header className="min-w-0">
-      <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-        Code review
-      </p>
       <h1 className="truncate text-base font-semibold tracking-tight text-foreground">
         {title}
       </h1>
@@ -357,11 +355,15 @@ export function ReviewHomePage() {
   const issues = issuesQuery.data?.issues ?? [];
   const reviews = reviewsQuery.data?.reviews ?? [];
   const project = issues.find(
-    (issue) => issue.id === projectId && issue.kind === "project",
+    (issue): issue is Extract<IssueRecord, { kind: "project" }> =>
+      issue.id === projectId && issue.kind === "project",
   );
   const loading =
     (issuesQuery.isLoading && !issuesQuery.data) ||
     (reviewsQuery.isLoading && !reviewsQuery.data);
+  const showSupportingDocsTab = project
+    ? hasPreviewableSupportingDocs(project.supportingDocs)
+    : false;
   useTabTitle(tabTitleEntityName(project?.title, projectId), "Reviews");
 
   return (
@@ -398,11 +400,15 @@ export function ReviewHomePage() {
         </PageShell>
       ) : (
         <PageShell data-testid="review-home-page">
+          <ProjectHomeBar
+            projectId={projectId}
+            showSupportingDocsTab={showSupportingDocsTab}
+            active="review"
+          />
           <div className="flex items-start justify-between gap-3">
             <ReviewHomeHeader title={project.title} />
             <NewReviewPicker projectId={projectId} projectTitle={project.title} />
           </div>
-          <ProjectLensSwitcher projectId={projectId} active="review" />
           <ReviewHomeLists
             projectId={projectId}
             issues={issues}

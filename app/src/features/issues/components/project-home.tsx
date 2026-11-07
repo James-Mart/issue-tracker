@@ -1,36 +1,20 @@
 import { useEffect, useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
-import { tabTriggerClassName } from "@/components/ui/tab-button";
 import { cn } from "@/lib/utils/cn";
-import { projectReviewPath } from "@/features/reviews/lib/links";
 import type { UploadAttachmentMutation } from "../hooks/use-issue-detail-file-upload";
-import { issuePath } from "../lib/links";
 import {
   locationWithSearch,
   projectHomeSearchAfterResolve,
   resolveProjectHomeTab,
   supportingDocForHome,
-  type ProjectHomePeer,
 } from "../lib/project-home";
 import { previewableSupportingDocs } from "../lib/supporting-docs";
+import { ProjectHomeBar } from "./project-home-bar";
 import { ProjectStructureSection } from "./project-structure-lens";
 import { ProjectOutlinesTab } from "./project-outlines-tab";
 import { ProjectSettingsOverview } from "./project-settings-overview";
 import { SupportingDocsHome } from "./supporting-docs-home";
-
-type HomePeerLink = {
-  id: ProjectHomePeer | "review";
-  label: string;
-  to: string;
-  replace: boolean;
-};
-
-function projectHomePeerHref(projectId: string, peer: ProjectHomePeer): string {
-  const base = issuePath(projectId, projectId);
-  if (peer === "structure") return base;
-  return `${base}?tab=${peer}`;
-}
 
 /**
  * Project-issue home: Structure, Overview, Outlines, Supporting docs, and
@@ -88,62 +72,13 @@ export function ProjectHome({
     searchParams,
   ]);
 
-  const peers: HomePeerLink[] = [
-    {
-      id: "structure",
-      label: "Structure",
-      to: projectHomePeerHref(projectId, "structure"),
-      replace: true,
-    },
-    {
-      id: "overview",
-      label: "Overview",
-      to: projectHomePeerHref(projectId, "overview"),
-      replace: true,
-    },
-    {
-      id: "outlines",
-      label: "Outlines",
-      to: projectHomePeerHref(projectId, "outlines"),
-      replace: true,
-    },
-  ];
-  if (previewable.length > 0) {
-    peers.push({
-      id: "supportingDocs",
-      label: "Supporting docs",
-      to: projectHomePeerHref(projectId, "supportingDocs"),
-      replace: true,
-    });
-  }
-  peers.push({
-    id: "review",
-    label: "Code review",
-    to: projectReviewPath(projectId),
-    replace: false,
-  });
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      <nav
-        aria-label="Project home"
-        className="flex shrink-0 flex-wrap gap-1 border-b border-border shell:flex-nowrap"
-      >
-        {peers.map((peer) => {
-          const selected = peer.id !== "review" && selection.peer === peer.id;
-          return (
-            <Link
-              key={peer.id}
-              to={peer.to}
-              replace={peer.replace}
-              aria-current={selected ? "page" : undefined}
-              className={tabTriggerClassName(selected)}
-            >
-              {peer.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <ProjectHomeBar
+        projectId={projectId}
+        showSupportingDocsTab={previewable.length > 0}
+        active={selection.peer}
+      />
 
       <div
         className={cn(
