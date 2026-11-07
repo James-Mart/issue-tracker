@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from "fs";
 import { isAbsolute, resolve } from "path";
 import { pathToFileURL } from "url";
 import { chromium, type Page } from "@playwright/test";
+import { projectPath } from "../src/features/issues/lib/links";
 
 const DIALOGS = [
   "new-project",
@@ -479,7 +480,7 @@ async function openNewProjectDialog(page: Page): Promise<void> {
 
 async function openRenameProjectDialog(page: Page, projectId: string): Promise<void> {
   const item = page.getByRole("listitem").filter({
-    has: page.locator(`a[href="/projects/${projectId}"]`),
+    has: page.locator(`a[href="${projectPath(projectId)}"]`),
   });
   await item.hover();
   await item.getByRole("button", { name: "Project actions" }).click();

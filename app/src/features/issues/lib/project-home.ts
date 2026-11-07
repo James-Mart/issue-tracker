@@ -2,7 +2,7 @@ import {
   isSupportingDocKey,
   type SupportingDocKey,
 } from "@server/issue-constants";
-import { issuePath } from "./links";
+import { projectPath } from "./links";
 import type { SupportingDocPreviewTab } from "./supporting-docs";
 
 export type ProjectHomePeer =
@@ -20,11 +20,32 @@ export const PROJECT_HOME_PEER_LABELS: Record<ProjectHomePeer, string> = {
   supportingDocs: "Supporting docs",
 };
 
+/**
+ * Canonical project-issue path for a home-bar peer. On Structure, `tab` is
+ * omitted. `extra` parameters merge in and carry over (for example legacy
+ * redirects preserving non-lens query keys).
+ */
+export function projectHomeHrefWithParams(
+  projectId: string,
+  peer: ProjectHomePeer,
+  extra: URLSearchParams,
+): string {
+  const pathname = projectPath(projectId);
+  const params = new URLSearchParams(extra);
+  if (peer === "structure") {
+    params.delete("tab");
+  } else {
+    params.set("tab", peer);
+  }
+  const { search } = locationWithSearch({ pathname, hash: "" }, params);
+  return `${pathname}${search}`;
+}
+
 export function projectHomePeerHref(
   projectId: string,
   peer: ProjectHomePeer,
 ): string {
-  const base = issuePath(projectId, projectId);
+  const base = projectPath(projectId);
   if (peer === "structure") return base;
   return `${base}?tab=${peer}`;
 }

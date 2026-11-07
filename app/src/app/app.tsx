@@ -4,6 +4,7 @@ import {
   LegacyPipelineRunRedirect,
   LegacyPipelineRunsRedirect,
 } from "@/features/pipeline/pipeline-legacy-redirects";
+import { LegacyProjectHomeRedirect } from "@/features/issues/issues-legacy-redirects";
 import { Suspense, lazy, useEffect } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PageShell } from "@/components/page-shell";
@@ -30,11 +31,6 @@ const AgentsPage = lazy(() =>
 const PipelinePage = lazy(() =>
   import("@/features/pipeline/components/pipeline-page").then((m) => ({
     default: m.PipelinePage,
-  })),
-);
-const OverviewPage = lazy(() =>
-  import("@/features/issues/components/overview-page").then((m) => ({
-    default: m.OverviewPage,
   })),
 );
 const IssueDetailPage = lazy(() =>
@@ -100,7 +96,10 @@ export function App() {
             />
             <Route path="/pipeline" element={<LegacyPipelineRedirect />} />
             <Route path="/settings" element={<AppSettingsPage />} />
-            <Route path="/projects/:projectId" element={<OverviewPage />} />
+            <Route
+              path="/projects/:projectId"
+              element={<LegacyProjectHomeRedirect />}
+            />
             <Route
               path="/projects/:projectId/issues/:id"
               element={<IssueDetailPage />}

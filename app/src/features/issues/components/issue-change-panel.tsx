@@ -32,6 +32,7 @@ import { useFileDiffContentsLoader } from "../hooks/use-file-diff-contents-loade
 import { useFileThreadAnnotations } from "../hooks/use-file-thread-annotations";
 import { useVirtualizedFileScroll } from "../hooks/use-virtualized-file-scroll";
 import { useFocusDiffThread } from "../lib/issue-change-focus-thread";
+import { projectHomePeerHref } from "../lib/project-home";
 import { fileDiffsFromPatch, filterFilesByPath } from "../lib/issue-change-file-diffs";
 import type { CommentThread as CommentThreadData } from "../lib/comment-threads";
 import {
@@ -282,7 +283,7 @@ export function IssueChangePanel({
             action={
               fault === "workspace-unset" ? (
                 <Button variant="secondary" asChild>
-                  <Link to={`/projects/${encodeURIComponent(projectId)}`}>
+                  <Link to={projectHomePeerHref(projectId, "overview")}>
                     Open project settings
                   </Link>
                 </Button>

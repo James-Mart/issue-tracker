@@ -41,7 +41,8 @@ import { useIssuesQuery } from "../api/queries";
 import { useRouteProjectId } from "../hooks/use-route-project-id";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { listProjects } from "../lib/build-tree";
-import { projectLensPath, projectPath } from "../lib/links";
+import { projectPath } from "../lib/links";
+import { projectHomePeerHref } from "../lib/project-home";
 import {
   readSidebarProjectsSectionOpen,
   writeSidebarProjectsSectionOpen,
@@ -259,7 +260,7 @@ export function ProjectSidebar() {
                         <DropdownMenuContent side="right" align="start">
                           <DropdownMenuItem
                             onClick={() =>
-                              navigate(projectLensPath(project.id, "overview"))
+                              navigate(projectHomePeerHref(project.id, "overview"))
                             }
                           >
                             <FolderKanban className="h-4 w-4" />
