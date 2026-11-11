@@ -1,4 +1,4 @@
-import { bySequence, isProjectBoardChild } from "@server/order";
+import { bySequenceThenId, isProjectBoardChild } from "@server/order";
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
 import { issuesById } from "./build-tree";
@@ -55,7 +55,7 @@ export function linkedRootsForOutline(
       order: issue.order,
     });
   }
-  roots.sort((a, b) => bySequence(a, b) || a.id.localeCompare(b.id));
+  roots.sort(bySequenceThenId);
   return roots;
 }
 

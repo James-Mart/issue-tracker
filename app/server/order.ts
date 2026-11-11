@@ -6,6 +6,12 @@ export function bySequence(a: Sequenced, b: Sequenced): number {
   return a.order - b.order;
 }
 
+type SequencedWithId = Sequenced & { id: string };
+
+export function bySequenceThenId(a: SequencedWithId, b: SequencedWithId): number {
+  return bySequence(a, b) || a.id.localeCompare(b.id);
+}
+
 // The sibling group an issue's `order` is unique within: same parent, and for
 // Stories also the same fork point, so root Stories (no `stackedOn`) share one
 // bucket and each stack shares another — matching the DFS traversal below and

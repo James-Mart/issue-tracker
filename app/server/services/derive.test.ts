@@ -87,6 +87,41 @@ const project = (
   ...extra,
 });
 
+const idea = (
+  id: string,
+  partOf: string,
+  order = 0,
+  extra: Partial<Extract<Issue, { kind: "idea" }>> = {},
+): Issue => ({
+  id,
+  kind: "idea",
+  title: id,
+  partOf,
+  order,
+  archived: false,
+  createdAt: nextAt(),
+  updatedAt: nextAt(),
+  ...extra,
+});
+
+const outline = (
+  id: string,
+  partOf: string,
+  order = 0,
+  extra: Partial<Extract<Issue, { kind: "outline" }>> = {},
+): Issue => ({
+  id,
+  kind: "outline",
+  title: id,
+  partOf,
+  order,
+  bodyVersion: 1,
+  archived: false,
+  createdAt: nextAt(),
+  updatedAt: nextAt(),
+  ...extra,
+});
+
 describe("derive - commit blocked", () => {
   it("blocks a todo commit when an earlier sibling is not done", () => {
     const issues = [
@@ -152,5 +187,24 @@ describe("derive - effective mergePolicy", () => {
     const { byId } = derive(issues);
     expect(byId.base.mergePolicy).toBe("fast-forward");
     expect(byId.child.mergePolicy).toBe("fast-forward");
+  });
+});
+
+describe("derive - idea generatedOutlines", () => {
+  it("lists outlines in the same Project whose stored sourceIdea points at the Idea", () => {
+    const issues = [
+      project("p"),
+      idea("cap", "p"),
+      outline("o-first", "p", 0, { sourceIdea: "cap" }),
+      outline("o-second", "p", 2, { sourceIdea: "cap" }),
+      outline("o-other-idea", "p", 1, { sourceIdea: "other" }),
+      idea("other", "p", 1),
+      outline("o-wrong-project", "p2", 0, { sourceIdea: "cap" }),
+      project("p2"),
+    ];
+    expect(derive(issues).byId.cap.generatedOutlines).toEqual([
+      "o-first",
+      "o-second",
+    ]);
   });
 });

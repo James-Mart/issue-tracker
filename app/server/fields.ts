@@ -247,6 +247,7 @@ export const FIELD_LABELS = {
   appendTo: "Append to",
   sourceIdea: "Source idea",
   sourceOutline: "Source outline",
+  generatedOutline: "Generated outline",
   generatedIssues: "Generated issues",
   maxImplementingRuns: "Max implementing runs",
   autonomous: "Autonomous",
