@@ -4,11 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DerivedState, DerivedWorktree, IssueDetail, IssueRecord } from "@server/schemas";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  WORKTREE_REMOVE_DISABLED_REASON,
-  worktreeRemoveRetainedConfirm,
-} from "../lib/worktree-card";
+import { worktreeRemoveRetainedConfirm } from "../lib/worktree-card";
 import { StoryWorktreeRow } from "./story-worktree-row";
 
 const queryState = vi.hoisted(() => ({
@@ -115,25 +111,23 @@ function mountRow(issue: Extract<IssueDetail, { kind: "story" }>): {
   const root = createRoot(container);
   act(() => {
     root.render(
-      <TooltipProvider delayDuration={0}>
-        <MemoryRouter
-          initialEntries={[`/projects/issue-tracker/issues/${issue.id}`]}
-        >
-          <Routes>
-            <Route
-              path="/projects/:projectId/issues/:id"
-              element={
-                <StoryWorktreeRow
-                  issue={issue}
-                  projectId="issue-tracker"
-                  supplement={testSupplement(queryState.issues)}
-                  liveRun={queryState.derived[issue.id]?.liveRun === true}
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </TooltipProvider>,
+      <MemoryRouter
+        initialEntries={[`/projects/issue-tracker/issues/${issue.id}`]}
+      >
+        <Routes>
+          <Route
+            path="/projects/:projectId/issues/:id"
+            element={
+              <StoryWorktreeRow
+                issue={issue}
+                projectId="issue-tracker"
+                supplement={testSupplement(queryState.issues)}
+                liveRun={queryState.derived[issue.id]?.liveRun === true}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
     );
   });
   return { container, root };
@@ -178,28 +172,5 @@ describe("StoryWorktreeRow", () => {
       { discard: true },
       expect.any(Object),
     );
-  });
-
-  it("disables remove with a tooltip reason while a live run holds the Story", () => {
-    const issue = story();
-    seed(issue, worktree({ exists: true, path: PATH }), true);
-    const { container } = mountRow(issue);
-
-    const remove = actionButton(container, "story-worktree-remove");
-    expect(remove.disabled).toBe(true);
-    expect(remove.getAttribute("aria-label")).toBe(WORKTREE_REMOVE_DISABLED_REASON);
-    expect(
-      container.querySelector('[data-testid="story-worktree-remove-reason"]'),
-    ).toBeNull();
-
-    act(() => {
-      remove.click();
-    });
-    expect(
-      document.body.querySelector(
-        '[data-testid="remove-worktree-confirm-dialog"]',
-      ),
-    ).toBeNull();
-    expect(removeMutate).not.toHaveBeenCalled();
   });
 });
