@@ -42,8 +42,6 @@ function idea(
     createdAt: t0,
     updatedAt: t0,
     archived: false,
-    needsAttention: false,
-    attentionReason: null,
     description: "",
     version: "1",
     labels: [],
@@ -62,8 +60,7 @@ function outline(id: string, title: string, archived = false): IssueRecord {
     updatedAt: t0,
     archived,
     sourceIdea: "cap",
-    description: "",
-    version: "1",
+    bodyVersion: 1,
   };
 }
 
@@ -98,7 +95,6 @@ describe("IssueGeneratedIssuesField", () => {
         planRoots: ["story-ship"],
       },
     };
-    queryState.issues.push(story("story-ship", "Ship story"));
 
     const { container } = mount(<IssueGeneratedIssuesField issue={idea()} />);
     expect(container.textContent).toContain(FIELD_LABELS.generatedOutline);

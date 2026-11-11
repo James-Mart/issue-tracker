@@ -4,6 +4,11 @@ import { toast } from "sonner";
 import type { IssueDetail, IssuesResponse } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api/errors";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -261,37 +266,36 @@ function StoryWorktreeRowInner({
     });
   };
 
-  const removeControl =
-    canRemove ? (
-      <div className="flex flex-col items-end gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="w-fit text-destructive"
-          data-testid="story-worktree-remove"
-          disabled={removeHeld || pending}
-          aria-describedby={
-            removeHeld ? "story-worktree-remove-reason" : undefined
-          }
-          onClick={() => {
-            if (removeHeld || pending) return;
-            setConfirmOpen(true);
-          }}
-        >
-          Remove worktree
-        </Button>
-        {removeHeld ? (
-          <p
-            id="story-worktree-remove-reason"
-            data-testid="story-worktree-remove-reason"
-            className="max-w-[36ch] text-right text-sm leading-relaxed text-muted-foreground"
-          >
-            {WORKTREE_REMOVE_DISABLED_REASON}
-          </p>
-        ) : null}
-      </div>
-    ) : null;
+  const removeButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="w-fit text-destructive"
+      data-testid="story-worktree-remove"
+      disabled={removeHeld || pending}
+      aria-label={removeHeld ? WORKTREE_REMOVE_DISABLED_REASON : undefined}
+      onClick={() => {
+        if (removeHeld || pending) return;
+        setConfirmOpen(true);
+      }}
+    >
+      Remove worktree
+    </Button>
+  );
+
+  const removeControl = canRemove ? (
+    removeHeld ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{removeButton}</span>
+        </TooltipTrigger>
+        <TooltipContent>{WORKTREE_REMOVE_DISABLED_REASON}</TooltipContent>
+      </Tooltip>
+    ) : (
+      removeButton
+    )
+  ) : null;
 
   const retryControl =
     model.kind === "setup-failed" ? (
