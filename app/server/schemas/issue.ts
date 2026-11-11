@@ -883,6 +883,8 @@ export interface DerivedState {
   mergePolicy?: MergePolicy;
   /** Epic, root project-level Story, and Story-with-task provenance ids for this Idea. */
   planRoots?: string[];
+  /** Outlines in the same Project whose stored `sourceIdea` is this Idea. */
+  generatedOutlines?: string[];
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
   /**

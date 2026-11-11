@@ -6,7 +6,7 @@ import type {
   MergePolicy,
   Problem,
 } from "../schemas.js";
-import { bySequence } from "../order.js";
+import { bySequence, bySequenceThenId } from "../order.js";
 import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
 import { effectiveMergePolicy } from "./merge-policy.js";
@@ -216,6 +216,7 @@ export function derive(issues: Issue[]): DeriveResult {
     const addRoot = (id: string, order: number) => {
       rootsById.set(id, order);
     };
+    const generatedOutlineIssues: Extract<Issue, { kind: "outline" }>[] = [];
     for (const candidate of issues) {
       if (candidate.kind === "epic") {
         if (
@@ -232,6 +233,12 @@ export function derive(issues: Issue[]): DeriveResult {
         ) {
           addRoot(candidate.id, candidate.order);
         }
+      } else if (
+        candidate.kind === "outline" &&
+        candidate.sourceIdea === issue.id &&
+        candidate.partOf === projectId
+      ) {
+        generatedOutlineIssues.push(candidate);
       }
     }
     for (const task of issues) {
@@ -244,7 +251,13 @@ export function derive(issues: Issue[]): DeriveResult {
     const roots = [...rootsById.entries()]
       .map(([id, order]) => ({ id, order }))
       .sort(bySequence);
-    state[issue.id] = { blocked: false, planRoots: roots.map((r) => r.id) };
+    generatedOutlineIssues.sort(bySequenceThenId);
+    const generatedOutlines = generatedOutlineIssues.map((outline) => outline.id);
+    state[issue.id] = {
+      blocked: false,
+      planRoots: roots.map((r) => r.id),
+      generatedOutlines,
+    };
   }
 
   return { byId: state, problems };

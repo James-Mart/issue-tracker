@@ -310,6 +310,11 @@ These are computed by `derive()` and never written to disk (see
   project-level Stories, and Stories holding Tasks whose stored `sourceIdea`
   points at this Idea, in ascending `order` (deduplicated by Story id); also
   `issue idea get … planRoots` (JSON array; `[]` when none).
+- **generatedOutlines** — derived reverse of outline `sourceIdea`: the ids of
+  Outlines in the same Project whose stored `sourceIdea` points at this Idea,
+  sorted by ascending `order` then id; archived Outlines stay listed; a pending
+  outline draft alone does not count; also `issue idea get … generatedOutlines`
+  (JSON array; `[]` when none).
 - **planNotFinal** — derived on Epics and root project-level Stories: `true`
   when the issue stores `sourceIdea`, the referenced Idea is present in the
   issue set, and that Idea's `archived` is not true; otherwise `false`; also
@@ -729,7 +734,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `generatedOutlines`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1400,7 +1405,8 @@ Idea — the common-to-every-kind fields plus:
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, stored status, worktree, or comments. Derived
-**`ideaStatus`** and **`planRoots`** on get / tree / list (see [Derived state](#derived-state)). Leaf under a Project;
+**`ideaStatus`**, **`planRoots`**, and **`generatedOutlines`** on get / tree /
+list (see [Derived state](#derived-state)). Leaf under a Project;
 shares the Project-child `order` space with Epics and root project-level Stories.
 
 Outline — the common-to-every-kind fields plus:
@@ -2587,6 +2593,10 @@ so cannot drift:
   Stories holding Tasks whose stored `sourceIdea` equals the Idea's id, sorted
   by ascending `order` (deduplicated by Story id); `[]` when none. Computed by
   `derive()` for every Idea.
+- **Idea `generatedOutlines`** — the ids of Outlines in the same Project whose
+  stored `sourceIdea` equals the Idea's id, sorted by ascending `order` then id;
+  archived Outlines stay listed; `[]` when none. Computed by `derive()` for
+  every Idea.
 - **Epic / root Story `planNotFinal`** — `true` when the issue stores
   `sourceIdea`, the referenced Idea is present in the pass's issue set, and that
   Idea's `archived` is not true; otherwise `false` (including when `sourceIdea`
