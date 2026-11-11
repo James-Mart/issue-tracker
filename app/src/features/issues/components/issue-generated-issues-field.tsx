@@ -47,16 +47,57 @@ function AppendedTasksRail({ tasks }: { tasks: TaskRecord[] }) {
   );
 }
 
+function IssueTitleLinkList({
+  ids,
+  byId,
+}: {
+  ids: string[];
+  byId: Map<string, IssueRecord>;
+}) {
+  return (
+    <span className="flex flex-col gap-1">
+      {ids.map((id) => {
+        const record = byId.get(id);
+        const title = record?.title ?? id;
+        return (
+          <IssueLink
+            key={id}
+            id={id}
+            className="text-primary hover:underline"
+          >
+            {title}
+          </IssueLink>
+        );
+      })}
+    </span>
+  );
+}
+
 export function IssueGeneratedIssuesField({ issue }: { issue: IdeaDetail }) {
   const { data } = useIssuesWithArchived(true);
-  const planRoots = data?.derived?.[issue.id]?.planRoots ?? [];
+  const derived = data?.derived?.[issue.id];
+  const generatedOutlines = derived?.generatedOutlines ?? [];
+  const planRoots = derived?.planRoots ?? [];
   const issues = data?.issues ?? [];
   const byId = useMemo(() => issuesById(issues), [issues]);
   const appendedTasks = useMemo(
     () =>
-      issue.appendTo ? ideaAppendedTasksForRail(issue.id, issues) : [],
-    [issue.appendTo, issue.id, issues],
+      generatedOutlines.length === 0 && issue.appendTo
+        ? ideaAppendedTasksForRail(issue.id, issues)
+        : [],
+    [generatedOutlines.length, issue.appendTo, issue.id, issues],
   );
+
+  if (generatedOutlines.length > 0) {
+    return (
+      <MetaRow
+        label={FIELD_LABELS.generatedOutline}
+        value={
+          <IssueTitleLinkList ids={generatedOutlines} byId={byId} />
+        }
+      />
+    );
+  }
 
   if (issue.appendTo) {
     if (appendedTasks.length === 0) return null;
@@ -73,19 +114,7 @@ export function IssueGeneratedIssuesField({ issue }: { issue: IdeaDetail }) {
   return (
     <MetaRow
       label={FIELD_LABELS.generatedIssues}
-      value={
-        <span className="flex flex-col gap-1">
-          {planRoots.map((rootId) => {
-            const root = byId.get(rootId);
-            const title = root?.title ?? rootId;
-            return (
-              <IssueLink key={rootId} id={rootId}>
-                {title}
-              </IssueLink>
-            );
-          })}
-        </span>
-      }
+      value={<IssueTitleLinkList ids={planRoots} byId={byId} />}
     />
   );
 }
