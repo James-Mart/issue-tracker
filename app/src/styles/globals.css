@@ -391,6 +391,27 @@
     border: none;
     border-top: 1px solid hsl(var(--border));
   }
+  /* Quiet disclosure: one inline arrow beside the summary text. */
+  .prose-issue .issue-md-details {
+    margin: 0 0 14px;
+  }
+  .prose-issue .issue-md-summary {
+    display: block;
+    width: 100%;
+    cursor: pointer;
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-issue .issue-md-summary:hover {
+    color: hsl(var(--foreground));
+  }
+  .prose-issue .issue-md-summary:focus-visible {
+    outline: 2px solid hsl(var(--current));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  .prose-issue details[open] > .issue-md-summary {
+    margin-bottom: 8px;
+  }
   .prose-issue .issue-md-gallery {
     display: grid;
     grid-template-columns: 1fr;

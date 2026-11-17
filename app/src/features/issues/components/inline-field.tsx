@@ -16,10 +16,7 @@ import {
   useInlineEditSession,
   type InlineEditSession,
 } from "../hooks/use-inline-edit-session";
-import {
-  richDisplayInteractiveTarget,
-  shouldBeginInlineEdit,
-} from "../lib/inline-field-display-click";
+import { shouldBeginInlineEdit } from "../lib/inline-field-display-click";
 import { ExternalEditConflictBanner } from "./external-edit-conflict-banner";
 
 export type InlineFieldEditContext = Pick<
@@ -187,16 +184,11 @@ export function InlineField({
     );
 
     const onDisplayClick = (event: MouseEvent<HTMLElement>) => {
-      const { targetIsLink, targetIsImage } = richDisplay
-        ? richDisplayInteractiveTarget(event.target)
-        : { targetIsLink: false, targetIsImage: false };
-      const hasTextSelection = window.getSelection()?.isCollapsed === false;
       if (
         !shouldBeginInlineEdit({
           richDisplay,
-          targetIsLink,
-          targetIsImage,
-          hasTextSelection,
+          target: event.target,
+          hasTextSelection: window.getSelection()?.isCollapsed === false,
         })
       ) {
         return;
@@ -206,18 +198,14 @@ export function InlineField({
 
     const onDisplayKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
       if (event.key !== "Enter" && event.key !== " ") return;
-      const { targetIsLink, targetIsImage } = richDisplay
-        ? richDisplayInteractiveTarget(event.target)
-        : { targetIsLink: false, targetIsImage: false };
       if (
         !shouldBeginInlineEdit({
           richDisplay,
-          targetIsLink,
-          targetIsImage,
+          target: event.target,
           hasTextSelection: false,
         })
       ) {
-        // Leave default activation to the focused link / image trigger.
+        // Leave default activation to the focused link, image, or summary.
         return;
       }
       event.preventDefault();

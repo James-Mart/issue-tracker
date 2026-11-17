@@ -1,26 +1,16 @@
-export function richDisplayInteractiveTarget(target: EventTarget | null): {
-  targetIsLink: boolean;
-  targetIsImage: boolean;
-} {
-  const el = target instanceof HTMLElement ? target : null;
-  return {
-    targetIsLink: Boolean(el?.closest("a")),
-    targetIsImage: Boolean(el?.closest("img, [data-markdown-image]")),
-  };
-}
+const INTERACTIVE_DISPLAY_SELECTOR = "a, img, [data-markdown-image], summary";
 
 export function shouldBeginInlineEdit({
   richDisplay,
-  targetIsLink,
-  targetIsImage,
+  target,
   hasTextSelection,
 }: {
   richDisplay: boolean;
-  targetIsLink: boolean;
-  targetIsImage: boolean;
+  target: EventTarget | null;
   hasTextSelection: boolean;
 }): boolean {
-  if (targetIsLink || targetIsImage) return false;
+  const el = target instanceof Element ? target : null;
+  if (richDisplay && el?.closest(INTERACTIVE_DISPLAY_SELECTOR)) return false;
   if (richDisplay && hasTextSelection) return false;
   return true;
 }
