@@ -1,10 +1,14 @@
 import type { AgentModel } from "@/features/agents/api/client";
 import { skillPath } from "@/lib/plugin-paths";
 import type { ConversationChannel, IssueDetail } from "../schemas.js";
-import { defaultConversationModel } from "../../src/features/issues/lib/planning-launch.js";
+import {
+  COMPOSER_25_MODEL_ID,
+  agentModelIdIfListed,
+  defaultConversationModel,
+} from "../../src/features/issues/lib/planning-launch.js";
 
 /** Root-agent model for the work-loop coordinator. */
-export const WORK_LOOP_COORDINATOR_MODEL = "composer-2.5";
+export const WORK_LOOP_COORDINATOR_MODEL = COMPOSER_25_MODEL_ID;
 
 export type ImplementingWorkRoot = Extract<
   IssueDetail,
@@ -20,10 +24,10 @@ export function implementingSessionTitle(issueTitle: string): string {
 export function implementingSessionModel(
   models: readonly AgentModel[],
 ): string | undefined {
-  if (models.some((model) => model.id === WORK_LOOP_COORDINATOR_MODEL)) {
-    return WORK_LOOP_COORDINATOR_MODEL;
-  }
-  return defaultConversationModel(models);
+  return (
+    agentModelIdIfListed(models, WORK_LOOP_COORDINATOR_MODEL) ??
+    defaultConversationModel(models)
+  );
 }
 
 /** First prompt naming the work-root id and skill to load, then any resume note. */

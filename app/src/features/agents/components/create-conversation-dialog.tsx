@@ -27,6 +27,11 @@ import {
   visionSessionMessage,
   visionSessionTitle,
 } from "../lib/vision-launch";
+import {
+  defaultNewConversationModelId,
+  defaultNewConversationProjectId,
+  projectHasUsableWorkspace,
+} from "../lib/create-conversation-defaults";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 const CONVERSATION_TYPES = [
@@ -85,13 +90,21 @@ export function CreateConversationDialog() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || model || modelsLoading) return;
-    const first = modelsData?.models?.[0]?.id;
-    if (first) setModel(first);
-  }, [open, model, modelsLoading, modelsData?.models]);
+    if (!open) return;
+    if (!projectId) {
+      const defaultProject = defaultNewConversationProjectId(projects);
+      if (defaultProject) setProjectId(defaultProject);
+    }
+    if (!model && !modelsLoading) {
+      const defaultModel = defaultNewConversationModelId(models);
+      if (defaultModel) setModel(defaultModel);
+    }
+  }, [open, projectId, model, modelsLoading, projects, modelsData?.models]);
 
   const selectedProject = projects.find((p) => p.id === projectId);
-  const projectHasWorkspace = Boolean(selectedProject?.workspace?.trim());
+  const projectHasWorkspace =
+    selectedProject !== undefined &&
+    projectHasUsableWorkspace(selectedProject);
 
   const canSubmit =
     projectId.length > 0 &&
@@ -158,7 +171,7 @@ export function CreateConversationDialog() {
               </SelectTrigger>
               <SelectContent>
                 {projects.map((project) => {
-                  const hasWorkspace = Boolean(project.workspace?.trim());
+                  const hasWorkspace = projectHasUsableWorkspace(project);
                   return (
                     <SelectItem
                       key={project.id}
