@@ -68,3 +68,20 @@ export function CopyTextButton({
     </Button>
   );
 }
+
+export function CopyAgentIdButton({
+  agentId,
+  testId,
+}: {
+  agentId: string;
+  testId?: string;
+}) {
+  return (
+    <CopyTextButton
+      text={agentId}
+      label="Copy agent id"
+      testId={testId}
+      className="shrink-0 text-muted-foreground"
+    />
+  );
+}

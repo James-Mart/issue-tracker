@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { NestedStep } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
+import { CopyAgentIdButton } from "@/features/issues/components/copy-text-button";
 import { cn } from "@/lib/utils/cn";
 import type { SubAgent } from "../lib/subagent";
 import { groupOrdinaryNestedToolCalls } from "../lib/transcript-rows";
@@ -274,6 +275,12 @@ export function SubagentCard({ agent }: { agent: SubAgent }) {
             >
               {formatElapsed(agent.elapsedMs)}
             </span>
+          ) : null}
+          {agent.resumeAgentId ? (
+            <CopyAgentIdButton
+              agentId={agent.resumeAgentId}
+              testId={`copy-resume-agent-id-${agent.callId}`}
+            />
           ) : null}
         </>
       }

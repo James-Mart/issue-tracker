@@ -21,7 +21,7 @@ import {
   isImageMime,
 } from "@/features/issues/lib/attachments";
 import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
-import { CopyTextButton } from "@/features/issues/components/copy-text-button";
+import { CopyAgentIdButton } from "@/features/issues/components/copy-text-button";
 import {
   useConversationAttachmentsQuery,
   useConversationDetailQuery,
@@ -773,17 +773,6 @@ function ForkedThreadSourceLink({
   );
 }
 
-function CopyRootAgentIdButton({ agentId }: { agentId: string }) {
-  return (
-    <CopyTextButton
-      text={agentId}
-      label="Copy agent id"
-      testId="copy-root-agent-id"
-      className="shrink-0 text-muted-foreground"
-    />
-  );
-}
-
 /** Open-thread density: Back, title, optional trailing actions, status strip. */
 export function OpenThreadChrome({
   title,
@@ -827,7 +816,9 @@ export function OpenThreadChrome({
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </h2>
-        {agentId ? <CopyRootAgentIdButton agentId={agentId} /> : null}
+        {agentId ? (
+          <CopyAgentIdButton agentId={agentId} testId="copy-root-agent-id" />
+        ) : null}
         {actions}
       </div>
       {forkedFrom && onSourceConversation ? (
