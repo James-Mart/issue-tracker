@@ -1,7 +1,4 @@
 import { mkdirSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   Agent,
   Cursor,
@@ -10,7 +7,6 @@ import {
   JsonlLocalAgentStore,
   composeLocalAgentStore,
   createAgentPlatform,
-  type AgentDefinition,
   type AgentOptions,
   type McpServerConfig,
   type CursorRequestOptions,
@@ -18,6 +14,7 @@ import {
   type ModelSelection,
   type NestedTaskUpdate,
   type Run,
+  type SettingSource,
   type SteerAckOutcome,
   type SDKAgent,
   type SDKCustomTool,
@@ -26,6 +23,7 @@ import {
   type SDKUserMessage,
   type SendOptions,
   type TokenUsage,
+  type ToolName,
 } from "@cursor/sdk";
 import { cursorApiKey } from "../config.js";
 import {
@@ -34,14 +32,9 @@ import {
   GUEST_REFUSED_RESUME_AGENT,
   GUEST_REFUSED_START_AGENT,
 } from "./guest-agent-launch.js";
-import {
-  browserArtifactsDir,
-  browserOriginMcpEnv,
-} from "./browser-origin-allowlist.js";
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 import { toModelSelection, type ModelKey } from "./model-selection.js";
-import { createAgentReadTools } from "./agent-read-tools.js";
 
 export { CursorAgentError };
 
@@ -55,8 +48,8 @@ export interface AgentSdk {
   /** Models available to the authenticated key. */
   listModels(): Promise<SDKModel[]>;
   /**
-   * Start a fresh local agent. The boundary owns the local runtime and config
-   * layers, including the restricted capability profile for read-only roles.
+   * Start a fresh local agent. The boundary owns the local runtime; the
+   * configured capabilities are exactly the ones passed in.
    */
   createAgent(options: CreateAgentOptions): Promise<AgentHandle>;
   /**
@@ -78,7 +71,18 @@ export interface AgentSdk {
    * cwd, so the warmed executor is the one a later agent hits. Returns a
    * release the host holds until agents against that workspace are gone.
    */
-  prewarmWorkspace(cwd: string): Promise<() => Promise<void>>;
+  prewarmWorkspace(
+    cwd: string,
+    capabilities: Omit<AgentCapabilities, "customTools">,
+  ): Promise<() => Promise<void>>;
+}
+
+/** What a spawn may load and call. `builtins: []` is text-only. */
+export interface AgentCapabilities {
+  settingSources: SettingSource[];
+  customTools: Record<string, SDKCustomTool>;
+  builtins: ToolName[];
+  mcp: Record<string, McpServerConfig>;
 }
 
 export interface CreateAgentOptions {
@@ -86,33 +90,14 @@ export interface CreateAgentOptions {
   model: ModelKey;
   agentId?: string;
   storeDir: string;
-  /**
-   * App conversation that owns the live stack this session may browse.
-   * Omitted sessions have no stack, so every browser navigation is refused.
-   */
-  conversationId?: string;
-  agents?: Record<string, AgentDefinition>;
-  customTools?: Record<string, SDKCustomTool>;
-  readOnly?: boolean;
-  /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
-  tools?: NonNullable<AgentOptions["tools"]>;
-  disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
+  capabilities: AgentCapabilities;
 }
 
 export interface ResumeAgentOptions {
   cwd: string;
   model: ModelKey;
-  /**
-   * App conversation that owns the live stack this session may browse.
-   * Omitted sessions have no stack, so every browser navigation is refused.
-   */
-  conversationId?: string;
-  agents?: Record<string, AgentDefinition>;
-  customTools?: Record<string, SDKCustomTool>;
-  readOnly?: boolean;
-  /** Restrict built-in tools; `[]` is text-only. Omitted keeps the default set. */
-  tools?: NonNullable<AgentOptions["tools"]>;
-  disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
+  /** Not persisted on the agent, so every resume passes them again. */
+  capabilities: AgentCapabilities;
 }
 
 export interface AgentSendOptions {
@@ -220,64 +205,6 @@ export interface AgentSdkDeps {
   apiKey: string | undefined;
 }
 
-/** Builtin Task is the only subagent spawn path; the app uses `delegate` instead. */
-const DISALLOWED_BUILTIN_TOOLS: NonNullable<AgentOptions["disallowedTools"]> = [
-  "task",
-];
-
-const READ_ONLY_TOOLS: NonNullable<AgentOptions["tools"]> = [
-  "read", "grep", "glob", "ls",
-  // The broad "mcp" group also enables resource downloads to disk and auth.
-  "get_mcp_tools_tool_call", "mcp_tool_call",
-];
-
-const require = createRequire(import.meta.url);
-const PLAYWRIGHT_MCP_CLI = join(
-  dirname(require.resolve("@playwright/mcp/package.json")),
-  "cli.js",
-);
-const BROWSER_ORIGIN_INIT_PAGE = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "browser-origin-init-page.cjs",
-);
-
-/**
- * Session-scoped Playwright MCP for app-channel agents (headless, isolated
- * context). `--init-page` refuses navigations outside the live stack. With
- * no conversation, the init page has no state file and refuses every one.
- */
-function playwrightMcpServers(
-  conversation?: { env: Record<string, string>; cwd: string },
-): Record<string, McpServerConfig> {
-  return {
-    playwright: {
-      command: "node",
-      args: [
-        PLAYWRIGHT_MCP_CLI,
-        "--headless",
-        "--isolated",
-        "--browser",
-        "chromium",
-        "--init-page",
-        BROWSER_ORIGIN_INIT_PAGE,
-      ],
-      ...(conversation ?? {}),
-    },
-  };
-}
-
-export const PLAYWRIGHT_MCP_SERVERS: Record<string, McpServerConfig> =
-  playwrightMcpServers();
-
-function conversationPlaywrightMcpServers(
-  conversationId: string,
-): Record<string, McpServerConfig> {
-  return playwrightMcpServers({
-    env: browserOriginMcpEnv(conversationId),
-    cwd: browserArtifactsDir(conversationId),
-  });
-}
-
 /** The SDK spawns a stdio MCP server in its `cwd` and fails when that is missing. */
 function ensureMcpServerCwds(options: Partial<AgentOptions> | undefined): void {
   for (const server of Object.values(options?.mcpServers ?? {})) {
@@ -312,45 +239,28 @@ const defaultDeps: AgentSdkDeps = {
 export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk {
   const deps: AgentSdkDeps = { ...defaultDeps, ...overrides };
 
-  function conversationAgentOptions(input: {
+  function sdkAgentOptions(input: {
     cwd: string;
     model?: ModelKey;
     agentId?: string;
     storeDir?: string;
-    agents?: Record<string, AgentDefinition>;
-    customTools?: Record<string, SDKCustomTool>;
-    readOnly?: boolean;
-    tools?: NonNullable<AgentOptions["tools"]>;
-    disallowedTools?: NonNullable<AgentOptions["disallowedTools"]>;
-    conversationId?: string;
-    /** Create and resume always pass `agents`, even when omitted. Prewarm does not. */
-    includeAgents: boolean;
+    capabilities: Omit<AgentCapabilities, "customTools"> &
+      Partial<Pick<AgentCapabilities, "customTools">>;
     /** Create always passes `agentId`, even when omitted. Resume and prewarm do not. */
     includeAgentId: boolean;
   }): AgentOptions {
-    const customTools = input.readOnly ? createAgentReadTools() : input.customTools;
-    const local = input.storeDir !== undefined
-      ? localRuntime(input.cwd, input.storeDir, customTools)
-      : localWorkspace(input.cwd, customTools);
-    // Ambient config must not add other MCP servers or hooks alongside our
-    // two read-only callback tools.
-    if (input.readOnly) local.settingSources = [];
+    const { settingSources, customTools, builtins, mcp } = input.capabilities;
     return {
       apiKey: deps.apiKey,
       ...(input.model !== undefined
         ? { model: toModelSelection(input.model) }
         : {}),
       ...(input.includeAgentId ? { agentId: input.agentId } : {}),
-      ...(input.includeAgents ? { agents: input.readOnly ? {} : input.agents } : {}),
-      ...(input.readOnly
-        ? { tools: [...READ_ONLY_TOOLS] }
-        : input.tools !== undefined ? { tools: input.tools } : {}),
-      disallowedTools: input.disallowedTools ?? DISALLOWED_BUILTIN_TOOLS,
-      mcpServers: input.readOnly ? {} :
-        input.conversationId !== undefined
-          ? conversationPlaywrightMcpServers(input.conversationId)
-          : PLAYWRIGHT_MCP_SERVERS,
-      local,
+      tools: [...builtins],
+      mcpServers: mcp,
+      local: input.storeDir !== undefined
+        ? localRuntime(input.cwd, input.storeDir, settingSources, customTools)
+        : localWorkspace(input.cwd, settingSources, customTools),
     };
   }
 
@@ -362,9 +272,8 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
     async createAgent(input) {
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_START_AGENT);
       const sdkAgent = await deps.createSdkAgent(
-        conversationAgentOptions({
+        sdkAgentOptions({
           ...input,
-          includeAgents: true,
           includeAgentId: true,
         }),
       );
@@ -375,23 +284,22 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_RESUME_AGENT);
       const sdkAgent = await deps.resumeSdkAgent(
         agentId,
-        conversationAgentOptions({
+        sdkAgentOptions({
           ...input,
           storeDir,
-          includeAgents: true,
           includeAgentId: false,
         }),
       );
       return wrapAgent(sdkAgent);
     },
 
-    async prewarmWorkspace(cwd) {
+    async prewarmWorkspace(cwd, capabilities) {
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_PREWARM);
       const platform = await deps.createPlatform();
       return platform.prewarmLocalWorkspace(
-        conversationAgentOptions({
+        sdkAgentOptions({
           cwd,
-          includeAgents: false,
+          capabilities,
           includeAgentId: false,
         }),
       );
@@ -400,24 +308,21 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
 }
 
 /**
- * The local runtime block both create and resume pass, built in one place so
- * the two can never drift. `cwd` carries twice the weight it looks like it
- * does: the SDK scopes store lookups to it (an agent persisted under one
- * workspace is invisible from another, and resume reports it as not found),
- * and it is also the directory the agent's tools run in. `settingSources` has
- * no default worth inheriting — omit it and the SDK loads no config layers at
- * all, which drops the plugin-packaged skills and agents this app relies on.
+ * Workspace fields that key the local executor. Create, resume, and prewarm
+ * share them, built in one place so they can never drift. `cwd` carries twice
+ * the weight it looks like it does: the SDK scopes store lookups to it (an
+ * agent persisted under one workspace is invisible from another, and resume
+ * reports it as not found), and it is also the directory the agent's tools
+ * run in.
  */
-const SETTING_SOURCES = ["user", "project", "plugins"] as const;
-
-/** Workspace fields that key the local executor. Create, resume, and prewarm share them. */
 function localWorkspace(
   cwd: string,
+  settingSources: SettingSource[],
   customTools: Record<string, SDKCustomTool> | undefined,
 ): NonNullable<AgentOptions["local"]> {
   return {
     cwd,
-    settingSources: [...SETTING_SOURCES],
+    settingSources: [...settingSources],
     ...(customTools !== undefined ? { customTools } : {}),
   };
 }
@@ -425,11 +330,12 @@ function localWorkspace(
 function localRuntime(
   cwd: string,
   storeDir: string,
+  settingSources: SettingSource[],
   customTools: Record<string, SDKCustomTool> | undefined,
 ): NonNullable<AgentOptions["local"]> {
   const jsonl = new JsonlLocalAgentStore(storeDir);
   return {
-    ...localWorkspace(cwd, customTools),
+    ...localWorkspace(cwd, settingSources, customTools),
     store: composeLocalAgentStore({
       agents: jsonl.agents,
       runs: jsonl.runs,

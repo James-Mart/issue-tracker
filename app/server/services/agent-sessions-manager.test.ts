@@ -14,6 +14,7 @@ import {
   useAgentSessionsTestFixtures,
   workspaceDir,
 } from "./agent-sessions.test-harness.js";
+import { resolveRoleRuntime, withInject } from "./role-runtime.js";
 
 useAgentSessionsTestFixtures();
 
@@ -61,9 +62,12 @@ describe("agent sessions manager", () => {
         options: {
           cwd: workspaceDir,
           model: "composer-2.5",
-          conversationId: meta.id,
-          customTools: expect.objectContaining({
-            delegate: expect.any(Object),
+          capabilities: expect.objectContaining({
+            settingSources: [],
+            customTools: expect.objectContaining({
+              delegate: expect.any(Object),
+              agent_stack_start: expect.any(Object),
+            }),
           }),
         },
       },
@@ -79,10 +83,16 @@ describe("agent sessions manager", () => {
         "agent-state",
       ),
     });
-    expect(fake.created[0]?.customTools?.delegate).toBeDefined();
+    expect(fake.created[0]?.capabilities.customTools.delegate).toBeDefined();
     expect(readConversation(meta.id).meta.agentId).toBe(FAKE_AGENT_ID);
     expect(fake.handles[0]?.sends).toEqual([
-      { message: "continue", options: { model: "composer-2.5" } },
+      {
+        message: withInject(
+          resolveRoleRuntime(undefined, { fresh: true }).inject,
+          "continue",
+        ),
+        options: { model: "composer-2.5" },
+      },
     ]);
 
     const { transcript } = readConversation(meta.id);

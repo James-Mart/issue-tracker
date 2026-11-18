@@ -54,6 +54,7 @@ describe("delegate publishes nested run frames", () => {
       storeDir,
       agentsDir,
       conversationId: meta.id,
+      customTools: ["delegate"],
     });
 
     const frames: ConversationFrame[] = [];

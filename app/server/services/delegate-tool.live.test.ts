@@ -133,7 +133,8 @@ function recordRunModels(inner: AgentSdk): {
       createAgent: async (options) => record(await inner.createAgent(options)),
       resumeAgent: async (agentId, storeDir, options) =>
         record(await inner.resumeAgent(agentId, storeDir, options)),
-      prewarmWorkspace: (cwd) => inner.prewarmWorkspace(cwd),
+      prewarmWorkspace: (cwd, capabilities) =>
+      inner.prewarmWorkspace(cwd, capabilities),
     },
   };
 }
@@ -160,6 +161,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
           cwd: process.cwd(),
           storeDir: STORE_DIR,
           conversationId: conversation.id,
+          customTools: ["delegate"],
         });
 
         await customTools.delegate!.execute(
@@ -226,6 +228,7 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("delegate tool (live)", () => {
         sdk: agentSdk,
         cwd: PROJECT_WORKSPACE,
         storeDir: STORE_DIR,
+        customTools: ["delegate"],
       });
 
       const spawned = (await customTools.delegate!.execute(

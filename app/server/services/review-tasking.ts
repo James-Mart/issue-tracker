@@ -46,7 +46,7 @@ import {
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
 import { readReviewView, requireReviewStory, updateStoredReview } from "./reviews.js";
-import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { loadRoleModelPin } from "./role-bodies.js";
 
 export const REVIEW_TASKER_ROLE = "issue-tracker-review-tasker";
 
@@ -109,8 +109,6 @@ function taskingPrompt(
   threadIds: string[],
 ): string {
   return [
-    loadRoleBody(REVIEW_TASKER_ROLE),
-    "",
     `Review: ${review.id}`,
     `Story: ${requireReviewStory(review)}`,
     `Threads: ${threadIds.join(", ")}`,

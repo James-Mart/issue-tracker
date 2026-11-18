@@ -68,7 +68,13 @@ import {
   recordResearcherRunFailure,
   REVIEW_QUESTION_ROLE,
 } from "./researcher-runs.js";
-import { loadRoleReadOnly } from "./role-bodies.js";
+import {
+  agentCapabilities,
+  resolveRoleRuntime,
+  withInject,
+  type InjectRow,
+  type RoleRuntime,
+} from "./role-runtime.js";
 export type { NormalizedStep };
 
 export interface ActiveRun {
@@ -139,6 +145,8 @@ type SessionEntry = {
   pumps: Set<Promise<void>>;
   /** Armed only while the session is idle. */
   idleTimer?: ReturnType<typeof setTimeout>;
+  /** A fresh create's inject, attached to the first send that starts a run. */
+  pendingInject: readonly InjectRow[];
 };
 
 /**
@@ -276,7 +284,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const meta = readConversationMeta(conversationId);
     const cwd = conversationWorkingDirectory(meta);
     const model = parseModelKey(meta.model);
-    const readOnly = meta.role !== undefined && loadRoleReadOnly(meta.role);
     const storeDir = conversationStoreDir(conversationId);
     if (!existsSync(storeDir)) {
       mkdirSync(storeDir, { recursive: true });
@@ -287,35 +294,51 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     const cursorConversationIdRef: { current: string | undefined } = {
       current: meta.agentId,
     };
-    const customTools = createDelegateCustomTools({
-      sdk,
-      cwd,
-      storeDir,
-      conversationId,
-      getCursorConversationId: () => cursorConversationIdRef.current,
-    });
+    const capabilitiesFor = (runtime: RoleRuntime) =>
+      agentCapabilities(
+        runtime,
+        createDelegateCustomTools({
+          sdk,
+          cwd,
+          storeDir,
+          conversationId,
+          getCursorConversationId: () => cursorConversationIdRef.current,
+          customTools: runtime.customTools,
+        }),
+      );
+
+    let pendingInject: InjectRow[] = [];
+    const create = async (): Promise<AgentHandle> => {
+      const runtime = resolveRoleRuntime(meta.role, {
+        fresh: true,
+        conversationId,
+      });
+      const created = await sdk.createAgent({
+        cwd,
+        model,
+        storeDir,
+        capabilities: capabilitiesFor(runtime),
+      });
+      pendingInject = runtime.inject;
+      cursorConversationIdRef.current = created.agentId;
+      await updateMeta(conversationId, { agentId: created.agentId });
+      return created;
+    };
 
     let handle: AgentHandle;
     if (meta.agentId) {
+      const runtime = resolveRoleRuntime(meta.role, {
+        fresh: false,
+        conversationId,
+      });
       try {
         handle = await sdk.resumeAgent(meta.agentId, storeDir, {
           cwd,
           model,
-          ...(readOnly ? { readOnly } : {}),
-          customTools,
-          conversationId,
+          capabilities: capabilitiesFor(runtime),
         });
       } catch (err) {
-        handle = await sdk.createAgent({
-          cwd,
-          model,
-          ...(readOnly ? { readOnly } : {}),
-          storeDir,
-          customTools,
-          conversationId,
-        });
-        cursorConversationIdRef.current = handle.agentId;
-        await updateMeta(conversationId, { agentId: handle.agentId });
+        handle = await create();
         await appendEvent(conversationId, {
           type: "error",
           // Starting over is silent from the user's side, so the reason has to
@@ -327,19 +350,10 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         });
       }
     } else {
-      handle = await sdk.createAgent({
-        cwd,
-        model,
-        ...(readOnly ? { readOnly } : {}),
-        storeDir,
-        customTools,
-        conversationId,
-      });
-      cursorConversationIdRef.current = handle.agentId;
-      await updateMeta(conversationId, { agentId: handle.agentId });
+      handle = await create();
     }
 
-    const entry: SessionEntry = { handle, pumps: new Set() };
+    const entry: SessionEntry = { handle, pumps: new Set(), pendingInject };
     sessions.set(conversationId, entry);
     return entry;
   }
@@ -572,12 +586,13 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
     // An open session keeps the model it opened with, so every send names the
     // stored one for a model switch to reach it.
     const sendOptions = { model };
-    const message =
-      images && images.length > 0 ? { text: prompt, images } : prompt;
+    const text = withInject(entry.pendingInject, prompt);
+    const message = images && images.length > 0 ? { text, images } : text;
 
     let agentRun: AgentRun;
     try {
       agentRun = await handle.send(message, sendOptions);
+      entry.pendingInject = [];
     } catch (err) {
       if (err instanceof CursorAgentError) {
         return { ok: false, cause: "never_started", error: err };

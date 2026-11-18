@@ -80,12 +80,35 @@ export function holdAfterStream(): { hold: Promise<void>; release: () => void } 
   return { hold, release };
 }
 
+export const FIXTURE_RULE = "Follow the fixture rule.";
+
+const FIXTURE_CAPABILITIES = {
+  default: {
+    settingSources: [],
+    inject: [{ kind: "rule", path: "_fixture-rule.md" }],
+    customTools: [
+      "delegate",
+      "delegations",
+      "file_cursor_sdk_bug",
+      "agent_stack_start",
+      "agent_stack_stop",
+      "agent_stack_redeploy",
+    ],
+    builtins: ["shell", "read", "edit", "mcp"],
+    mcp: ["playwright"],
+  },
+  profiles: {},
+  roles: {},
+};
+
 export function setupDelegateToolTest(): void {
   agentsDir = mkdtempSync(join(tmpdir(), "issue-delegate-agents-"));
   storeDir = mkdtempSync(join(tmpdir(), "issue-delegate-store-"));
   cwd = mkdtempSync(join(tmpdir(), "issue-delegate-cwd-"));
   mkdirSync(agentsDir, { recursive: true });
 
+  writeAgent("_fixture-rule.md", FIXTURE_RULE);
+  writeAgent("capabilities.json", JSON.stringify(FIXTURE_CAPABILITIES));
   writeAgent(
     "pinned-role.md",
     `---

@@ -32,7 +32,13 @@ You are ${name}.`,
 
 async function loadTools(sdk: ReturnType<typeof createFakeAgentSdk>) {
   const { createDelegateCustomTools } = await loadNestedRunPublishModules();
-  return createDelegateCustomTools({ sdk, cwd, storeDir, agentsDir }).delegate!;
+  return createDelegateCustomTools({
+    sdk,
+    cwd,
+    storeDir,
+    agentsDir,
+    customTools: ["delegate"],
+  }).delegate!;
 }
 
 beforeEach(() => {
@@ -95,7 +101,7 @@ describe("delegate worktree lease", () => {
       {},
     );
     await waitForHandleSend(fake, 0);
-    const nested = fake.created[0]!.customTools!.delegate!;
+    const nested = fake.created[0]!.capabilities.customTools.delegate!;
 
     const reviewers = [
       nested.execute({ role: "reviewer", prompt: "review", issueId: "t1a" }, {}),

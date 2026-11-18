@@ -8,6 +8,7 @@ import {
 import type { Server } from "node:http";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentCapabilities } from "./agent-sdk.js";
 import type { AgentSessions } from "./agent-sessions.js";
 import {
   GUEST_REFUSED_CHANNEL_SESSION,
@@ -267,6 +268,7 @@ describe("guest agent launch refusals", () => {
       sdk: fake,
       cwd: join(root, "workspace"),
       storeDir,
+      customTools: ["delegate"],
     });
 
     await expect(
@@ -299,21 +301,27 @@ describe("guest agent launch refusals", () => {
       apiKey: "test",
     });
     const model = parseModelKey("composer-2.5");
+    const capabilities: AgentCapabilities = {
+      settingSources: [],
+      customTools: {},
+      builtins: [],
+      mcp: {},
+    };
     await expect(
-      sdk.createAgent({ cwd: "/repo", model, storeDir: "/store" }),
+      sdk.createAgent({ cwd: "/repo", model, storeDir: "/store", capabilities }),
     ).rejects.toMatchObject({
       code: "guest",
       status: 403,
       message: GUEST_REFUSED_START_AGENT,
     });
     await expect(
-      sdk.resumeAgent("agent-1", "/store", { cwd: "/repo", model }),
+      sdk.resumeAgent("agent-1", "/store", { cwd: "/repo", model, capabilities }),
     ).rejects.toMatchObject({
       code: "guest",
       status: 403,
       message: GUEST_REFUSED_RESUME_AGENT,
     });
-    await expect(sdk.prewarmWorkspace("/repo")).rejects.toMatchObject({
+    await expect(sdk.prewarmWorkspace("/repo", capabilities)).rejects.toMatchObject({
       code: "guest",
       status: 403,
       message: GUEST_REFUSED_PREWARM,

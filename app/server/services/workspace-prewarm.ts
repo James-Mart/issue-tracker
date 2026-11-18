@@ -2,6 +2,7 @@ import type { Issue } from "../schemas.js";
 import { agentSdk, type AgentSdk } from "./agent-sdk.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import { readAll } from "./issues.js";
+import { resolveRoleRuntime } from "./role-runtime.js";
 
 export type PrewarmRelease = () => Promise<void>;
 
@@ -17,13 +18,18 @@ export async function prewarmProjectWorkspaces(
   // No HTTP caller. A thrown refusal is logged as a prewarm failure for
   // every Project workspace, so guest mode skips and returns no releases.
   if (guestRefusesAgentLaunch()) return [];
+  const { settingSources, builtins, mcp } = resolveRoleRuntime(undefined, {
+    fresh: true,
+  });
   const releases: PrewarmRelease[] = [];
   for (const issue of readAll().issues) {
     if (issue.kind !== "project") continue;
     const workspace = projectWorkspace(issue);
     if (workspace === undefined) continue;
     try {
-      releases.push(await sdk.prewarmWorkspace(workspace));
+      releases.push(
+        await sdk.prewarmWorkspace(workspace, { settingSources, builtins, mcp }),
+      );
     } catch (err) {
       console.error(`prewarm failed for workspace ${workspace}`, err);
     }

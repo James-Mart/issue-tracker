@@ -12,7 +12,7 @@ import { JsonlLocalAgentStore } from "@cursor/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgentSdk,
-  PLAYWRIGHT_MCP_SERVERS,
+  type AgentCapabilities,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
 import { parseModelKey } from "./model-selection.js";
@@ -48,13 +48,12 @@ const SAMPLE_CUSTOM_TOOLS: Record<string, SDKCustomTool> = {
   },
 };
 
-function expectPlaywrightMcpServers(options: AgentOptions): void {
-  expect(options.mcpServers).toEqual(PLAYWRIGHT_MCP_SERVERS);
-  const playwright = options.mcpServers?.playwright;
-  expect(playwright && "args" in playwright ? playwright.args : undefined).toEqual(
-    expect.arrayContaining(["--headless", "--isolated", "--browser", "chromium"]),
-  );
-}
+const CAPABILITIES: AgentCapabilities = {
+  settingSources: [],
+  customTools: SAMPLE_CUSTOM_TOOLS,
+  builtins: ["read", "mcp"],
+  mcp: { sample: { command: "node", args: ["sample-mcp.js"] } },
+};
 
 // A step in a fake run: either a top-level stream message or an `onDelta`
 // interaction the run fires while streaming.
@@ -125,7 +124,7 @@ async function drain(
 }
 
 describe("createAgent", () => {
-  it("always pins local runtime + config layers and forwards the api key", async () => {
+  it("configures exactly the passed capabilities on the local runtime and forwards the api key", async () => {
     const createSdkAgent = vi.fn(
       async (_options: AgentOptions) => makeFakeSdkAgent([]),
     );
@@ -136,22 +135,22 @@ describe("createAgent", () => {
       model: MODEL,
       agentId: "resume-me",
       storeDir: STORE_DIR,
+      capabilities: CAPABILITIES,
     });
 
     expect(createSdkAgent).toHaveBeenCalledTimes(1);
     const options = createSdkAgent.mock.calls[0]![0];
     expect(options.local?.cwd).toBe("/repo");
-    expect(options.local?.settingSources).toEqual([
-      "user",
-      "project",
-      "plugins",
-    ]);
+    expect(options.local?.settingSources).toEqual([]);
+    expect(options.local?.customTools).toBe(SAMPLE_CUSTOM_TOOLS);
     expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
     expect(options.model).toEqual({ id: "composer-2.5" });
     expect(options.agentId).toBe("resume-me");
-    expect(options.disallowedTools).toEqual(["task"]);
-    expectPlaywrightMcpServers(options);
+    expect(options.tools).toEqual(["read", "mcp"]);
+    expect(options.disallowedTools).toBeUndefined();
+    expect(options.agents).toBeUndefined();
+    expect(options.mcpServers).toBe(CAPABILITIES.mcp);
   });
 });
 
@@ -174,12 +173,12 @@ describe("resumeAgent", () => {
       cwd: "/repo",
       model: MODEL,
       storeDir: STORE_DIR,
-      customTools: SAMPLE_CUSTOM_TOOLS,
+      capabilities: CAPABILITIES,
     });
     await sdk.resumeAgent("agent-1", STORE_DIR, {
       cwd: "/repo",
       model: MODEL,
-      customTools: SAMPLE_CUSTOM_TOOLS,
+      capabilities: CAPABILITIES,
     });
 
     const createdLocal = createSdkAgent.mock.calls[0]![0].local;
@@ -187,8 +186,10 @@ describe("resumeAgent", () => {
     expect(resumedLocal?.cwd).toEqual(createdLocal?.cwd);
     expect(resumedLocal?.settingSources).toEqual(createdLocal?.settingSources);
     expect(resumedLocal?.customTools).toBe(createdLocal?.customTools);
-    expect(createSdkAgent.mock.calls[0]![0].disallowedTools).toEqual(["task"]);
-    expect(resumeSdkAgent.mock.calls[0]![1]?.disallowedTools).toEqual(["task"]);
+    expect(resumeSdkAgent.mock.calls[0]![1]?.tools).toEqual(
+      createSdkAgent.mock.calls[0]![0].tools,
+    );
+    expect(resumeSdkAgent.mock.calls[0]![1]?.mcpServers).toBe(CAPABILITIES.mcp);
     expectCachedComposedStore(createdLocal?.store);
     expectCachedComposedStore(resumedLocal?.store);
   });
@@ -225,7 +226,12 @@ describe("send (merged stream)", () => {
       createSdkAgent: async () => makeFakeSdkAgent(script),
     });
 
-    const handle = await sdk.createAgent({ cwd: "/repo", model: MODEL, storeDir: STORE_DIR });
+    const handle = await sdk.createAgent({
+      cwd: "/repo",
+      model: MODEL,
+      storeDir: STORE_DIR,
+      capabilities: CAPABILITIES,
+    });
     const run = await handle.send("go");
     const events = await drain(run);
     expect(await run.wait()).toMatchObject({ id: "run-1", status: "finished" });

@@ -85,7 +85,8 @@ function sdkThatRejectsActiveRun(inner: FakeAgentSdk): AgentSdk {
       guard(dir);
       return wrap(dir, await inner.resumeAgent(agentId, dir, options));
     },
-    prewarmWorkspace: (cwd) => inner.prewarmWorkspace(cwd),
+    prewarmWorkspace: (cwd, capabilities) =>
+      inner.prewarmWorkspace(cwd, capabilities),
   };
 }
 

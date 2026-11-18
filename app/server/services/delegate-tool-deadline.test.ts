@@ -36,6 +36,7 @@ describe("nested run first-content deadline", () => {
         cwd,
         storeDir,
         agentsDir,
+        customTools: ["delegate"],
       });
 
       const executePromise = customTools.delegate!.execute(

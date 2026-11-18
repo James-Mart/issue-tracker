@@ -7,7 +7,7 @@ import {
 } from "./agent-definitions.js";
 import { isModelPin, type ModelKey } from "./model-selection.js";
 
-function defaultAgentsDir(): string {
+export function defaultAgentsDir(): string {
   return join(pluginDir, "agents");
 }
 
@@ -30,26 +30,14 @@ function requireModelPin(fileName: string, model: unknown): ModelKey {
 function readRoleFile(
   name: string,
   agentsDir: string,
-): { fileName: string; frontmatter: AgentFrontmatter; prompt: string } {
+): { fileName: string; frontmatter: AgentFrontmatter } {
   const fileName = `${name}.md`;
   const source = readFileSync(join(agentsDir, fileName), "utf8");
   const parsed = splitFrontmatter(source);
   if (!parsed) {
     throw new Error(`${fileName}: failed to parse frontmatter`);
   }
-  return {
-    fileName,
-    frontmatter: parsed.frontmatter,
-    prompt: parsed.prompt,
-  };
-}
-
-/** Read a spawnable role's markdown body with YAML frontmatter stripped. */
-export function loadRoleBody(
-  name: string,
-  agentsDir: string = defaultAgentsDir(),
-): string {
-  return readRoleFile(name, agentsDir).prompt;
+  return { fileName, frontmatter: parsed.frontmatter };
 }
 
 /** Read a spawnable role's frontmatter model pin. */
@@ -61,19 +49,10 @@ export function loadRoleModelPin(
   return requireModelPin(fileName, frontmatter.model);
 }
 
-export function loadRoleReadOnly(
-  name: string,
-  agentsDir: string = defaultAgentsDir(),
-): boolean {
-  const { fileName, frontmatter } = readRoleFile(name, agentsDir);
-  return requireReadOnlyFlag(fileName, frontmatter.readonly);
-}
-
-function requireReadOnlyFlag(fileName: string, value: unknown): boolean {
+function requireReadOnlyFlag(fileName: string, value: unknown): void {
   if (value !== undefined && typeof value !== "boolean") {
     throw new Error(`${fileName}: readonly must be a boolean`);
   }
-  return value === true;
 }
 
 /**

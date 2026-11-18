@@ -69,6 +69,7 @@ describe("delegate end records", () => {
       storeDir,
       agentsDir,
       conversationId: meta.id,
+      customTools: ["delegate"],
     });
 
     await expect(
