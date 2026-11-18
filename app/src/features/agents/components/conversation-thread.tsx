@@ -424,7 +424,6 @@ function TranscriptEventRow({
     case "status":
     case "usage":
     case "run_usage":
-    case "run_cost":
     case "request":
     case "delegation_recovery":
     case "host_crash_recovery": {
@@ -716,7 +715,7 @@ function ThreadStatusStrip({
   events: readonly TranscriptEvent[];
 }) {
   const label = threadRunLabel(runActive);
-  const usageText = formatThreadStatus(events, runActive);
+  const usageText = formatThreadStatus(events);
 
   return (
     <div

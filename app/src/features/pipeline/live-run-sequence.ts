@@ -3,8 +3,7 @@ import type {
   ConversationStreamEvent,
 } from "@server/schemas";
 import {
-  applyAttributedCost,
-  mergeSequenceCost,
+  settledRunIds,
   usageTokenTotal,
 } from "@server/services/run-sequence-cost";
 import { roleFamilyCaption, roleFamilyTitle } from "./role-family";
@@ -368,7 +367,7 @@ function applySubagentUpdate(
   return { ...sequence, beats };
 }
 
-function beatIndexForCost(
+function beatIndexForUsage(
   beats: SequenceBeat[],
   event: { at: string; parentCallId?: string },
 ): number {
@@ -390,27 +389,6 @@ function beatIndexForCost(
   return best;
 }
 
-function withBeatCost(
-  sequence: RunSequence,
-  beats: SequenceBeat[],
-  index: number,
-  event: Parameters<typeof applyAttributedCost>[1],
-): RunSequence {
-  if (index >= 0) {
-    const beat = beats[index]!;
-    beats[index] = {
-      ...beat,
-      cost: applyAttributedCost(beat.cost, event),
-    };
-  }
-  const cost = mergeSequenceCost(beats.map((beat) => beat.cost));
-  return {
-    ...sequence,
-    beats,
-    ...(cost !== undefined ? { cost } : {}),
-  };
-}
-
 function applyUsage(
   sequence: RunSequence,
   event: Extract<ConversationStreamEvent, { type: "usage" | "run_usage" }>,
@@ -418,30 +396,19 @@ function applyUsage(
   const tokens = usageTokenTotal(event.usage);
   const tokenTotal = (sequence.tokenTotal ?? 0) + tokens;
   const beats = sequence.beats.slice();
-  const index = beatIndexForCost(beats, event);
+  const index = beatIndexForUsage(beats, event);
   if (index >= 0) {
     const beat = beats[index]!;
     beats[index] = {
       ...beat,
       tokenTotal: (beat.tokenTotal ?? 0) + tokens,
-      cost: applyAttributedCost(beat.cost, event),
     };
   }
-  const cost = mergeSequenceCost(beats.map((beat) => beat.cost));
   return {
     ...sequence,
     beats,
     tokenTotal,
-    ...(cost !== undefined ? { cost } : {}),
   };
-}
-
-function applyRunCost(
-  sequence: RunSequence,
-  event: Extract<ConversationStreamEvent, { type: "run_cost" }>,
-): RunSequence {
-  const beats = sequence.beats.slice();
-  return withBeatCost(sequence, beats, beatIndexForCost(beats, event), event);
 }
 
 type AppliedLiveFrame = Extract<
@@ -452,8 +419,7 @@ type AppliedLiveFrame = Extract<
       | "delegation_end"
       | "subagent_update"
       | "usage"
-      | "run_usage"
-      | "run_cost";
+      | "run_usage";
   }
 >;
 
@@ -468,7 +434,6 @@ const liveFrameAppliers: {
   subagent_update: applySubagentUpdate,
   usage: applyUsage,
   run_usage: applyUsage,
-  run_cost: applyRunCost,
 };
 
 /** Kinds `applyLiveFrame` folds in. Other stream frames are not stored. */
@@ -496,10 +461,7 @@ export function applyLiveFrame(
 function withoutSupersededStreamUsage(
   frames: ConversationStreamEvent[],
 ): ConversationStreamEvent[] {
-  const settled = new Set<string>();
-  for (const event of frames) {
-    if (event.type === "run_usage") settled.add(event.runId);
-  }
+  const settled = settledRunIds(frames);
   if (settled.size === 0) return frames;
   return frames.filter(
     (event) =>

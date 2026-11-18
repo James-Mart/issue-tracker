@@ -34,7 +34,7 @@ import { pipelines, type PipelineId } from "../shape";
 import { usePipelineRunQuery } from "../api/queries";
 import { useLiveRunSequence } from "../hooks/use-live-run-sequence";
 import {
-  formatSequenceHeaderTotals,
+  formatSequenceTokenTotal,
   type RunSequence,
 } from "../run-sequence";
 import { conditionCaption } from "./run-sequence-shared";
@@ -72,10 +72,7 @@ function RunSequencePaneHeader({
     location.search,
     (location.state as IssueBackLocationState | null)?.issueBackStack,
   );
-  const tokenTotalLabel = formatSequenceHeaderTotals(
-    sequence.tokenTotal,
-    sequence.cost,
-  );
+  const tokenTotalLabel = formatSequenceTokenTotal(sequence.tokenTotal);
   const compact = layout === "phone";
 
   return (

@@ -68,7 +68,6 @@ import {
   recordResearcherRunFailure,
   REVIEW_QUESTION_ROLE,
 } from "./researcher-runs.js";
-import { runCostRecorder } from "./run-cost-recorder.js";
 import { loadRoleReadOnly } from "./role-bodies.js";
 export type { NormalizedStep };
 
@@ -636,12 +635,6 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         };
         publishFrame(conversationId, { event: usageEvent, persist: true });
         await appendEvent(conversationId, usageEvent);
-        runCostRecorder.onRunUsage({
-          conversationId,
-          runId: result.id,
-          agentId: entry.handle.agentId,
-          endedAt: Date.now(),
-        });
       }
       const replaysAuth =
         !isReplay && (sawAuthFailure || isAuthFailureResult(result));

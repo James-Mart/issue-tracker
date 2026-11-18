@@ -58,11 +58,6 @@ const { scrubOrphanedRunsAtBoot } = await import(
 );
 await scrubOrphanedRunsAtBoot();
 
-const { resumeRunCostPollingAtBoot } = await import(
-  "./services/run-cost-recorder.js"
-);
-await resumeRunCostPollingAtBoot();
-
 const { closeOpenDelegationsAtBoot } = await import(
   "./services/open-delegation-boot.js"
 );
