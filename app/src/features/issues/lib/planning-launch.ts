@@ -73,6 +73,17 @@ export function planningLaunchCopy(
   };
 }
 
+/** Preferred agent chat model when the catalog lists it. */
+export const COMPOSER_25_MODEL_ID = "composer-2.5";
+
+/** Returns a catalog id when `models` contains it. */
+export function agentModelIdIfListed(
+  models: readonly AgentModel[],
+  id: string,
+): string | undefined {
+  return models.find((model) => model.id === id)?.id;
+}
+
 /** Default conversation model: first listed agent model. */
 export function defaultConversationModel(
   models: readonly AgentModel[],

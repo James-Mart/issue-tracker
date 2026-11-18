@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,11 @@ import {
   visionSessionMessage,
   visionSessionTitle,
 } from "../lib/vision-launch";
+import {
+  newConversationInitialFocusField,
+  projectHasUsableWorkspace,
+  resolveNewConversationSelection,
+} from "../lib/create-conversation-defaults";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 const CONVERSATION_TYPES = [
@@ -59,7 +64,7 @@ export function CreateConversationDialog() {
   const open = useAgentsUiStore((s) => s.createDialogOpen);
   const close = useAgentsUiStore((s) => s.closeCreateDialog);
   const navigate = useNavigate();
-  const { data: issuesData } = useIssuesQuery();
+  const { data: issuesData, isLoading: issuesLoading } = useIssuesQuery();
   const { data: modelsData, isLoading: modelsLoading } = useAgentModelsQuery();
   const createConversation = useCreateConversation();
 
@@ -68,30 +73,84 @@ export function CreateConversationDialog() {
   const [projectId, setProjectId] = useState("");
   const [model, setModel] = useState("");
   const [title, setTitle] = useState("");
+  const titleRef = useRef<HTMLInputElement>(null);
+  const projectTriggerRef = useRef<HTMLButtonElement>(null);
+  const modelTriggerRef = useRef<HTMLButtonElement>(null);
+  const initialFocusPlaced = useRef(false);
 
   const projects = useMemo(
     () => listProjects(issuesData?.issues ?? []),
     [issuesData?.issues],
   );
 
-  const models = modelsData?.models ?? [];
+  const models = useMemo(
+    () => modelsData?.models ?? [],
+    [modelsData?.models],
+  );
 
   useEffect(() => {
-    if (!open) return;
+    if (open) return;
     setConversationType("general");
     setProjectId("");
     setModel("");
     setTitle("");
+    initialFocusPlaced.current = false;
   }, [open]);
 
   useEffect(() => {
-    if (!open || model || modelsLoading) return;
-    const first = modelsData?.models?.[0]?.id;
-    if (first) setModel(first);
-  }, [open, model, modelsLoading, modelsData?.models]);
+    if (!open) return;
+    const resolved = resolveNewConversationSelection(
+      projectId,
+      model,
+      projects,
+      models,
+    );
+    if (!projectId && resolved.projectId) setProjectId(resolved.projectId);
+    if (!model && !modelsLoading && resolved.modelId) setModel(resolved.modelId);
+  }, [open, projectId, model, modelsLoading, projects, models]);
+
+  useLayoutEffect(() => {
+    if (!open || initialFocusPlaced.current) return;
+    if (issuesLoading || modelsLoading) return;
+
+    const resolved = resolveNewConversationSelection(
+      projectId,
+      model,
+      projects,
+      models,
+    );
+    const field = newConversationInitialFocusField({
+      projectId: resolved.projectId,
+      modelId: resolved.modelId,
+      titleAvailable: conversationType === "general",
+    });
+    if (!field) {
+      initialFocusPlaced.current = true;
+      return;
+    }
+    const node = {
+      title: titleRef,
+      project: projectTriggerRef,
+      model: modelTriggerRef,
+    }[field].current;
+    if (!node) return;
+    node.focus();
+    initialFocusPlaced.current = true;
+  }, [
+    open,
+    issuesLoading,
+    modelsLoading,
+    projectId,
+    model,
+    projects,
+    models,
+    conversationType,
+  ]);
 
   const selectedProject = projects.find((p) => p.id === projectId);
-  const projectHasWorkspace = Boolean(selectedProject?.workspace?.trim());
+  const projectHasWorkspace =
+    selectedProject !== undefined &&
+    projectHasUsableWorkspace(selectedProject);
 
   const canSubmit =
     projectId.length > 0 &&
@@ -153,12 +212,12 @@ export function CreateConversationDialog() {
           <div className="grid gap-1.5">
             <Label htmlFor="conversation-project">Project</Label>
             <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger id="conversation-project">
+              <SelectTrigger id="conversation-project" ref={projectTriggerRef}>
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
               <SelectContent>
                 {projects.map((project) => {
-                  const hasWorkspace = Boolean(project.workspace?.trim());
+                  const hasWorkspace = projectHasUsableWorkspace(project);
                   return (
                     <SelectItem
                       key={project.id}
@@ -179,9 +238,10 @@ export function CreateConversationDialog() {
             <Select
               value={model}
               onValueChange={setModel}
-              disabled={modelsLoading || models.length === 0}
+              // Empty catalogs stay enabled so initial focus can land on Model.
+              disabled={modelsLoading}
             >
-              <SelectTrigger id="conversation-model">
+              <SelectTrigger id="conversation-model" ref={modelTriggerRef}>
                 <SelectValue
                   placeholder={
                     modelsLoading ? "Loading models…" : "Select a model"
@@ -203,10 +263,15 @@ export function CreateConversationDialog() {
               <Label htmlFor="conversation-title">Title (optional)</Label>
               <Input
                 id="conversation-title"
+                ref={titleRef}
                 value={title}
                 placeholder="New conversation"
                 onChange={(e) => setTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submit()}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  submit();
+                }}
               />
             </div>
           ) : null}
