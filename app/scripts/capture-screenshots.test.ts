@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { APP_THEME } from "../src/lib/theme/theme";
 
 const scriptPath = fileURLToPath(new URL("./capture-screenshots.ts", import.meta.url));
 
@@ -21,9 +22,9 @@ function startMockApp(): Promise<{ baseUrl: string; close: () => Promise<void> }
         return;
       }
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(`<!doctype html><html><head><script>
-document.documentElement.setAttribute("data-theme", localStorage.getItem("ui-theme") || "dark");
-</script></head><body>mock ui</body></html>`);
+      res.end(
+        `<!doctype html><html data-theme="${APP_THEME}"><body>mock ui</body></html>`,
+      );
     });
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {

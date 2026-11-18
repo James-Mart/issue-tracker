@@ -22,8 +22,6 @@ const DIALOGS = [
 ] as const;
 
 type DialogId = (typeof DIALOGS)[number];
-type Theme = "light" | "dark";
-type ThemeMode = Theme | "both";
 type IssueKind = "project" | "epic" | "idea" | "story" | "task";
 
 type IssueRecord = {
@@ -42,7 +40,6 @@ type Options = {
   baseUrl: string;
   out: string;
   project: string | null;
-  theme: ThemeMode;
   viewport: Viewport;
   all: boolean;
   list: boolean;
@@ -54,7 +51,6 @@ export type ScreenshotDriverModule = {
   reach: (page: Page) => Promise<void>;
 };
 
-const THEME_STORAGE_KEY = "ui-theme";
 export const DEFAULT_BASE_URL = "http://localhost:8060";
 const DEFAULT_OUT = "/tmp/issue-tracker-screenshots";
 
@@ -86,7 +82,6 @@ Options:
   --base-url <url>   Base URL (default AGENT_STACK_BASE_URL or ${DEFAULT_BASE_URL})
   --out <dir>        Output directory (default ${DEFAULT_OUT})
   --project <id>     Project for --all / dialog context (default: issue-tracker if present, else first project)
-  --theme <mode>     light | dark | both (default dark)
   --viewport <WxH>   Browser viewport (default ${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height})
   --driver <path>    Absolute path to a module exporting async reach(page) (exclusive with targets and --all)
   --all              Capture common paths for --project plus all dialogs
@@ -118,7 +113,6 @@ export function parseArgs(argv: string[]): Options {
     baseUrl: resolveDefaultBaseUrl(),
     out: DEFAULT_OUT,
     project: null,
-    theme: "dark",
     viewport: DEFAULT_VIEWPORT,
     all: false,
     list: false,
@@ -140,12 +134,6 @@ export function parseArgs(argv: string[]): Options {
       const value = argv[++i];
       if (!value) throw new Error("--project requires a value");
       opts.project = value;
-    } else if (arg === "--theme") {
-      const value = argv[++i];
-      if (value !== "light" && value !== "dark" && value !== "both") {
-        throw new Error("--theme must be light, dark, or both");
-      }
-      opts.theme = value;
     } else if (arg === "--viewport" || arg.startsWith("--viewport=")) {
       const value = arg.startsWith("--viewport=") ? arg.slice("--viewport=".length) : argv[++i];
       if (!value) throw new Error("--viewport requires a value");
@@ -213,38 +201,9 @@ function dialogFilename(dialogId: DialogId): string {
   return `${dialogId}.png`;
 }
 
-function withThemeSuffix(filename: string, theme: Theme | null): string {
-  if (!theme) return filename;
-  return filename.replace(/\.png$/i, `-${theme}.png`);
-}
-
 async function settle(page: Page): Promise<void> {
   await page.waitForTimeout(SETTLE_MS);
   await page.evaluate(() => document.fonts.ready).catch(() => undefined);
-}
-
-async function applyTheme(page: Page, theme: Theme): Promise<void> {
-  await page.evaluate(
-    ({ key, theme: next }) => {
-      localStorage.setItem(key, next);
-    },
-    { key: THEME_STORAGE_KEY, theme },
-  );
-  const current = await page.evaluate(() =>
-    document.documentElement.getAttribute("data-theme"),
-  );
-  // Default theme is already dark; a reload re-fetches /api/pipeline/runs
-  // (~40s) and blows the ready waiter. Only reload when the document
-  // theme does not yet match.
-  if (current !== theme) {
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(
-      (expected) =>
-        document.documentElement.getAttribute("data-theme") === expected,
-      theme,
-    );
-  }
-  await settle(page);
 }
 
 async function gotoPath(page: Page, baseUrl: string, path: string): Promise<void> {
@@ -321,7 +280,7 @@ async function waitForPipelineRunsReady(page: Page, path: string): Promise<void>
   }
 }
 
-/** Issue detail hydrates after theme reload; 800ms settle alone captures the skeleton. */
+/** Issue detail hydrates after navigation; 800ms settle alone captures the skeleton. */
 async function waitForIssueDetailReady(page: Page, path: string): Promise<void> {
   const pathname = path.split("?")[0] ?? path;
   if (!ISSUE_DETAIL_PATH.test(pathname)) return;
@@ -601,18 +560,14 @@ async function openDialog(
   }
 }
 
-async function captureSupportingDocTabs(
-  page: Page,
-  outDir: string,
-  themeSuffix: Theme | null,
-): Promise<number> {
+async function captureSupportingDocTabs(page: Page, outDir: string): Promise<number> {
   let count = 0;
   for (const tab of SUPPORTING_DOC_TABS) {
     const locator = page.getByRole("tab", { name: tab.label, exact: true });
     if ((await locator.count()) === 0) continue;
     await locator.click();
     await settle(page);
-    await writeScreenshot(page, outDir, withThemeSuffix(`${tab.filename}.png`, themeSuffix));
+    await writeScreenshot(page, outDir, `${tab.filename}.png`);
     count++;
   }
   return count;
@@ -625,22 +580,17 @@ async function captureTarget(
     outDir: string;
     projectId: string;
     target: string;
-    theme: Theme;
-    themeSuffix: Theme | null;
     samples: ReturnType<typeof samplesForProject>;
     captureProjectDocTabs: boolean;
   },
 ): Promise<number> {
-  const { baseUrl, outDir, projectId, target, theme, themeSuffix, samples, captureProjectDocTabs } =
-    opts;
+  const { baseUrl, outDir, projectId, target, samples, captureProjectDocTabs } = opts;
 
   if (isDialog(target)) {
-    // Theme reload closes dialogs — land on prep page, apply theme, then open.
     await gotoPath(page, baseUrl, dialogPrepPath(projectId, target, samples));
-    await applyTheme(page, theme);
     await openDialog(page, projectId, target, samples);
     await settle(page);
-    await writeScreenshot(page, outDir, withThemeSuffix(dialogFilename(target), themeSuffix));
+    await writeScreenshot(page, outDir, dialogFilename(target));
     return 1;
   }
 
@@ -649,17 +599,16 @@ async function captureTarget(
   }
 
   await gotoPath(page, baseUrl, target);
-  await applyTheme(page, theme);
   await waitForIssueDetailReady(page, target);
   await waitForPipelineRunsReady(page, target);
-  await writeScreenshot(page, outDir, withThemeSuffix(pathFilename(target), themeSuffix));
+  await writeScreenshot(page, outDir, pathFilename(target));
   let count = 1;
 
   if (
     captureProjectDocTabs &&
     target === `/projects/${projectId}/issues/${projectId}`
   ) {
-    count += await captureSupportingDocTabs(page, outDir, themeSuffix);
+    count += await captureSupportingDocTabs(page, outDir);
   }
 
   return count;
@@ -670,32 +619,16 @@ async function captureWithDriver(
   opts: {
     baseUrl: string;
     outDir: string;
-    theme: ThemeMode;
     reach: ScreenshotDriverModule["reach"];
   },
 ): Promise<number> {
-  const { baseUrl, outDir, theme, reach } = opts;
-  const themes: Theme[] = theme === "both" ? ["dark", "light"] : [theme];
-  const themeSuffix = theme === "both";
-  const pending: { filename: string; buffer: Buffer }[] = [];
+  const { baseUrl, outDir, reach } = opts;
 
   await gotoPath(page, baseUrl, "/");
-  for (const nextTheme of themes) {
-    await applyTheme(page, nextTheme);
-    await reach(page);
-    await settle(page);
-    const filename = withThemeSuffix("driver.png", themeSuffix ? nextTheme : null);
-    const buffer = await page.screenshot({ type: "png", fullPage: false });
-    pending.push({ filename, buffer });
-  }
-
-  for (const shot of pending) {
-    const outPath = resolve(outDir, shot.filename);
-    writeFileSync(outPath, shot.buffer);
-    console.log(outPath);
-  }
-
-  return pending.length;
+  await reach(page);
+  await settle(page);
+  await writeScreenshot(page, outDir, "driver.png");
+  return 1;
 }
 
 async function main(): Promise<void> {
@@ -739,7 +672,6 @@ async function main(): Promise<void> {
       await captureWithDriver(page, {
         baseUrl: opts.baseUrl,
         outDir: opts.out,
-        theme: opts.theme,
         reach,
       });
     } catch (err) {
@@ -771,32 +703,25 @@ async function main(): Promise<void> {
 
   mkdirSync(opts.out, { recursive: true });
 
-  const themes: Theme[] = opts.theme === "both" ? ["dark", "light"] : [opts.theme];
-  const themeSuffix = opts.theme === "both";
-
   const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: opts.viewport });
 
   let succeeded = 0;
   try {
     for (const target of targets) {
-      for (const theme of themes) {
-        try {
-          succeeded += await captureTarget(page, {
-            baseUrl: opts.baseUrl,
-            outDir: opts.out,
-            projectId,
-            target,
-            theme,
-            themeSuffix: themeSuffix ? theme : null,
-            samples,
-            captureProjectDocTabs: opts.all,
-          });
-        } catch (err) {
-          console.warn(
-            `warn: failed ${target} (${theme}): ${err instanceof Error ? err.message : err}`,
-          );
-        }
+      try {
+        succeeded += await captureTarget(page, {
+          baseUrl: opts.baseUrl,
+          outDir: opts.out,
+          projectId,
+          target,
+          samples,
+          captureProjectDocTabs: opts.all,
+        });
+      } catch (err) {
+        console.warn(
+          `warn: failed ${target}: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
   } finally {

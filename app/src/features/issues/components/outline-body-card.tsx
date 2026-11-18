@@ -3,8 +3,8 @@ import { ArrowRight, GitCompare } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { IssueDetail } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
+import { APP_THEME } from "@/lib/theme/theme";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
-import { useTheme } from "@/lib/theme/use-theme";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -122,7 +122,6 @@ function OutlineVersionDiff({
   from: number;
   to: number;
 }) {
-  const { theme } = useTheme();
   const query = useOutlineDiffQuery(id, from, to);
   const placeholder = outlineQueryPlaceholder(
     query,
@@ -149,7 +148,7 @@ function OutlineVersionDiff({
           disableFileHeader: true,
           diffStyle: "unified",
           overflow: "wrap",
-          themeType: theme,
+          themeType: APP_THEME,
         }}
       />
     </div>

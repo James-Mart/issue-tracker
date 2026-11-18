@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DiffsWorkerPoolProvider } from "@/lib/diffs/diffs-worker-pool-provider";
 import { createQueryClient } from "@/lib/query/client";
-import { useTheme } from "@/lib/theme/use-theme";
+import { APP_THEME } from "@/lib/theme/theme";
 import { ErrorFallback } from "./error-fallback";
 
 interface Props {
@@ -14,14 +14,13 @@ interface Props {
 
 export function Providers({ children }: Props) {
   const [queryClient] = useState(createQueryClient);
-  const { theme } = useTheme();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>
         <ErrorBoundary FallbackComponent={ErrorFallback}>
           <DiffsWorkerPoolProvider>{children}</DiffsWorkerPoolProvider>
         </ErrorBoundary>
-        <Toaster theme={theme} richColors position="top-right" />
+        <Toaster theme={APP_THEME} richColors position="top-right" />
       </TooltipProvider>
     </QueryClientProvider>
   );
