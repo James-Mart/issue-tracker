@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptEvent } from "@server/schemas";
-import { deriveSubAgents } from "../lib/subagent";
+import { deriveSubAgents, type SubAgent } from "../lib/subagent";
 import { SubagentCard } from "./subagent-card";
 
 const AT = "2026-10-30T00:00:00.000Z";
+const RESUME_AGENT_ID = "bc-nested-resume";
+
+const writeText = vi.fn();
 
 type Unstamped<E> = E extends unknown ? Omit<E, "at"> : never;
 
@@ -68,16 +71,33 @@ function chain(): TranscriptEvent[] {
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-function mount(events: TranscriptEvent[]): HTMLDivElement {
-  const [agent] = deriveSubAgents(events);
+function mountSubagentCard(agent: SubAgent): HTMLDivElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<SubagentCard agent={agent!} />);
+    root!.render(<SubagentCard agent={agent} />);
   });
   return container;
 }
+
+function mount(events: TranscriptEvent[]): HTMLDivElement {
+  const [agent] = deriveSubAgents(events);
+  return mountSubagentCard(agent!);
+}
+
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+beforeEach(() => {
+  writeText.mockReset();
+  writeText.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+});
 
 afterEach(() => {
   act(() => root?.unmount());
@@ -99,6 +119,29 @@ function showThread(details: HTMLDetailsElement) {
   expect(button?.textContent).toBe("Show thread");
   act(() => button!.click());
 }
+
+describe("SubagentCard copy resume agent id", () => {
+  it("copies resumeAgentId from the summary row when present", async () => {
+    const agent: SubAgent = {
+      callId: "call-task-1",
+      role: "issue-tracker-implementor",
+      status: "completed",
+      resumeAgentId: RESUME_AGENT_ID,
+      steps: [],
+      nestedRuns: [],
+    };
+    const host = mountSubagentCard(agent);
+    const button = host.querySelector<HTMLButtonElement>(
+      '[data-testid="copy-resume-agent-id-call-task-1"]',
+    );
+    expect(button).toBeTruthy();
+    await act(async () => {
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith(RESUME_AGENT_ID);
+  });
+});
 
 describe("SubagentCard nested runs", () => {
   it("shows each depth as the same collapsed card behind Show thread", () => {

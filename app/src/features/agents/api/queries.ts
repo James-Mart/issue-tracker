@@ -39,6 +39,11 @@ export function useConversationDetailQuery(
     queryFn: () => getConversationDetail(conversationId!),
     enabled: Boolean(conversationId),
     retry: false,
+    // Detail can return before the runtime assigns agentId; poll until meta.agentId is set.
+    refetchInterval: (query) =>
+      query.state.data?.meta.agentId
+        ? false
+        : CONVERSATIONS_REFETCH_INTERVAL_MS,
   });
 }
 

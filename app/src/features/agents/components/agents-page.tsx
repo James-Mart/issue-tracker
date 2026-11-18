@@ -151,6 +151,7 @@ export function AgentsPage() {
               ? {
                   title: offRoster.data.meta.title,
                   model: offRoster.data.meta.model,
+                  agentId: offRoster.data.meta.agentId,
                   pendingMessage: offRoster.data.meta.pendingMessage,
                 }
               : undefined

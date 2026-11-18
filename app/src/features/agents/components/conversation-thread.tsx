@@ -21,7 +21,12 @@ import {
   isImageMime,
 } from "@/features/issues/lib/attachments";
 import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
-import { useConversationsQuery, useConversationAttachmentsQuery } from "../api/queries";
+import { CopyAgentIdButton } from "@/features/issues/components/copy-text-button";
+import {
+  useConversationAttachmentsQuery,
+  useConversationDetailQuery,
+  useConversationsQuery,
+} from "../api/queries";
 import {
   conversationAttachmentApiPath,
   type ConversationAttachment,
@@ -771,6 +776,7 @@ function ForkedThreadSourceLink({
 /** Open-thread density: Back, title, optional trailing actions, status strip. */
 export function OpenThreadChrome({
   title,
+  agentId,
   onBack,
   backAriaLabel = "Back to conversations",
   runActive,
@@ -780,6 +786,7 @@ export function OpenThreadChrome({
   onSourceConversation,
 }: {
   title: string;
+  agentId?: string;
   onBack?: () => void;
   backAriaLabel?: string;
   runActive: boolean;
@@ -809,6 +816,9 @@ export function OpenThreadChrome({
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </h2>
+        {agentId ? (
+          <CopyAgentIdButton agentId={agentId} testId="copy-root-agent-id" />
+        ) : null}
         {actions}
       </div>
       {forkedFrom && onSourceConversation ? (
@@ -851,6 +861,7 @@ export function ConversationThread({
   meta?: {
     title: string;
     model: string;
+    agentId?: string;
     pendingMessage?: { text: string; at: string };
   };
   /** Read-only history (e.g. archived channel session) — transcript only. */
@@ -892,7 +903,18 @@ export function ConversationThread({
   const navigate = useNavigate();
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
+  const rosterReady = conversations !== undefined;
+  const threadOffRoster = rosterReady && listMeta === undefined;
+  const agentIdFromRoster = listMeta?.agentId;
+  const agentIdFromProp = metaProp?.agentId;
+  const needsConversationDetail =
+    threadOffRoster && !agentIdFromRoster && !agentIdFromProp;
+  const { data: conversationDetail } = useConversationDetailQuery(
+    needsConversationDetail ? conversationId : undefined,
+  );
   const meta = listMeta ?? metaProp;
+  const agentId =
+    agentIdFromRoster ?? agentIdFromProp ?? conversationDetail?.meta.agentId;
   const forkedFrom = listMeta?.forkedFrom;
   const forkedAtSeq = listMeta?.forkedAtSeq;
   const title = meta?.title?.trim() || "Thread";
@@ -913,6 +935,7 @@ export function ConversationThread({
     >
       <OpenThreadChrome
         title={title}
+        agentId={agentId}
         onBack={onBack}
         backAriaLabel={backAriaLabel}
         runActive={runActive}

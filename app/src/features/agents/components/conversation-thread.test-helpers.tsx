@@ -31,6 +31,24 @@ const initialEvents: TranscriptEvent[] = [
   },
 ];
 
+type RosterConversation = {
+  id: string;
+  title: string;
+  model: string;
+  agentId?: string;
+};
+
+function defaultRosterConversations(): RosterConversation[] {
+  return [
+    {
+      id: "conv-1",
+      title: "Test thread",
+      model: "composer-2.5-fast",
+      agentId: "agent-root-1",
+    },
+  ];
+}
+
 const mocks = vi.hoisted(() => ({
   transcriptState: { events: [] as TranscriptEvent[] },
   threadUi: {
@@ -40,20 +58,41 @@ const mocks = vi.hoisted(() => ({
     historyFailed: false,
     historyErrorMessage: undefined as string | undefined,
   },
+  rosterConversations: defaultRosterConversations(),
+  conversationDetail: undefined as
+    | { meta: { agentId?: string; title: string; model: string } }
+    | undefined,
   forkMutate: vi.fn(),
   navigate: vi.fn(),
 }));
 
 export const transcriptState = mocks.transcriptState;
 export const threadUi = mocks.threadUi;
+export const rosterConversations = mocks.rosterConversations;
 export const forkMutate = mocks.forkMutate;
+
+export function setConversationDetailForTest(
+  detail: typeof mocks.conversationDetail,
+) {
+  mocks.conversationDetail = detail;
+}
+
+export function setRosterConversationsForTest(
+  sessions: typeof mocks.rosterConversations,
+) {
+  mocks.rosterConversations = sessions;
+}
 export const navigate = mocks.navigate;
 
 mocks.transcriptState.events = [...initialEvents];
 
 vi.mock("../api/queries", () => ({
-  useConversationsQuery: () => ({
-    data: [{ id: "conv-1", title: "Test thread", model: "composer-2.5-fast" }],
+  useConversationsQuery: () => ({ data: mocks.rosterConversations }),
+  useConversationDetailQuery: (conversationId: string | undefined) => ({
+    data:
+      conversationId && mocks.conversationDetail
+        ? mocks.conversationDetail
+        : undefined,
   }),
   useConversationAttachmentsQuery: () => ({ data: [], isLoading: false }),
 }));
@@ -138,6 +177,8 @@ function resetThreadMocks() {
   threadUi.ready = true;
   threadUi.historyFailed = false;
   threadUi.historyErrorMessage = undefined;
+  mocks.rosterConversations = defaultRosterConversations();
+  mocks.conversationDetail = undefined;
   forkMutate.mockReset();
   navigate.mockClear();
 }

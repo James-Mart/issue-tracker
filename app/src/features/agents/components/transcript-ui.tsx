@@ -63,6 +63,14 @@ export function indexedStreamKey(index: number, kind: string): string {
   return `${index}-${kind}`;
 }
 
+function shouldSuppressSummaryToggle(target: Element) {
+  return Boolean(
+    target.closest(
+      "button, a[href], input, select, textarea, [contenteditable='true'], [contenteditable='']",
+    ),
+  );
+}
+
 export function CollapsibleDetails({
   label,
   children,
@@ -114,6 +122,12 @@ export function CollapsibleDetails({
           "flex min-h-11 cursor-pointer list-none items-center gap-1.5 font-mono text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden",
           summaryClassName,
         )}
+        onClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && shouldSuppressSummaryToggle(target)) {
+            event.preventDefault();
+          }
+        }}
       >
         <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
         {label}
