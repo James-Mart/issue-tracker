@@ -161,7 +161,7 @@ describe("agent sessions streaming", () => {
     if (!result.ok) return;
 
     await Promise.resolve();
-    const delegate = fake.created[0]?.customTools?.delegate;
+    const delegate = fake.created[0]?.capabilities.customTools.delegate;
     expect(delegate).toBeDefined();
     if (!delegate) return;
 

@@ -203,8 +203,9 @@ describe("standards assessment at submit", () => {
 
     await launchSubmitAgents("p", REVIEW_ID, recorded, sessions);
     expect(prompts).toHaveLength(2);
-    const assessor = prompts.find((prompt) => prompt.includes("standards assessor"));
-    const tasker = prompts.find((prompt) => prompt.includes("issue-tracker-review-tasker"));
+    expect(prompts.every((prompt) => prompt.startsWith(`Review: ${REVIEW_ID}`))).toBe(true);
+    const assessor = prompts.find((prompt) => prompt.includes("Coding standards:"));
+    const tasker = prompts.find((prompt) => !prompt.includes("Coding standards:"));
     expect(tasker).toBeTruthy();
     expect(assessor).toContain(`Review: ${REVIEW_ID}`);
     expect(assessor).toContain(`Submission: ${onlySubmission(recorded).id}`);

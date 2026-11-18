@@ -99,7 +99,7 @@ describe("review tasking", () => {
     expect(prompts[0]).toContain(`Story: s`);
     expect(prompts[0]).toContain(`Threads: ${first.id}, ${second.id}`);
     expect(prompts[0]).not.toContain("Summary comment:");
-    expect(prompts[0]).toContain("issue-tracker-review-tasker");
+    expect(prompts[0]!.startsWith(`Review: ${REVIEW_ID}`)).toBe(true);
 
     const comments = readComments(REVIEW_ID);
     expect(comments.messages.map((message) => message.body)).toContain(

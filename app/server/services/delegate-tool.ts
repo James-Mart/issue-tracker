@@ -33,7 +33,14 @@ import {
 import { readIssueOrThrow } from "./issues.js";
 import { EventPipeline } from "./event-pipeline.js";
 import { formatEffectiveModel } from "./model-selection.js";
-import { loadRoleBody, loadRoleModelPin, loadRoleReadOnly } from "./role-bodies.js";
+import { loadRoleModelPin } from "./role-bodies.js";
+import {
+  agentCapabilities,
+  resolveRoleRuntime,
+  withInject,
+  type CustomToolName,
+} from "./role-runtime.js";
+import { createAgentReadTools } from "./agent-read-tools.js";
 import { createAgentStackTools } from "./agent-stack-tools.js";
 import { coalesceCustomTools } from "./custom-tool-coalesce.js";
 import { createSdkBugReportTools } from "./sdk-bug-report.js";
@@ -195,6 +202,8 @@ export interface DelegateToolOptions {
    * Nested delegates pass their own agentId into {@link buildCustomTools}.
    */
   getCursorConversationId?: () => string | undefined;
+  /** The root session's resolved custom tools. Nested spawns resolve their own role's. */
+  customTools: readonly CustomToolName[];
   /** Override agents directory (tests). Defaults to the plugin `agents/`. */
   agentsDir?: string;
 }
@@ -420,10 +429,26 @@ type ParentFrame = {
   lineage: readonly string[];
 };
 
+function selectCustomTools(
+  available: Record<string, SDKCustomTool>,
+  names: readonly CustomToolName[],
+): Record<string, SDKCustomTool> {
+  const selected: Record<string, SDKCustomTool> = {};
+  for (const name of names) {
+    const tool = available[name];
+    if (tool === undefined) {
+      throw new Error(`delegate: custom tool ${name} is unavailable to this session`);
+    }
+    selected[name] = tool;
+  }
+  return selected;
+}
+
 /**
- * Build the `customTools` map containing the app-hosted `delegate` bridge.
- * Each nested agent receives tools closed over its parent frame so concurrent
- * siblings do not inflate depth or steal parentage from each other.
+ * Build a session's `customTools` map, including the app-hosted `delegate`
+ * bridge when its resolved runtime grants it. Each nested agent receives tools
+ * closed over its parent frame so concurrent siblings do not inflate depth or
+ * steal parentage from each other.
  */
 export function createDelegateCustomTools(
   options: DelegateToolOptions,
@@ -434,13 +459,12 @@ export function createDelegateCustomTools(
 
   function buildCustomTools(
     parent: ParentFrame | null,
+    toolNames: readonly CustomToolName[],
     getCursorConversationId?: () => string | undefined,
   ): Record<string, SDKCustomTool> {
-    // Bug filing rides along with delegation so every agent — root and nested
-    // alike — can report an SDK defect it trips over, without each spawn site
-    // having to assemble its own tool map.
     const customTools: Record<string, SDKCustomTool> = {
       ...createSdkBugReportTools(),
+      ...createAgentReadTools(),
     };
 
     // Verification stack tools are session-scoped to the app conversation;
@@ -554,13 +578,17 @@ export function createDelegateCustomTools(
         const agentsDir = options.agentsDir;
 
         const model = loadRoleModelPin(role, agentsDir);
-        const readOnly = loadRoleReadOnly(role, agentsDir);
-        // Fresh spawn injects the role body; resume skips it — the agent already
-        // carries those instructions from the first turn.
-        const fullPrompt =
-          resumeId === undefined
-            ? `${loadRoleBody(role, agentsDir)}\n\n${prompt}`
-            : prompt;
+        const runtime = resolveRoleRuntime(
+          role,
+          {
+            fresh: resumeId === undefined,
+            ...(options.conversationId !== undefined
+              ? { conversationId: options.conversationId }
+              : {}),
+          },
+          agentsDir,
+        );
+        const fullPrompt = withInject(runtime.inject, prompt);
 
         const delegationId = randomUUID();
         const ancestorDelegationIds = parent?.lineage ?? [];
@@ -628,6 +656,7 @@ export function createDelegateCustomTools(
             // Local SDK sessionId === agentId; hooks see it as conversation_id.
             const nestedCustomTools = buildCustomTools(
               { depth: attemptedDepth, lineage },
+              runtime.customTools,
               () => resumeId,
             );
             try {
@@ -640,11 +669,7 @@ export function createDelegateCustomTools(
                   // agent to carry it: the app names the model on every turn,
                   // and a resumed local agent has no selection of its own.
                   model,
-                  ...(readOnly ? { readOnly } : {}),
-                  customTools: nestedCustomTools,
-                  ...(options.conversationId !== undefined
-                    ? { conversationId: options.conversationId }
-                    : {}),
+                  capabilities: agentCapabilities(runtime, nestedCustomTools),
                 },
               );
             } catch (err) {
@@ -666,18 +691,15 @@ export function createDelegateCustomTools(
 
             const nestedCustomTools = buildCustomTools(
               { depth: attemptedDepth, lineage },
+              runtime.customTools,
               () => agentId,
             );
             handle = await options.sdk.createAgent({
               cwd: options.cwd,
               model,
-              ...(readOnly ? { readOnly } : {}),
               agentId,
               storeDir: nestedStoreDir,
-              customTools: nestedCustomTools,
-              ...(options.conversationId !== undefined
-                ? { conversationId: options.conversationId }
-                : {}),
+              capabilities: agentCapabilities(runtime, nestedCustomTools),
             });
           }
           tracked.cancel = () => handle!.cancel();
@@ -868,8 +890,15 @@ export function createDelegateCustomTools(
       },
     };
 
-    return coalesceCustomTools(customTools, options.conversationId);
+    return coalesceCustomTools(
+      selectCustomTools(customTools, toolNames),
+      options.conversationId,
+    );
   }
 
-  return buildCustomTools(null, options.getCursorConversationId);
+  return buildCustomTools(
+    null,
+    options.customTools,
+    options.getCursorConversationId,
+  );
 }

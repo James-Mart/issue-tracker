@@ -17,8 +17,8 @@ import {
   storeDir,
   teardownDelegateToolTest,
   waitForHandleSend,
+  FIXTURE_RULE,
 } from "./delegate-tool.fixtures.js";
-import { loadRoleBody } from "./role-bodies.js";
 
 function sentText(send: FakeSend): string {
   return typeof send.message === "string" ? send.message : send.message.text;
@@ -32,17 +32,19 @@ afterEach(() => {
   teardownDelegateToolTest();
 });
 
+const PINNED_ROLE_BODY = "You are the pinned role.\n\nFollow the checklist.";
+
 describe("createDelegateCustomTools", () => {
-  it("creates a nested agent on the role's mapped pin with the role body prepended", async () => {
+  it("creates a nested agent on the role's mapped pin with the resolved inject before the task", async () => {
     const fake = createFakeAgentSdk({ stream: ASSISTANT_STREAM });
     const customTools = createDelegateCustomTools({
       sdk: fake,
       cwd,
       storeDir,
       agentsDir,
+      customTools: ["delegate"],
     });
 
-    const roleBody = loadRoleBody("pinned-role", agentsDir);
     const result = await customTools.delegate!.execute(
       { role: "pinned-role", prompt: "do the thing" },
       {},
@@ -51,9 +53,8 @@ describe("createDelegateCustomTools", () => {
     expect(fake.created).toHaveLength(1);
     expect(fake.created[0]!.model).toBe("cursor-grok-4.5");
     expect(fake.handles[0]!.sends).toHaveLength(1);
-    expect(sentText(fake.handles[0]!.sends[0]!).startsWith(roleBody)).toBe(true);
-    expect(sentText(fake.handles[0]!.sends[0]!).endsWith("do the thing")).toBe(
-      true,
+    expect(sentText(fake.handles[0]!.sends[0]!)).toBe(
+      `${FIXTURE_RULE}\n\n${PINNED_ROLE_BODY}\n\ndo the thing`,
     );
     expect(result).toEqual({
       ok: true,
@@ -113,6 +114,7 @@ describe("createDelegateCustomTools", () => {
       cwd,
       storeDir,
       agentsDir,
+      customTools: ["delegate"],
     });
 
     const result = await customTools.delegate!.execute(
@@ -138,6 +140,7 @@ describe("createDelegateCustomTools", () => {
       cwd,
       storeDir,
       agentsDir,
+      customTools: ["delegate"],
     });
     const delegate = customTools.delegate!;
 
@@ -147,14 +150,14 @@ describe("createDelegateCustomTools", () => {
     );
     await waitForHandleSend(fake, 0);
 
-    const delegate2 = fake.created[0]!.customTools!.delegate!;
+    const delegate2 = fake.created[0]!.capabilities.customTools.delegate!;
     const depth2 = delegate2.execute(
       { role: "pinned-role", prompt: "depth 2" },
       {},
     );
     await waitForHandleSend(fake, 1);
 
-    const delegate3 = fake.created[1]!.customTools!.delegate!;
+    const delegate3 = fake.created[1]!.capabilities.customTools.delegate!;
     const depth3 = delegate3.execute(
       { role: "pinned-role", prompt: "depth 3" },
       {},
@@ -163,7 +166,7 @@ describe("createDelegateCustomTools", () => {
 
     expect(fake.created).toHaveLength(MAX_DELEGATION_DEPTH);
 
-    const delegate4 = fake.created[2]!.customTools!.delegate!;
+    const delegate4 = fake.created[2]!.capabilities.customTools.delegate!;
     await expect(
       delegate4.execute({ role: "pinned-role", prompt: "depth 4" }, {}),
     ).rejects.toThrow(
@@ -190,6 +193,7 @@ describe("createDelegateCustomTools", () => {
       storeDir,
       agentsDir,
       conversationId: "conv-concurrency-a",
+      customTools: ["delegate"],
     });
     const delegate = customTools.delegate!;
     const cap = MAX_CONCURRENT_DELEGATIONS_PER_CONVERSATION;

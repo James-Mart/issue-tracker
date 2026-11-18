@@ -9,6 +9,7 @@ import {
   useAgentSessionsTestFixtures,
 } from "./agent-sessions.test-harness.js";
 import type { ConversationFrame } from "./conversation-stream.js";
+import { resolveRoleRuntime, withInject } from "./role-runtime.js";
 
 useAgentSessionsTestFixtures();
 
@@ -70,7 +71,13 @@ describe("pending message firing", () => {
       },
     });
     expect(fake.handles[0]?.sends).toEqual([
-      { message: "first turn", options: { model: "composer-2.5" } },
+      {
+        message: withInject(
+          resolveRoleRuntime(undefined, { fresh: true }).inject,
+          "first turn",
+        ),
+        options: { model: "composer-2.5" },
+      },
       { message: "follow up", options: { model: "composer-2.5" } },
     ]);
   });

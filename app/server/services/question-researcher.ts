@@ -29,7 +29,7 @@ import {
   showResearcherLaunch,
   trackResearcherLaunch,
 } from "./researcher-runs.js";
-import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { loadRoleModelPin } from "./role-bodies.js";
 import { appendThreadEvent, findThreadRoot } from "./thread-events.js";
 
 const TITLE_EXCERPT_LENGTH = 60;
@@ -127,8 +127,6 @@ function researcherPrompt(
   issues: readonly Issue[],
 ): string {
   return [
-    loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
-    "",
     ...contextLines(review, root, workspace, issues),
     "Question:",
     root.body,
@@ -169,8 +167,6 @@ function recoveredResearcherPrompt(
   issues: readonly Issue[],
 ): string {
   return [
-    loadRoleBody(REVIEW_QUESTION_ROLE).trim(),
-    "",
     "The previous researcher conversation for this thread is gone. This is a new session.",
     "Answer the latest reply.",
     "",

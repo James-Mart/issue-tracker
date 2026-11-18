@@ -41,7 +41,7 @@ import { launchRecordedSubmission, reviewOfConversation } from "./review-tasking
 import { liveReviewWorktreePath } from "./review-worktree.js";
 import { patchStoredSubmission, readReviewView } from "./reviews.js";
 import { isRunLive } from "./run-live.js";
-import { loadRoleBody, loadRoleModelPin } from "./role-bodies.js";
+import { loadRoleModelPin } from "./role-bodies.js";
 import { resolveSupportingDocPath } from "./supporting-docs.js";
 
 export const STANDARDS_ASSESSOR_ROLE = "issue-tracker-standards-assessor";
@@ -184,8 +184,6 @@ async function assessmentPrompt(
   const messages = readComments(review.id).messages;
   const blocks = await commitBlocks(messages, submission.threadIds, workspace);
   return [
-    loadRoleBody(STANDARDS_ASSESSOR_ROLE).trim(),
-    "",
     `Review: ${review.id}`,
     `Submission: ${submission.id}`,
     `Story: ${storyId}`,

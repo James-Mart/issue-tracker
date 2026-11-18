@@ -5,6 +5,7 @@ import {
   type AgentStreamEvent,
 } from "./agent-sdk.js";
 import { parseModelKey } from "./model-selection.js";
+import { agentCapabilities, resolveRoleRuntime } from "./role-runtime.js";
 
 // Live SDK suite: authored and preserved, but excluded from the default
 // `npm test` (which must never contact the SDK/network or spend tokens).
@@ -24,6 +25,10 @@ describe.skipIf(!process.env.CURSOR_SDK_LIVE)("agent-sdk (live)", () => {
         cwd: process.cwd(),
         model: parseModelKey("composer-2.5"),
         storeDir: STORE_DIR,
+        capabilities: agentCapabilities(
+          resolveRoleRuntime(undefined, { fresh: true }),
+          {},
+        ),
       });
 
       const run = await agent.send('Reply with the single word "pong".');

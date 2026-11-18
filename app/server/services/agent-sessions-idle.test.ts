@@ -82,7 +82,7 @@ describe("agent sessions idle teardown", () => {
     });
 
     await runOnce(sessions, meta.id, "go");
-    const delegate = fake.created[0]?.customTools?.delegate;
+    const delegate = fake.created[0]?.capabilities.customTools.delegate;
     expect(delegate).toBeDefined();
     if (!delegate) return;
     const nested = delegate.execute(

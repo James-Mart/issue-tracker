@@ -63,6 +63,7 @@ describe("delegate delegations listing and lifecycle", () => {
       storeDir,
       agentsDir,
       conversationId: metaA.id,
+      customTools: ["delegate", "delegations"],
     });
     const toolsB = createTools({
       sdk: fake,
@@ -70,6 +71,7 @@ describe("delegate delegations listing and lifecycle", () => {
       storeDir,
       agentsDir,
       conversationId: metaB.id,
+      customTools: ["delegate", "delegations"],
     });
 
     const first = delegateResultOf(

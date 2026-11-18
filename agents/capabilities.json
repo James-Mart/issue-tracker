@@ -1,0 +1,72 @@
+{
+  "default": {
+    "settingSources": [],
+    "inject": [
+      { "kind": "skill", "path": "../skills/issue-tracker/SKILL.md" },
+      { "kind": "rule", "path": "_issue-tracker-global-coding-standards.md" },
+      { "kind": "rule", "path": "_issue-tracker-cli.md" },
+      { "kind": "rule", "path": "_issue-tracker-ikigai.md" }
+    ],
+    "customTools": [
+      "delegate",
+      "delegations",
+      "file_cursor_sdk_bug",
+      "agent_stack_start",
+      "agent_stack_stop",
+      "agent_stack_redeploy"
+    ],
+    "builtins": [
+      "shell",
+      "read",
+      "edit",
+      "delete",
+      "grep",
+      "glob",
+      "await",
+      "readLints",
+      "updateTodos",
+      "webSearch",
+      "webFetch",
+      "generateImage",
+      "switchMode",
+      "createPlan",
+      "createGoal",
+      "updateGoal",
+      "mcp"
+    ],
+    "mcp": ["playwright"]
+  },
+  "profiles": {
+    "read-only": {
+      "settingSources": [],
+      "inject": [
+        { "kind": "rule", "path": "_issue-tracker-ikigai.md" },
+        { "kind": "rule", "path": "_issue-tracker-cli.md" }
+      ],
+      "customTools": ["issue_read", "git_read"],
+      "builtins": [
+        "read",
+        "grep",
+        "glob",
+        "ls",
+        "get_mcp_tools_tool_call",
+        "mcp_tool_call"
+      ],
+      "mcp": []
+    }
+  },
+  "roles": {
+    "issue-tracker-plan-authoring-conformance": { "profile": "read-only" },
+    "issue-tracker-plan-copyedit": { "profile": "read-only" },
+    "issue-tracker-plan-dependency-order": { "profile": "read-only" },
+    "issue-tracker-plan-dry": { "profile": "read-only" },
+    "issue-tracker-plan-footprint": { "profile": "read-only" },
+    "issue-tracker-plan-internal-consistency": { "profile": "read-only" },
+    "issue-tracker-research": { "profile": "read-only" },
+    "issue-tracker-review-coding-standards": { "profile": "read-only" },
+    "issue-tracker-review-design-system": { "profile": "read-only" },
+    "issue-tracker-review-duplication": { "profile": "read-only" },
+    "issue-tracker-review-idiom": { "profile": "read-only" },
+    "issue-tracker-review-structure": { "profile": "read-only" }
+  }
+}
