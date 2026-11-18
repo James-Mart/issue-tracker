@@ -33,6 +33,22 @@ async function postDecompose(
   });
 }
 
+async function expectDecomposeTranscript(
+  metaId: string,
+  expected: Parameters<
+    typeof import("../../src/features/issues/lib/outline-planning-launch.js").outlineDecomposerSessionMessage
+  >[0],
+): Promise<void> {
+  const { transcriptPathOf } = await import(
+    "../services/conversation-transcript-seq.js"
+  );
+  const { outlineDecomposerSessionMessage } = await import(
+    "../../src/features/issues/lib/outline-planning-launch.js"
+  );
+  const line = readFileSync(transcriptPathOf(metaId), "utf8").trim();
+  expect(JSON.parse(line).text).toBe(outlineDecomposerSessionMessage(expected));
+}
+
 beforeEach(async () => {
   rootDir = mkdtempSync(join(tmpdir(), "issue-tracker-outline-decompose-"));
   issuesDir = join(rootDir, "issues");
@@ -95,12 +111,6 @@ describe("POST /api/issues/:id/outline/decompose", () => {
     });
 
     const { listConversations } = await import("../services/conversations.js");
-    const { transcriptPathOf } = await import(
-      "../services/conversation-transcript-seq.js"
-    );
-    const { outlineDecomposerSessionMessage } = await import(
-      "../../src/features/issues/lib/outline-planning-launch.js"
-    );
     const [meta] = listConversations();
     expect(meta).toMatchObject({
       id: body.id,
@@ -109,13 +119,10 @@ describe("POST /api/issues/:id/outline/decompose", () => {
       model: "cursor-grok-4.7",
       title: "Decompose Feature outline",
     });
-    const line = readFileSync(transcriptPathOf(meta!.id), "utf8").trim();
-    expect(JSON.parse(line).text).toBe(
-      outlineDecomposerSessionMessage({
-        outlineId: "spec",
-        version: 3,
-        executionGate: "off",
-      }),
-    );
+    await expectDecomposeTranscript(meta!.id, {
+      outlineId: "spec",
+      version: 3,
+      executionGate: "off",
+    });
   });
 });

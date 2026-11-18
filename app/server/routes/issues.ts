@@ -195,14 +195,14 @@ export function createIssuesRouter(
     "/:id/outline/decompose",
     asyncRoute(async (req, res) => {
       const outline = readOutlineOrThrow(req.params.id);
-      const executionGate = parseDecomposeRequest(req.body);
+      const request = parseDecomposeRequest(req.body);
       requireProjectWorkspace(outline.partOf);
       const meta = await startOutlinePlanningSession(
         {
           outlineId: outline.id,
           role: "decomposer",
           version: outline.bodyVersion,
-          executionGate,
+          ...request,
         },
         sessions,
       );
