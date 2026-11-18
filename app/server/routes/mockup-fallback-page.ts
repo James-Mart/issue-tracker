@@ -48,17 +48,11 @@ export function mockupFallbackHtml(
   const href = `/agents/${encodeURIComponent(conversationId)}`;
   const eyebrowClass = copy.tone === "blocked" ? "eyebrow eyebrow-blocked" : "eyebrow";
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(copy.title)}</title>
-<script>
-(function () {
-  var stored = localStorage.getItem("ui-theme");
-  document.documentElement.setAttribute("data-theme", stored === "light" ? "light" : "dark");
-})();
-</script>
 <style>
 @font-face {
   font-family: "Martian Mono";
@@ -81,7 +75,7 @@ export function mockupFallbackHtml(
   font-display: swap;
   src: url("/src/styles/fonts/ibm-plex-sans/ibm-plex-sans-600.woff2") format("woff2");
 }
-:root, [data-theme="dark"] {
+:root {
   --void: 217.5 25% 6.3%;
   --panel: 218.6 25.9% 10.6%;
   --rail: 216 19.6% 20%;
@@ -90,16 +84,6 @@ export function mockupFallbackHtml(
   --ink: 220 23.1% 92.4%;
   --current: 180 65% 54.1%;
   --blocked: 352 68.5% 61.4%;
-}
-[data-theme="light"] {
-  --void: 46.7 27.3% 93.5%;
-  --panel: 48 38.5% 97.5%;
-  --rail: 45 16.3% 80.8%;
-  --rail-lit: 45.7 12.7% 67.6%;
-  --mut: 40 10.9% 37.8%;
-  --ink: 220 14.3% 12.4%;
-  --current: 182.8 84.4% 35.3%;
-  --blocked: 350.8 53.7% 50%;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }

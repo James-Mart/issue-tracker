@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { currentGlow, liveChip } from "@/components/ui/overlay-surfaces";
 import { cn } from "@/lib/utils/cn";
 import { useIssuesQuery } from "../api/queries";
@@ -62,7 +61,6 @@ export function TopBar() {
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2 shell:items-start">
         <RestartControl />
-        <ThemeToggle />
       </div>
     </header>
   );

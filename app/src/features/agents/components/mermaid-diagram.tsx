@@ -1,33 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Code, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-type MermaidTheme = "dark" | "default";
-
-function mermaidThemeFor(documentTheme: string | undefined): MermaidTheme {
-  return documentTheme === "dark" ? "dark" : "default";
-}
-
-function readMermaidTheme(): MermaidTheme {
-  if (typeof document === "undefined") return "default";
-  return mermaidThemeFor(document.documentElement.dataset.theme);
-}
-
-function useDocumentMermaidTheme(): MermaidTheme {
-  const [theme, setTheme] = useState(readMermaidTheme);
-  useEffect(() => {
-    const root = document.documentElement;
-    const sync = () => setTheme(readMermaidTheme());
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    return () => observer.disconnect();
-  }, []);
-  return theme;
-}
+import { APP_THEME } from "@/lib/theme/theme";
 
 function parserErrorText(error: unknown): string {
   if (typeof error === "string" && error.trim()) return error.trim();
@@ -46,7 +20,6 @@ function parserErrorText(error: unknown): string {
 async function renderMermaidDiagram(
   id: string,
   source: string,
-  theme: MermaidTheme,
 ): Promise<string> {
   const { default: mermaid } = await import("mermaid");
   mermaid.initialize({
@@ -55,7 +28,7 @@ async function renderMermaidDiagram(
     // Mermaid otherwise inserts its own error diagram. A thrown render
     // surfaces the parser message here instead.
     suppressErrorRendering: true,
-    theme,
+    theme: APP_THEME,
     fontFamily: '"IBM Plex Sans", ui-sans-serif, sans-serif',
     logLevel: "fatal",
   });
@@ -93,7 +66,6 @@ function FenceBody({ source }: { source: string }) {
 }
 
 export function MermaidDiagram({ source }: { source: string }) {
-  const theme = useDocumentMermaidTheme();
   const domId = useId().replace(/[^A-Za-z0-9]/g, "");
   const attempt = useRef(0);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -104,7 +76,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   useEffect(() => {
     let cancelled = false;
     const id = `mermaid-${domId}-${++attempt.current}`;
-    void renderMermaidDiagram(id, source, theme).then(
+    void renderMermaidDiagram(id, source).then(
       (next) => {
         if (cancelled) return;
         setError(null);
@@ -119,7 +91,7 @@ export function MermaidDiagram({ source }: { source: string }) {
     return () => {
       cancelled = true;
     };
-  }, [source, theme, domId]);
+  }, [source, domId]);
 
   useLayoutEffect(() => {
     if (!svg || !hostRef.current) return;
