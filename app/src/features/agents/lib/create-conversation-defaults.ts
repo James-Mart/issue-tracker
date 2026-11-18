@@ -34,3 +34,35 @@ export function defaultNewConversationModelId(
 ): string {
   return agentModelIdIfListed(models, COMPOSER_25_MODEL_ID) ?? "";
 }
+
+/** Current field values, filled from the New conversation defaults when empty. */
+export function resolveNewConversationSelection(
+  projectId: string,
+  modelId: string,
+  projects: readonly ProjectRecord[],
+  models: readonly AgentModel[],
+): { projectId: string; modelId: string } {
+  return {
+    projectId: projectId || defaultNewConversationProjectId(projects),
+    modelId: modelId || defaultNewConversationModelId(models),
+  };
+}
+
+export type NewConversationFocusField = "title" | "project" | "model";
+
+/**
+ * Where focus goes once, after the project list and model catalog are known.
+ * Title when both values are set and the title field is shown; otherwise
+ * Project if it is unset, else Model. Null when the chosen field is not shown.
+ */
+export function newConversationInitialFocusField(fields: {
+  projectId: string;
+  modelId: string;
+  titleAvailable: boolean;
+}): NewConversationFocusField | null {
+  if (fields.projectId && fields.modelId) {
+    return fields.titleAvailable ? "title" : null;
+  }
+  if (!fields.projectId) return "project";
+  return "model";
+}
