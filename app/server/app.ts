@@ -8,6 +8,7 @@ import express, {
 import { join } from "path";
 import { distDir, hasBuiltClient, isProdEnv } from "./config.js";
 import { errorHandler } from "./errors.js";
+import { agentCapabilitiesRouter } from "./routes/agent-capabilities.js";
 import { agentModelsRouter } from "./routes/agent-models.js";
 import { createBackupRouter } from "./routes/backup.js";
 import { createConversationsRouter } from "./routes/conversations.js";
@@ -94,6 +95,7 @@ export function createApp(
   app.use("/api/reviews", createReviewRuntimeRouter());
   app.use("/api/conversations", createConversationsRouter(sessions));
   app.use("/api/agent-models", agentModelsRouter);
+  app.use("/api/agent-capabilities", agentCapabilitiesRouter);
   app.use("/api/health", createHealthRouter());
   app.use("/api/restart", createRestartRouter(sessions, initiateRestart));
   app.use("/api/backup", createBackupRouter());

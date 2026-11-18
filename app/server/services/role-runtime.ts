@@ -70,6 +70,17 @@ const manifestSchema = z.strictObject({
 });
 
 type ManifestCapabilities = z.infer<typeof capabilitiesSchema>;
+type CapabilityManifest = z.infer<typeof manifestSchema>;
+
+/** Document contract before a spawn filters tools or scopes MCP. */
+export interface CapabilityDocumentSlice {
+  settingSources: SettingSource[];
+  inject: InjectRow[];
+  customTools: CustomToolName[];
+  builtins: string[];
+  /** MCP servers the document allows. Session scoping stays in `resolveRoleRuntime`. */
+  mcp: string[];
+}
 
 export interface RoleRuntimeContext {
   /** A fresh create attaches inject; a resume rebinds everything else. */
@@ -128,6 +139,75 @@ function injectRow(
   return { kind: row.kind, name, path };
 }
 
+function capabilitiesFor(
+  manifest: CapabilityManifest,
+  role: string | undefined,
+): ManifestCapabilities {
+  const entry = role === undefined ? undefined : manifest.roles[role];
+  return entry === undefined
+    ? manifest.default
+    : manifest.profiles[entry.profile]!;
+}
+
+function freshInject(
+  agentsDir: string,
+  capabilities: ManifestCapabilities,
+  role: string | undefined,
+): InjectRow[] {
+  const rows = capabilities.inject.map((row) => injectRow(agentsDir, row));
+  if (role === undefined) return rows;
+  return [
+    ...rows,
+    { kind: "role", name: role, path: join(agentsDir, `${role}.md`) },
+  ];
+}
+
+function documentSlice(
+  agentsDir: string,
+  capabilities: ManifestCapabilities,
+  role?: string,
+): CapabilityDocumentSlice {
+  return {
+    settingSources: [...capabilities.settingSources],
+    inject: freshInject(agentsDir, capabilities, role),
+    customTools: [...capabilities.customTools],
+    builtins: [...capabilities.builtins],
+    mcp: [...capabilities.mcp],
+  };
+}
+
+/**
+ * The capability document the catalog shows: shared default, each profile,
+ * and one slice per spawnable role id. Custom tools are the manifest
+ * allowlist. MCP is the allowed server names.
+ */
+export function readSpawnContracts(
+  roleIds: readonly string[],
+  agentsDir: string = defaultAgentsDir(),
+): {
+  sharedDefault: CapabilityDocumentSlice;
+  profiles: { id: string; slice: CapabilityDocumentSlice }[];
+  roles: {
+    id: string;
+    profileId: string | undefined;
+    slice: CapabilityDocumentSlice;
+  }[];
+} {
+  const manifest = loadCapabilityManifest(agentsDir);
+  return {
+    sharedDefault: documentSlice(agentsDir, manifest.default),
+    profiles: Object.entries(manifest.profiles).map(([id, capabilities]) => ({
+      id,
+      slice: documentSlice(agentsDir, capabilities),
+    })),
+    roles: roleIds.map((id) => ({
+      id,
+      profileId: manifest.roles[id]?.profile,
+      slice: documentSlice(agentsDir, capabilitiesFor(manifest, id), id),
+    })),
+  };
+}
+
 /**
  * The capability contract one spawn runs with. `role` is the spawnable role
  * id; omit it for spawns with no role (the implementing coordinator, outline
@@ -141,20 +221,12 @@ export function resolveRoleRuntime(
   agentsDir: string = defaultAgentsDir(),
 ): RoleRuntime {
   const manifest = loadCapabilityManifest(agentsDir);
-  const entry = role === undefined ? undefined : manifest.roles[role];
-  const capabilities =
-    entry === undefined ? manifest.default : manifest.profiles[entry.profile]!;
-  const roleRow: InjectRow[] =
-    role === undefined
-      ? []
-      : [{ kind: "role", name: role, path: join(agentsDir, `${role}.md`) }];
+  const capabilities = capabilitiesFor(manifest, role);
   const hasConversation = context.conversationId !== undefined;
 
   return {
     settingSources: [...capabilities.settingSources],
-    inject: context.fresh
-      ? [...capabilities.inject.map((row) => injectRow(agentsDir, row)), ...roleRow]
-      : [],
+    inject: context.fresh ? freshInject(agentsDir, capabilities, role) : [],
     customTools: capabilities.customTools.filter(
       (name) => hasConversation || !AGENT_STACK_TOOLS.has(name),
     ),

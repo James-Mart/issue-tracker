@@ -5,7 +5,6 @@ import {
   LegacyPipelineRunsRedirect,
 } from "@/features/pipeline/pipeline-legacy-redirects";
 import { LegacyProjectHomeRedirect } from "@/features/issues/issues-legacy-redirects";
-import { LegacyAgentsRedirect } from "@/features/agents/agents-legacy-redirects";
 import { Suspense, lazy, useEffect } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PageShell } from "@/components/page-shell";
@@ -27,6 +26,11 @@ const CockpitPage = lazy(() =>
 const AgentsPage = lazy(() =>
   import("@/features/agents/components/agents-page").then((m) => ({
     default: m.AgentsPage,
+  })),
+);
+const CapabilityCatalogPage = lazy(() =>
+  import("@/features/agents/components/capability-catalog-page").then((m) => ({
+    default: m.CapabilityCatalogPage,
   })),
 );
 const PipelinePage = lazy(() =>
@@ -81,9 +85,15 @@ export function App() {
             <Route path="/" element={<CockpitPage />} />
             <Route path="/chat" element={<AgentsPage />} />
             <Route path="/chat/:conversationId" element={<AgentsPage />} />
+            <Route path="/agents" element={<CapabilityCatalogPage />} />
+            <Route path="/agents/default" element={<CapabilityCatalogPage />} />
             <Route
-              path="/agents/:conversationId?"
-              element={<LegacyAgentsRedirect />}
+              path="/agents/profiles/:profileId"
+              element={<CapabilityCatalogPage />}
+            />
+            <Route
+              path="/agents/roles/:roleId"
+              element={<CapabilityCatalogPage />}
             />
             <Route path="/pipelines" element={<PipelinePage />} />
             <Route path="/runs" element={<PipelinePage />} />

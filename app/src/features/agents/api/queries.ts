@@ -1,4 +1,5 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import type { CapabilityCatalog } from "@server/services/capability-catalog";
 import type {
   ConversationDetail,
   ConversationListItem,
@@ -8,6 +9,7 @@ import {
   fetchTranscriptionCapability,
   getConversationDetail,
   getConversationTranscript,
+  getCapabilityCatalog,
   listAgentModels,
   listConversationAttachments,
   listConversations,
@@ -67,6 +69,16 @@ export function useAgentModelsQuery(): UseQueryResult<
   return useQuery({
     queryKey: agentsKeys.models(),
     queryFn: listAgentModels,
+  });
+}
+
+export function useCapabilityCatalogQuery(): UseQueryResult<
+  CapabilityCatalog,
+  Error
+> {
+  return useQuery({
+    queryKey: agentsKeys.capabilityCatalog(),
+    queryFn: getCapabilityCatalog,
   });
 }
 
