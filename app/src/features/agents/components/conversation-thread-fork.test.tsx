@@ -66,6 +66,6 @@ describe("ConversationThread assistant meta fork affordance", () => {
       expect.objectContaining({ seq: 2 }),
       expect.anything(),
     );
-    expect(navigate).toHaveBeenCalledWith("/agents/conv-forked");
+    expect(navigate).toHaveBeenCalledWith("/chat/conv-forked");
   });
 });

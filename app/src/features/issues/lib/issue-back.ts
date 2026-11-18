@@ -1,3 +1,7 @@
+import {
+  CHAT_PATH,
+  isChatAreaPath,
+} from "@/features/agents/lib/links";
 import { issuePath, projectPath } from "./links";
 
 export type IssueBackEntry =
@@ -42,7 +46,7 @@ export function originEntryFromLocation(
   ) {
     return { kind: "pipeline", to: pathname + search };
   }
-  if (pathname === "/agents" || pathname.startsWith("/agents/")) {
+  if (isChatAreaPath(pathname)) {
     return { kind: "agents" };
   }
   if (ISSUE_DETAIL_PATH.test(pathname)) {
@@ -108,7 +112,7 @@ export function issueBackTo(entry: IssueBackEntry): string {
     case "pipeline":
       return entry.to;
     case "agents":
-      return "/agents";
+      return CHAT_PATH;
     case "issue":
       return `${issuePath(entry.projectId, entry.issueId)}${entry.search ?? ""}`;
   }

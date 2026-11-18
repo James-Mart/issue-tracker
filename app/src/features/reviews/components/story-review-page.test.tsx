@@ -473,14 +473,14 @@ describe("StoryReviewPage", () => {
     expect(container.querySelector('[role="tablist"]')).toBeNull();
     expect(container.querySelector("[data-testid='story-review-header']")).toBeNull();
     const screen = container.querySelector("[data-testid='review-phone-transcript']");
-    expect(screen?.textContent).toContain("Agents");
+    expect(screen?.textContent).toContain("Open in Chat");
     expect(screen?.textContent).toContain("Question researcher");
     expect(screen?.textContent).toContain("Tokens should 401.");
     expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
       "Back to Agents",
     );
     const open = screen?.querySelector("[data-testid='agent-run-open-in-agents']");
-    expect(open?.getAttribute("href")).toBe("/agents/conv-q");
+    expect(open?.getAttribute("href")).toBe("/chat/conv-q");
     expect(open?.querySelector("svg")).toBeNull();
 
     click(screen!.querySelector("[data-testid='review-transcript-back']")!);

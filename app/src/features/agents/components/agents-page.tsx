@@ -18,20 +18,20 @@ import {
   holdOffRosterConversation,
   resolveAgentsConversationParam,
 } from "../lib/agents-conversation-param";
-import { AGENTS_PATH } from "../lib/links";
+import { CHAT_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListSidebar } from "./conversation-list-sidebar";
 import { ConversationThread } from "./conversation-thread";
 import { CreateConversationDialog } from "./create-conversation-dialog";
 import { DeleteConversationDialog } from "./delete-conversation-dialog";
 
-const AGENTS_PAGE_SHELL_CLASS = "max-w-6xl gap-4 py-6";
+const CHAT_PAGE_SHELL_CLASS = "max-w-6xl gap-4 py-6";
 
-function AgentsHeader() {
+function ChatHeader() {
   return (
     <header>
       <p className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
-        Agents
+        Chat
       </p>
     </header>
   );
@@ -103,13 +103,13 @@ export function AgentsPage() {
   useTabTitle(
     selectedConversationId
       ? tabTitleEntityName(selectedTitle, selectedConversationId)
-      : "Agents",
-    selectedConversationId ? "Agent" : undefined,
+      : "Chat",
+    selectedConversationId ? "Chat" : undefined,
   );
 
   useEffect(() => {
     if (held.replaceWithRoster) {
-      navigate(AGENTS_PATH, { replace: true });
+      navigate(CHAT_PATH, { replace: true });
     }
   }, [held.replaceWithRoster, navigate]);
 
@@ -145,7 +145,7 @@ export function AgentsPage() {
         <ConversationThread
           key={selectedConversationId}
           conversationId={selectedConversationId}
-          onBack={isMobile ? () => navigate(AGENTS_PATH) : undefined}
+          onBack={isMobile ? () => navigate(CHAT_PATH) : undefined}
           meta={
             offRoster.data
               ? {
@@ -173,12 +173,12 @@ export function AgentsPage() {
   return (
     <PageShell
       className={cn(
-        AGENTS_PAGE_SHELL_CLASS,
+        CHAT_PAGE_SHELL_CLASS,
         // Bound height so the thread scrolls and the composer stays pinned.
         "h-[calc(100svh-3rem)] min-h-0 overflow-hidden",
       )}
     >
-      <AgentsHeader />
+      <ChatHeader />
       <div
         className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
         data-region="agents-window"

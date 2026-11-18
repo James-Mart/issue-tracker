@@ -35,7 +35,7 @@ import { useForkConversation } from "../api/mutations";
 import { useConversationEvents } from "../hooks/use-conversation-events";
 import { useConversationRunActive } from "../hooks/use-conversation-run-active";
 import type { OlderEventsStatus } from "../lib/conversation-events-state";
-import { agentsConversationPath } from "../lib/links";
+import { chatConversationPath } from "../lib/links";
 import {
   deriveSubAgents,
   isSubAgentToolCall,
@@ -648,7 +648,7 @@ function ThreadBody({
                   { id: conversationId, seq: forkSeq },
                   {
                     onSuccess: (created) =>
-                      navigate(agentsConversationPath(created.id)),
+                      navigate(chatConversationPath(created.id)),
                   },
                 )
               }
@@ -944,7 +944,7 @@ export function ConversationThread({
         forkedFrom={forkedFrom}
         onSourceConversation={
           forkedFrom
-            ? (sourceId) => navigate(agentsConversationPath(sourceId))
+            ? (sourceId) => navigate(chatConversationPath(sourceId))
             : undefined
         }
       />

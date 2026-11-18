@@ -1,3 +1,5 @@
+import { chatConversationPath } from "@/features/agents/lib/links";
+
 /**
  * Bare centered fallback for a conversation whose Storybook is not live.
  * Markup follows ShellState: eyebrow, title, detail, one quiet link.
@@ -45,7 +47,7 @@ export function mockupFallbackHtml(
   conversationId: string,
 ): string {
   const copy = pageCopy(kind);
-  const href = `/agents/${encodeURIComponent(conversationId)}`;
+  const href = chatConversationPath(conversationId);
   const eyebrowClass = copy.tone === "blocked" ? "eyebrow eyebrow-blocked" : "eyebrow";
   return `<!doctype html>
 <html lang="en" data-theme="dark">

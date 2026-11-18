@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { CHAT_PATH, isChatAreaPath } from "@/features/agents/lib/links";
 import {
-  Bot,
   ChevronRight,
   FolderKanban,
   LayoutDashboard,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -133,7 +134,7 @@ export function ProjectSidebar() {
   );
 
   const isCockpit = pathname === "/";
-  const isAgents = pathname === "/agents" || pathname.startsWith("/agents/");
+  const isChat = isChatAreaPath(pathname);
   const isPipelines =
     pathname === "/pipelines" || pathname.startsWith("/pipelines/");
   const isRuns = pathname === "/runs" || pathname.startsWith("/runs/");
@@ -174,11 +175,11 @@ export function ProjectSidebar() {
               icon={LayoutDashboard}
             />
             <NavItem
-              to="/agents"
-              isActive={isAgents}
-              tooltip="Agents"
-              label="Agents"
-              icon={Bot}
+              to={CHAT_PATH}
+              isActive={isChat}
+              tooltip="Chat"
+              label="Chat"
+              icon={MessageSquare}
             />
             <NavItem
               to="/pipelines"

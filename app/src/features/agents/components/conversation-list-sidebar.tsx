@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { issuesById } from "@/features/issues/lib/build-tree";
 import { useConversationsQuery } from "../api/queries";
-import { agentsConversationPath } from "../lib/links";
+import { chatConversationPath } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 import { ConversationListItem } from "./conversation-list-item";
 
@@ -107,7 +107,7 @@ export function ConversationListSidebar() {
                 }
                 isSelected={selectedConversationId === conversation.id}
                 onSelect={() =>
-                  navigate(agentsConversationPath(conversation.id))
+                  navigate(chatConversationPath(conversation.id))
                 }
               />
             ))}

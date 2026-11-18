@@ -22,7 +22,7 @@ import { useCreateConversation } from "../api/mutations";
 import { useAgentModelsQuery } from "../api/queries";
 import { useIssuesQuery } from "@/features/issues/api/queries";
 import { listProjects } from "@/features/issues/lib/build-tree";
-import { agentsConversationPath } from "../lib/links";
+import { chatConversationPath } from "../lib/links";
 import {
   visionSessionMessage,
   visionSessionTitle,
@@ -169,7 +169,7 @@ export function CreateConversationDialog() {
       }),
       {
         onSuccess: (meta) => {
-          navigate(agentsConversationPath(meta.id));
+          navigate(chatConversationPath(meta.id));
           close();
         },
       },

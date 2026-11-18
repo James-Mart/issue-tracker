@@ -1,5 +1,15 @@
-export const AGENTS_PATH = "/agents";
+export const CHAT_PATH = "/chat";
+export const LEGACY_AGENTS_PATH = "/agents";
 
-export function agentsConversationPath(conversationId: string): string {
-  return `${AGENTS_PATH}/${conversationId}`;
+export function isChatAreaPath(pathname: string): boolean {
+  return (
+    pathname === CHAT_PATH ||
+    pathname.startsWith(`${CHAT_PATH}/`) ||
+    pathname === LEGACY_AGENTS_PATH ||
+    pathname.startsWith(`${LEGACY_AGENTS_PATH}/`)
+  );
+}
+
+export function chatConversationPath(conversationId: string): string {
+  return `${CHAT_PATH}/${encodeURIComponent(conversationId)}`;
 }
