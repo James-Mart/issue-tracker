@@ -40,6 +40,24 @@ function readRoleFile(
   return { fileName, frontmatter: parsed.frontmatter };
 }
 
+/** Spawnable role ids: `agents/*.md` except includes (`_*`). */
+export function listSpawnableRoleIds(
+  agentsDir: string = defaultAgentsDir(),
+): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(agentsDir);
+  } catch (err) {
+    throw new Error(`agents directory unreadable: ${agentsDir}`, {
+      cause: err,
+    });
+  }
+  return entries
+    .filter((entry) => entry.endsWith(".md") && !entry.startsWith("_"))
+    .map((entry) => entry.slice(0, -".md".length))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 /** Read a spawnable role's frontmatter model pin. */
 export function loadRoleModelPin(
   name: string,
@@ -66,22 +84,23 @@ export function loadRoleWorktreeExclusive(
   return readRoleFile(name, agentsDir).frontmatter.worktree === "exclusive";
 }
 
+/** Frontmatter description for a spawnable role, when the file has one. */
+export function loadRoleDescription(
+  name: string,
+  agentsDir: string = defaultAgentsDir(),
+): string | undefined {
+  const description = readRoleFile(name, agentsDir).frontmatter.description;
+  if (typeof description !== "string") return undefined;
+  const trimmed = description.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /** Fail fast when a spawnable role is missing required frontmatter. */
 export function validateRoleBodies(
   agentsDir: string = defaultAgentsDir(),
 ): void {
-  let entries: string[];
-  try {
-    entries = readdirSync(agentsDir);
-  } catch (err) {
-    throw new Error(`agents directory unreadable: ${agentsDir}`, {
-      cause: err,
-    });
-  }
-
-  for (const entry of entries) {
-    if (!entry.endsWith(".md") || entry.startsWith("_")) continue;
-
+  for (const roleId of listSpawnableRoleIds(agentsDir)) {
+    const entry = `${roleId}.md`;
     const source = readFileSync(join(agentsDir, entry), "utf8");
     const parsed = splitFrontmatter(source);
     if (!parsed) {

@@ -1,3 +1,4 @@
+import type { CapabilityCatalog } from "@server/services/capability-catalog";
 import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type {
@@ -101,6 +102,10 @@ export function getConversationTranscript(
 
 export function listAgentModels(): Promise<AgentModelsResponse> {
   return request<AgentModelsResponse>("/api/agent-models");
+}
+
+export function getCapabilityCatalog(): Promise<CapabilityCatalog> {
+  return request<CapabilityCatalog>("/api/agent-capabilities");
 }
 
 export type SendConversationMessageBody = {

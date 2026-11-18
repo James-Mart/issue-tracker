@@ -10,6 +10,7 @@ export const agentsKeys = {
   attachments: (id: string) =>
     [...agentsKeys.conversationsPrefix(), id, "attachments"] as const,
   models: () => [...agentsKeys.all, "models"] as const,
+  capabilityCatalog: () => [...agentsKeys.all, "capability-catalog"] as const,
   transcriptionCapability: () =>
     [...agentsKeys.all, "transcription-capability"] as const,
 };
