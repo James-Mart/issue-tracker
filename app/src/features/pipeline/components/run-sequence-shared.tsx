@@ -12,7 +12,7 @@ import {
   beatStroke,
   displayedDurationMs,
   formatSequenceDuration,
-  formatSequenceTokensAndCost,
+  formatSequenceTokens,
   strokeCss,
   type RunSequence,
   type RunSequenceSection,
@@ -327,8 +327,7 @@ export function displayBeatLabel(label: string): string {
 }
 
 export const SEQUENCE_METRIC_COLS = {
-  /** Fits `cost unavailable` and a `(n of m runs)` qualifier after the tokens. */
-  token: "36ch",
+  token: "8ch",
   duration: "7.5ch",
   cumulative: "7.5ch",
 } as const;
@@ -350,7 +349,7 @@ export function SequenceMetricCells({
   isFailed: boolean;
   beatIndex: number;
   rowKind: string;
-  /** Desktop gutter aligns a fixed column. Phone sizes the cost text to itself. */
+  /** Desktop gutter aligns a fixed column. Phone sizes the token text to itself. */
   tokenWidth?: "column" | "content";
 }) {
   const color = isFailed
@@ -429,10 +428,10 @@ export function rowMetricLabels(
     return { isLive: false, isFailed: false };
   }
   return {
-    token: formatSequenceTokensAndCost(
-      row.beat.tokenTotal,
-      row.beat.kind === "return" ? undefined : row.beat.cost,
-    ),
+    token:
+      row.beat.kind === "return"
+        ? undefined
+        : formatSequenceTokens(row.beat.tokenTotal),
     duration: formatSequenceDuration(displayedDurationMs(row.beat, isLive)),
     cumulative: formatSequenceDuration(row.beat.cumulativeMs),
     isLive,

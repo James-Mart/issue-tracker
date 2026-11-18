@@ -30,10 +30,11 @@ function stamped(seq: number, text: string): string {
   return JSON.stringify({ type: "assistant", text, at: AT, seq });
 }
 
+async function loadTranscriptSeq() {
+  return import("./conversation-transcript-seq.js");
+}
+
 describe("maxSeqFromTranscriptTail", () => {
-  async function loadTail() {
-    return import("./conversation-transcript-seq.js");
-  }
 
   it("uses the last stamped line when the tail is torn or blank", async () => {
     writeTranscript(
@@ -41,7 +42,8 @@ describe("maxSeqFromTranscriptTail", () => {
       `${stamped(4, "kept")}\n${stamped(7, "last")}\n{"type":"assistant"`,
     );
     writeTranscript("blank", `${stamped(3, "only")}\n\n`);
-    const { maxSeqFromTranscriptTail, maxSeqFromTranscriptFile } = await loadTail();
+    const { maxSeqFromTranscriptTail, maxSeqFromTranscriptFile } =
+      await loadTranscriptSeq();
     const torn = maxSeqFromTranscriptTail("torn");
     expect(torn).toBe(maxSeqFromTranscriptFile("torn"));
     expect(torn).toBe(7);
@@ -49,5 +51,35 @@ describe("maxSeqFromTranscriptTail", () => {
     expect(maxSeqFromTranscriptTail("missing")).toBe(0);
     writeTranscript("empty", "");
     expect(maxSeqFromTranscriptTail("empty")).toBe(0);
+  });
+});
+
+describe("legacy run_cost lines", () => {
+  it("skips run_cost on load without dropping other events", async () => {
+    const usage = JSON.stringify({
+      type: "usage",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 12,
+      },
+      at: AT,
+      seq: 2,
+    });
+    const legacyCost = JSON.stringify({
+      type: "run_cost",
+      runId: "run-1",
+      agentId: "agent-1",
+      status: "settled",
+      at: AT,
+      seq: 3,
+      cost: { rawCostCents: 5, chargedCents: 5 },
+    });
+    writeTranscript("legacy", `${stamped(1, "hi")}\n${usage}\n${legacyCost}`);
+    const { readAllTranscriptEvents } = await loadTranscriptSeq();
+    const events = readAllTranscriptEvents("legacy");
+    expect(events.map((e) => e.type)).toEqual(["assistant", "usage"]);
   });
 });
