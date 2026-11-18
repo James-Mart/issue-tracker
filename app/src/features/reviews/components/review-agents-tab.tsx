@@ -25,6 +25,7 @@ import {
   type ReviewAgentRunName,
 } from "../lib/review-agent-runs";
 import { ReviewAgentTranscript } from "./review-agent-transcript";
+import { REVIEW_AGENTS_TAB_LABEL } from "../lib/workbench-tabs";
 import { ReviewRunOpenInAgents } from "./review-run-open-in-agents";
 
 function RunMeta({
@@ -158,7 +159,7 @@ function ReviewAgentRunCard({
   );
 }
 
-/** Agents tab: one card per top-level review run, oldest first. */
+/** Activity tab: one card per top-level review run, oldest first. */
 export function ReviewAgentsTab({
   projectId,
   reviewId,
@@ -250,7 +251,7 @@ export function ReviewAgentsTab({
       <div data-testid="review-agents-empty" data-slot="agent-runs-panel">
         <ShellState
           className="border-0 bg-transparent px-4 py-8 shadow-none"
-          eyebrow="Agents"
+          eyebrow={REVIEW_AGENTS_TAB_LABEL}
           title="No agent has run against this review yet."
         />
       </div>

@@ -458,7 +458,7 @@ describe("StoryReviewPage", () => {
     ).toBe("2 / 3 files reviewed");
   });
 
-  it("opens a phone transcript over the workbench and returns to the Agents tab", () => {
+  it("opens a phone transcript over the workbench and returns to the Activity tab", () => {
     state.wide = false;
     state.agentRuns = [researcherRun()];
     const container = mountPage("tab=agents");
@@ -477,7 +477,7 @@ describe("StoryReviewPage", () => {
     expect(screen?.textContent).toContain("Question researcher");
     expect(screen?.textContent).toContain("Tokens should 401.");
     expect(screen?.querySelector("[data-testid='review-transcript-back']")?.getAttribute("aria-label")).toBe(
-      "Back to Agents",
+      "Back to Activity",
     );
     const open = screen?.querySelector("[data-testid='agent-run-open-in-agents']");
     expect(open?.getAttribute("href")).toBe("/chat/conv-q");

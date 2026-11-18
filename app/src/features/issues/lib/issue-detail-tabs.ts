@@ -1,3 +1,4 @@
+import { AGENT_RUNS_SURFACE_LABEL } from "@/features/agents/lib/agent-runs-surface-label";
 import { channelForIssue } from "@server/kind";
 import type {
   ConversationChannel,
@@ -9,6 +10,7 @@ import type { ChannelTabIndicator } from "./channel-tab-indicator";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
 export const AGENTS_DETAIL_TAB = "agents" as const;
+export const AGENTS_DETAIL_TAB_LABEL = AGENT_RUNS_SURFACE_LABEL;
 export const DIFF_DETAIL_TAB = "diff" as const;
 
 export type IssueDetailTabKey =
@@ -19,13 +21,13 @@ export type IssueDetailTabKey =
 
 export type IssueDetailTab =
   | { key: typeof DEFAULT_ISSUE_DETAIL_TAB; label: "Overview" }
-  | { key: typeof AGENTS_DETAIL_TAB; label: "Agents" }
+  | { key: typeof AGENTS_DETAIL_TAB; label: typeof AGENTS_DETAIL_TAB_LABEL }
   | { key: typeof DIFF_DETAIL_TAB; label: "Diff" }
   | { key: ConversationChannel; label: string; channel: ConversationChannel };
 
 const ISSUE_DETAIL_TAB_LABELS = {
   overview: "Overview",
-  agents: "Agents",
+  agents: AGENTS_DETAIL_TAB_LABEL,
   diff: "Diff",
   planning: "Planning",
   implementing: "Implementing",
@@ -44,7 +46,7 @@ export function channelTabForIssue(
   return channelForIssue(issue);
 }
 
-/** Agents tab for Task and Story (once its parent is known) — kind-only, not data-dependent. */
+/** Activity tab for Task and Story (once its parent is known) — kind-only, not data-dependent. */
 export function agentsTabForIssue(
   issue: Issue,
   parentKind?: IssueKind,
@@ -60,7 +62,7 @@ export function diffTabForIssue(issue: Issue): boolean {
 
 /**
  * Page-level tab set for issue detail: Overview always; optional channel,
- * Agents, and Diff. The project issue uses the home bar instead of this set.
+ * Activity, and Diff. The project issue uses the home bar instead of this set.
  */
 export function tabsForIssueDetail(
   issue: Issue,
