@@ -7,6 +7,7 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
+import { ChevronRight } from "lucide-react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
@@ -22,6 +23,7 @@ import {
   attachmentLinkHref,
 } from "../lib/attachments";
 import { ISSUE_LINK_PREFIX, parseIssueLink } from "../lib/links";
+import { remarkDetailsSummary } from "../lib/remark-details-summary";
 import { remarkImageGallery } from "../lib/remark-image-gallery";
 import { MermaidDiagram } from "@/features/agents/components/mermaid-diagram";
 import { IssueLink } from "./issue-link";
@@ -214,6 +216,22 @@ function MarkdownParagraph({
   return <p {...props}>{children}</p>;
 }
 
+function MarkdownDetails({ children }: ComponentPropsWithoutRef<"details">) {
+  return <details className="issue-md-details group">{children}</details>;
+}
+
+function MarkdownSummary({ children }: ComponentPropsWithoutRef<"summary">) {
+  return (
+    <summary className="issue-md-summary list-none marker:content-none [&::-webkit-details-marker]:hidden">
+      <ChevronRight
+        aria-hidden
+        className="mr-1.5 inline h-3 w-3 shrink-0 align-[-2px] motion-safe:transition-transform group-open:rotate-90"
+      />
+      {children}
+    </summary>
+  );
+}
+
 function markdownComponents(
   renderMermaid: boolean,
   mermaidStreamingRef: { current: boolean },
@@ -231,6 +249,8 @@ function markdownComponents(
     ),
     img: MarkdownImage,
     p: MarkdownParagraph,
+    details: MarkdownDetails,
+    summary: MarkdownSummary,
   };
 }
 
@@ -273,7 +293,7 @@ export function Markdown({
   return (
     <div className={cn("prose-issue min-w-0", READING_MEASURE_CLASS)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkImageGallery]}
+        remarkPlugins={[remarkGfm, remarkDetailsSummary, remarkImageGallery]}
         urlTransform={urlTransform}
         components={components}
       >
