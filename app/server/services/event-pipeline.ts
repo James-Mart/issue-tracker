@@ -1,6 +1,7 @@
 import type { NestedStep, TranscriptEventInput } from "../schemas.js";
 import { type AgentFailureClass } from "./agent-failure.js";
 import { type AgentStreamEvent } from "./agent-sdk.js";
+import { assistantMessageText, userMessageText } from "./assistant-message-text.js";
 import { publishFrame } from "./conversation-stream.js";
 import { appendEvent } from "./conversations.js";
 import { extractTaskHints } from "./task-hints.js";
@@ -125,7 +126,7 @@ export class EventPipeline {
   ): Promise<void> {
     switch (message.type) {
       case "assistant": {
-        const chunk = textFromAssistant(message);
+        const chunk = assistantMessageText(message);
         if (chunk) {
           this.assistantText += chunk;
           // Live-only delta for subscribers; the coalesced finalized text
@@ -208,7 +209,7 @@ export class EventPipeline {
       }
       case "user": {
         await this.flushAssistant();
-        const text = textFromUser(message);
+        const text = userMessageText(message);
         if (!text) return;
         await this.emit({ event: { type: "prompt", text }, persist: true });
         return;
@@ -234,7 +235,7 @@ export class EventPipeline {
 
     switch (message.type) {
       case "assistant": {
-        const chunk = textFromAssistant(message);
+        const chunk = assistantMessageText(message);
         if (!chunk) return;
         await this.handleNested(parentCallId, {
           type: "text-delta",
@@ -492,30 +493,4 @@ export class EventPipeline {
       await appendEvent(this.conversationId, step.event);
     }
   }
-}
-
-function textFromAssistant(
-  message: Extract<
-    Extract<AgentStreamEvent, { kind: "message" }>["message"],
-    { type: "assistant" }
-  >,
-): string {
-  let out = "";
-  for (const block of message.message.content) {
-    if (block.type === "text") out += block.text;
-  }
-  return out;
-}
-
-function textFromUser(
-  message: Extract<
-    Extract<AgentStreamEvent, { kind: "message" }>["message"],
-    { type: "user" }
-  >,
-): string {
-  let out = "";
-  for (const block of message.message.content) {
-    if (block.type === "text") out += block.text;
-  }
-  return out;
 }

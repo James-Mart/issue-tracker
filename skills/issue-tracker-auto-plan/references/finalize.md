@@ -34,7 +34,6 @@ imperative `sourceIdea` write (not part of finalize).
 
 On success, print the full `decision-summary.md` body to the invoking user —
 not only where it was attached — so they can review each decision and iterate
-immediately. Also report the planner's final message (the resulting root
-id after Yes, the outline id after Not now) and where the
-decision-summary report and standout-decisions comment landed on the archived
-source Idea.
+immediately. Also report the planner's final message as the relay loop
+classifies it, and where the decision-summary report and
+standout-decisions comment landed on the archived source Idea.

@@ -1,5 +1,6 @@
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AgentStreamEvent } from "./agent-sdk.js";
 import { createFakeAgentSdk, type FakeSend } from "./agent-sdk.fake.js";
 import {
   createDelegateCustomTools,
@@ -10,6 +11,7 @@ import {
 import {
   agentsDir,
   ASSISTANT_STREAM,
+  NESTED_RUN_IDS,
   cwd,
   setupDelegateToolTest,
   storeDir,
@@ -62,6 +64,67 @@ describe("createDelegateCustomTools", () => {
     expect(fake.created[0]!.storeDir).toBe(
       join(storeDir, "nested", fake.handles[0]!.agentId),
     );
+  });
+
+  it("returns assistant text after the last tool call as the reply", async () => {
+    const stream: AgentStreamEvent[] = [
+      {
+        kind: "message",
+        message: {
+          type: "assistant",
+          ...NESTED_RUN_IDS,
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "This outline's Planning tab has the decomposer session.\n",
+              },
+            ],
+          },
+        },
+      },
+      {
+        kind: "message",
+        message: {
+          type: "tool_call",
+          ...NESTED_RUN_IDS,
+          call_id: "call-wait",
+          name: "shell",
+          status: "completed",
+          result: { output: "idle" },
+        },
+      },
+      {
+        kind: "message",
+        message: {
+          type: "assistant",
+          ...NESTED_RUN_IDS,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "planned-root\n" }],
+          },
+        },
+      },
+    ];
+    const fake = createFakeAgentSdk({ stream });
+    const customTools = createDelegateCustomTools({
+      sdk: fake,
+      cwd,
+      storeDir,
+      agentsDir,
+    });
+
+    const result = await customTools.delegate!.execute(
+      { role: "pinned-role", prompt: "do the thing" },
+      {},
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      agentId: fake.handles[0]!.agentId,
+      reply: "planned-root\n",
+    });
   });
 
   it("allows delegation through depth 3 and refuses depth 4", async () => {

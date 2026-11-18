@@ -31,8 +31,25 @@ afterEach(() => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
+describe("parseDecomposeRequest", () => {
+  it("accepts execution gate with optional merge policy and refuses unknown fields", async () => {
+    const { parseDecomposeRequest } = await import("./outline-planning-session.js");
+    const { IssueError } = await import("./errors.js");
+    expect(parseDecomposeRequest({ executionGate: "off" })).toEqual({
+      executionGate: "off",
+      mergePolicy: undefined,
+    });
+    expect(
+      parseDecomposeRequest({ executionGate: "on", mergePolicy: "squash" }),
+    ).toEqual({ executionGate: "on", mergePolicy: "squash" });
+    expect(() =>
+      parseDecomposeRequest({ executionGate: "off", outlineGate: "on" }),
+    ).toThrow(IssueError);
+  });
+});
+
 describe("startOutlinePlanningSession", () => {
-  it("starts a decomposer session on the outline planning channel", async () => {
+  beforeEach(() => {
     writeIssue("p", {
       kind: "project",
       title: "P",
@@ -50,6 +67,9 @@ describe("startOutlinePlanningSession", () => {
       createdAt: AT,
       updatedAt: AT,
     });
+  });
+
+  it("starts a decomposer session on the outline planning channel", async () => {
     const { sessions, started } = fakeLauncherSessions();
     const { startOutlinePlanningSession } = await import(
       "./outline-planning-session.js"

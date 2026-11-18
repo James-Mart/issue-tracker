@@ -1,8 +1,8 @@
 # Decomposer body (shared)
 
-Not a spawnable agent (no frontmatter). Loaded by the
-`issue-tracker-decomposer-*` wrappers. Callers **Read** this file from disk — a
-markdown link alone is not enough.
+Not a spawnable agent (no frontmatter). The outline planning session's first
+prompt Reads this file. Callers **Read** this file from disk — a markdown
+link alone is not enough.
 
 Absolute path for this file (Read this exact path):
 

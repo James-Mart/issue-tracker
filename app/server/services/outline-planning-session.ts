@@ -56,14 +56,20 @@ export type StartOutlinePlanningSessionInput =
   | StartOutlineReconcileSession
   | StartOutlineCheckSession;
 
+export type DecomposeRequest = Pick<
+  StartOutlineDecomposerSession,
+  "executionGate" | "mergePolicy"
+>;
+
 const decomposeRequestSchema = z
   .object({
     executionGate: z.enum(["on", "off"]),
+    mergePolicy: z.string().optional(),
   })
   .strict();
 
 /** Body of `POST /outline/decompose`. Unknown fields are refused. */
-export function parseDecomposeRequest(body: unknown): OutlineExecutionGate {
+export function parseDecomposeRequest(body: unknown): DecomposeRequest {
   const parsed = decomposeRequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new IssueError(
@@ -71,7 +77,10 @@ export function parseDecomposeRequest(body: unknown): OutlineExecutionGate {
       formatZodError(parsed.error, "invalid decompose body"),
     );
   }
-  return parsed.data.executionGate;
+  return {
+    executionGate: parsed.data.executionGate,
+    mergePolicy: parsed.data.mergePolicy,
+  };
 }
 
 /**

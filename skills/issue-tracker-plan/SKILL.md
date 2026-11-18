@@ -249,12 +249,43 @@ When the grill is ready (no extra pre-outline confirm):
 2. The execution gate is `on` when `issue idea get <ideaId> executionGate`
    prints `true` or `issue idea get <ideaId> stakeholder` prints nothing;
    otherwise it is `off`.
-3. `issue outline get <outlineId> version` prints the latest version.
-4. Delegate the **Decomposer** stub for the model you run on (Spawn stubs):
-   **Decomposer (opus)** on a Claude Opus model, **Decomposer (grok)** on any
-   other. Wait for its reply: the root id on the first line, then any queue
-   failure.
-5. Report that reply.
+3. Start the outline decomposer session with the Decompose request. The
+   API listens on port `PORT`, or `8061` when `PORT` is unset. The body is
+   `{"executionGate":"<on|off>"}`. When the merge base is not trunk, the
+   body also includes `"mergePolicy":"<policy>"` from the grill.
+
+   ```bash
+   curl -sS -w '\n%{http_code}' -X POST \
+     "http://127.0.0.1:${PORT:-8061}/api/issues/<outlineId>/outline/decompose" \
+     -H 'content-type: application/json' \
+     -d '<body>'
+   ```
+
+   The last line is the HTTP status. The preceding lines are the response
+   body.
+4. Status `409` with JSON `code` `conflict` means the outline's planning
+   channel already has an active session. The final message is that JSON
+   `error` string. Stop.
+5. A status other than `201` or that `409` is a failed start. The final
+   message is the response body. Stop.
+6. Status `201`: JSON `id` is the session id. Post this in the planning
+   chat, with `<projectId>` from Bootstrap step 1:
+
+   `This outline's [Planning tab](/projects/<projectId>/issues/<outlineId>?tab=planning) has the decomposer session.`
+
+7. Repeat
+   `GET http://127.0.0.1:${PORT:-8061}/api/conversations/<sessionId>/run`
+   until JSON `active` is `false`, pausing 2 seconds between checks. A
+   non-200 response is a failed wait: the final message is that response.
+   Stop. When `active` is `false`,
+   `GET http://127.0.0.1:${PORT:-8061}/api/conversations/<sessionId>`.
+   A non-200 response is a failed read: the final message is that response.
+   Stop. The reply is the `text` of the last `transcript` item whose
+   `type` is `assistant`.
+8. When the transcript has no `assistant` item, the final message is
+   `The decomposer session ended with no reply.` Stop.
+9. The final message is that reply: the root id on the first line, then
+   any queue failure.
 
 ## Append
 
@@ -301,18 +332,6 @@ workflow instructions here.
 
 > Research: `<focused question>`. Workspace: `<absolute workspace path>`.
 > Seed paths (if any): `<paths>`. Ref: `<git ref>` (optional).
-
-**Decomposer (opus)** — `role: issue-tracker-decomposer-opus`
-
-**Decomposer (grok)** — `role: issue-tracker-decomposer-grok`
-
-Both take the same prompt:
-
-> Mode: `decompose`. Outline: `<outlineId>`. Version: `<n>`. Execution gate:
-> `<on|off>`.
-
-For a non-trunk merge base, append `` Merge policy: `<policy>`. `` to that
-prompt.
 
 ## Rules
 
