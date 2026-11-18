@@ -912,14 +912,12 @@ export function ConversationThread({
   const navigate = useNavigate();
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
-  const rosterReady = conversations !== undefined;
-  const missingFromRoster = rosterReady && listMeta === undefined;
   const agentIdFromRoster = listMeta?.agentId;
   const agentIdFromProp = metaProp?.agentId;
   const needsConversationDetail =
     !agentIdFromRoster &&
     !agentIdFromProp &&
-    (missingFromRoster || rosterReady);
+    listMeta === undefined;
   const { data: conversationDetail } = useConversationDetailQuery(
     needsConversationDetail ? conversationId : undefined,
   );
