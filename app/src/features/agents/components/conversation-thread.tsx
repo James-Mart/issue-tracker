@@ -21,7 +21,12 @@ import {
   isImageMime,
 } from "@/features/issues/lib/attachments";
 import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
-import { useConversationsQuery, useConversationAttachmentsQuery } from "../api/queries";
+import { CopyAgentIdButton } from "@/features/issues/components/copy-agent-id-button";
+import {
+  useConversationAttachmentsQuery,
+  useConversationDetailQuery,
+  useConversationsQuery,
+} from "../api/queries";
 import {
   conversationAttachmentApiPath,
   type ConversationAttachment,
@@ -771,6 +776,7 @@ function ForkedThreadSourceLink({
 /** Open-thread density: Back, title, optional trailing actions, status strip. */
 export function OpenThreadChrome({
   title,
+  agentId,
   onBack,
   backAriaLabel = "Back to conversations",
   runActive,
@@ -780,6 +786,7 @@ export function OpenThreadChrome({
   onSourceConversation,
 }: {
   title: string;
+  agentId?: string;
   onBack?: () => void;
   backAriaLabel?: string;
   runActive: boolean;
@@ -809,6 +816,7 @@ export function OpenThreadChrome({
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </h2>
+        {agentId ? <CopyAgentIdButton agentId={agentId} /> : null}
         {actions}
       </div>
       {forkedFrom && onSourceConversation ? (
@@ -892,7 +900,12 @@ export function ConversationThread({
   const navigate = useNavigate();
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
+  const offRoster = listMeta === undefined;
+  const { data: conversationDetail } = useConversationDetailQuery(
+    offRoster ? conversationId : undefined,
+  );
   const meta = listMeta ?? metaProp;
+  const agentId = listMeta?.agentId ?? conversationDetail?.meta.agentId;
   const forkedFrom = listMeta?.forkedFrom;
   const forkedAtSeq = listMeta?.forkedAtSeq;
   const title = meta?.title?.trim() || "Thread";
@@ -913,6 +926,7 @@ export function ConversationThread({
     >
       <OpenThreadChrome
         title={title}
+        agentId={agentId}
         onBack={onBack}
         backAriaLabel={backAriaLabel}
         runActive={runActive}

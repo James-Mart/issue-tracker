@@ -39,6 +39,10 @@ export function useConversationDetailQuery(
     queryFn: () => getConversationDetail(conversationId!),
     enabled: Boolean(conversationId),
     retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.meta.agentId
+        ? false
+        : CONVERSATIONS_REFETCH_INTERVAL_MS,
   });
 }
 
