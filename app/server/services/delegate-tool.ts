@@ -9,6 +9,7 @@ import type {
 import { z } from "zod";
 import { agentFailureClassSchema } from "../schemas/conversation.js";
 import type { AgentRunResult, AgentSdk, AgentStreamEvent } from "./agent-sdk.js";
+import { assistantMessageText } from "./assistant-message-text.js";
 import {
   classifyAgentFailure,
   isContentEvent,
@@ -421,16 +422,6 @@ function nestedStorePath(storeDir: string, agentId: string): string {
   return join(storeDir, "nested", agentId);
 }
 
-function assistantTextFromEvent(event: AgentStreamEvent): string {
-  if (event.kind !== "message") return "";
-  if (event.message.type !== "assistant") return "";
-  let reply = "";
-  for (const block of event.message.message.content) {
-    if (block.type === "text") reply += block.text;
-  }
-  return reply;
-}
-
 type ParentFrame = {
   depth: number;
   /** Delegation ids from the outermost delegation down to this one (last). */
@@ -774,7 +765,20 @@ export function createDelegateCustomTools(
                   clearTimeout(firstContentTimeout);
                   firstContentTimeout = undefined;
                 }
-                reply += assistantTextFromEvent(event);
+                // A tool call ends the previous assistant message. The reply
+                // is the text after the last tool call, so an earlier chat
+                // note stays in the transcript and out of what the parent reads.
+                if (
+                  event.kind === "message" &&
+                  event.message.type === "tool_call"
+                ) {
+                  reply = "";
+                } else if (
+                  event.kind === "message" &&
+                  event.message.type === "assistant"
+                ) {
+                  reply += assistantMessageText(event.message);
+                }
                 if (pipeline && parentCallId) {
                   await pipeline.handleDelegation(parentCallId, stamp, event);
                 }

@@ -5,7 +5,7 @@ import {
 } from "./planning-launch";
 
 /**
- * Session root model. Matches the planner and decomposer wrapper pins:
+ * Session root model. Matches the planner wrapper pins:
  * Opus when the source Idea's stakeholder is an Opus model, otherwise Grok.
  */
 export const OUTLINE_PLANNING_GROK_MODEL = "cursor-grok-4.7";

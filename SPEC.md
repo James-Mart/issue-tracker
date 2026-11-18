@@ -1154,7 +1154,7 @@ An Outline offers the `planning` channel. Issue detail shows it as a Planning ta
 
 `startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner, decomposer, reconcile, or check ([Outline check](#outline-check)) session through `createIssueChannelSession` with channel `planning` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
 
-A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`decompose`), `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended the same way the plan skill appends it. A blank merge policy is refused.
+A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`decompose`), `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended to that prompt. A blank merge policy is refused.
 
 The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off", mergePolicy?: string }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `planning` channel at the latest `bodyVersion`, with that execution gate, an optional merge policy, and no outline gate. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a blank `mergePolicy`, a body with any field other than `executionGate` and `mergePolicy`, or a Project with no workspace is an error. A busy planning session on that outline is `409`, the same refusal as any other start on that channel. The decomposer queues the new root after polish when the gate is `off`, and leaves the root unqueued when the gate is `on`.
 
@@ -2665,8 +2665,7 @@ this SPEC entry is where the invariant is durable.
 is good at, so each role carries one line naming the craft it is trusted with,
 sitting with its role intro. A role that exists as several model-pinned
 wrappers carries the line once in its shared body
-(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`,
-`_issue-tracker-decomposer.md`) and not in the
+(`_issue-tracker-implementor.md`, `_issue-tracker-planner.md`) and not in the
 wrappers. Like the include, the line never modulates scope, effort, or
 thoroughness.
 

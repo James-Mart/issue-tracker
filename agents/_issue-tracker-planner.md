@@ -25,7 +25,7 @@ into a plan someone else can build from.
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/SKILL.md`
    and follow it for the given issue id.
 2. Own the grill, its mock-or-skip check and mockup rounds, outline saves,
-   outline gate, decomposer delegation, and retro spawn per that skill — one
+   outline gate, the outline decomposer session, and retro spawn per that skill — one
    grill question per turn, ending the turn so the stakeholder can resume
    with an answer.
 3. When the skill finishes, return what it reports as your entire final

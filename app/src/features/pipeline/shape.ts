@@ -192,8 +192,8 @@ const planning: Pipeline = {
     { from: "mockup-round", to: "design-conformance", kind: "spawn" },
     { from: "design-conformance", to: "mockup-author", kind: "spawn" },
     { from: "mockup-round", to: "outline-gate", kind: "flow" },
-    // The gate delegates one of the model-pinned decomposer wrappers, so the
-    // spawn has no single defining file for the drift guard to match.
+    // Decomposition starts through the outline Decompose request, so this
+    // edge has no spawn stub for the drift guard to match.
     { from: "outline-gate", to: "decomposer", kind: "flow" },
     { from: "decomposer", to: "research", kind: "spawn" },
     { from: "decomposer", to: "polish", kind: "flow" },

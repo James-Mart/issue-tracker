@@ -8,6 +8,7 @@ import {
   type AgentSdk,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import { assistantMessageText } from "./assistant-message-text.js";
 import { parseModelKey } from "./model-selection.js";
 
 export const TRANSCRIPT_CLEANUP_MODEL = parseModelKey("composer-2.5-fast");
@@ -29,11 +30,7 @@ function assistantText(event: AgentStreamEvent): string {
   if (event.kind !== "message" || event.message.type !== "assistant") {
     return "";
   }
-  let out = "";
-  for (const block of event.message.message.content) {
-    if (block.type === "text") out += block.text;
-  }
-  return out;
+  return assistantMessageText(event.message);
 }
 
 function reasonOf(err: unknown): string {

@@ -21,7 +21,8 @@ finalize with an audit report on the source Idea.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
 You do **not** author the outline or the plan tree yourself — the vanilla
-planner and the decomposer it delegates do (`issue-tracker-plan` unchanged;
+planner starts the outline decomposer session, which authors and polishes
+the plan (`issue-tracker-plan`;
 Story *"Reuse over reinvention"* invariant).
 
 This skill is meant to be invoked **manually on opus 5.5
@@ -238,10 +239,17 @@ specifics and stop; otherwise proceed to Flow.
    vision + the source issue's theme + inspirationApps.
    Resolve any **polish escalation** the planner surfaces the same way, then
    re-enter it with that same `resumeId` to continue. Repeat until the planner
-   returns its final message: after Yes, the resulting root id (already
-   applied and polished), or for an Idea with `appendTo` the target Story id
-   (its reconciliation runs on the outline's Planning channel); after Not
-   now, the outline id.
+   returns its final message, then classify it:
+
+   - **Not now** — the message is the outline id.
+   - **Yes** with `appendTo` — the first line is the target Story id.
+     Reconciliation runs on the outline's Planning channel.
+   - **Yes** otherwise — the message is the decomposer session's reply.
+     The first line is a root id when `issue get <line> kind` prints
+     `epic`, or prints `story` and `issue get <line> partOf` prints the
+     Project id from Bootstrap. That id is the resulting root, already
+     applied and polished. Any other first line means the start produced
+     no root, and the message stays the planner's report.
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
@@ -293,11 +301,12 @@ specifics and stop; otherwise proceed to Flow.
    Not now and before re-entering the planner, run
    `issue idea set <issueId> approvalPending false`. The marker's
    lifecycle across Amend rounds is fixed by
-   `issue:awaiting-approval-status`. After the planner returns the
-   resulting root id (or target Story id) on the Yes path, comment on it with
-   `issue comment <rootId> --role human --body <text>`. The body
-   records that a human approved the plan and names the Idea
-   (`<issueId>`). This is your write, not the planner's: the planner
+   `issue:awaiting-approval-status`. After the planner returns on the Yes
+   path, comment when the relay-loop classification names an id: the target
+   Story id, or the resulting root id. The comment is
+   `issue comment <id> --role human --body <text>`. The body records that a
+   human approved the plan and names the Idea (`<issueId>`). This is your
+   write, not the planner's: the planner
    cannot tell whether a human or an agent answered its gate, so you
    are the only party that knows a human signed off. That is what
    makes "was this plan human-approved, or self-approved?" answerable
@@ -381,6 +390,5 @@ When finalize is done, report per **## Finalize**. Then stop.
 - You are the stakeholder on opus 5.5 (`claude-opus-5-5-thinking-high`):
   bootstrap, grill answers,
   discriminator + planner spawns, retro request, finalize. Do not author the
-  outline or the plan tree yourself — the vanilla planner and its decomposer
-  own authoring / polish via `issue-tracker-plan`.
+  outline or the plan tree yourself.
 - Honor the intro **Allowed writes** contract.
