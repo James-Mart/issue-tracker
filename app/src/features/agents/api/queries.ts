@@ -39,6 +39,7 @@ export function useConversationDetailQuery(
     queryFn: () => getConversationDetail(conversationId!),
     enabled: Boolean(conversationId),
     retry: false,
+    // Off-roster detail can load before the runtime assigns agentId; poll until it appears.
     refetchInterval: (query) =>
       query.state.data?.meta.agentId
         ? false

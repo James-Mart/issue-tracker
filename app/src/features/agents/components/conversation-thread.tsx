@@ -21,7 +21,7 @@ import {
   isImageMime,
 } from "@/features/issues/lib/attachments";
 import type { ParkedRootResume } from "@/features/issues/hooks/use-parked-root-resume";
-import { CopyAgentIdButton } from "@/features/issues/components/copy-agent-id-button";
+import { CopyTextButton } from "@/features/issues/components/copy-text-button";
 import {
   useConversationAttachmentsQuery,
   useConversationDetailQuery,
@@ -773,6 +773,17 @@ function ForkedThreadSourceLink({
   );
 }
 
+function CopyRootAgentIdButton({ agentId }: { agentId: string }) {
+  return (
+    <CopyTextButton
+      text={agentId}
+      label="Copy agent id"
+      testId="copy-root-agent-id"
+      className="shrink-0 text-muted-foreground"
+    />
+  );
+}
+
 /** Open-thread density: Back, title, optional trailing actions, status strip. */
 export function OpenThreadChrome({
   title,
@@ -816,7 +827,7 @@ export function OpenThreadChrome({
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {title}
         </h2>
-        {agentId ? <CopyAgentIdButton agentId={agentId} /> : null}
+        {agentId ? <CopyRootAgentIdButton agentId={agentId} /> : null}
         {actions}
       </div>
       {forkedFrom && onSourceConversation ? (
@@ -859,6 +870,7 @@ export function ConversationThread({
   meta?: {
     title: string;
     model: string;
+    agentId?: string;
     pendingMessage?: { text: string; at: string };
   };
   /** Read-only history (e.g. archived channel session) — transcript only. */
@@ -900,12 +912,20 @@ export function ConversationThread({
   const navigate = useNavigate();
   const keyboardInset = useKeyboardInset();
   const listMeta = conversations?.find((c) => c.id === conversationId);
-  const offRoster = listMeta === undefined;
+  const rosterReady = conversations !== undefined;
+  const missingFromRoster = rosterReady && listMeta === undefined;
+  const agentIdFromRoster = listMeta?.agentId;
+  const agentIdFromProp = metaProp?.agentId;
+  const needsConversationDetail =
+    !agentIdFromRoster &&
+    !agentIdFromProp &&
+    (missingFromRoster || rosterReady);
   const { data: conversationDetail } = useConversationDetailQuery(
-    offRoster ? conversationId : undefined,
+    needsConversationDetail ? conversationId : undefined,
   );
   const meta = listMeta ?? metaProp;
-  const agentId = listMeta?.agentId ?? conversationDetail?.meta.agentId;
+  const agentId =
+    agentIdFromRoster ?? agentIdFromProp ?? conversationDetail?.meta.agentId;
   const forkedFrom = listMeta?.forkedFrom;
   const forkedAtSeq = listMeta?.forkedAtSeq;
   const title = meta?.title?.trim() || "Thread";

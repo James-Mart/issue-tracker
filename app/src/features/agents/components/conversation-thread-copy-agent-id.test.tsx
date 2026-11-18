@@ -2,13 +2,13 @@
 import { describe, expect, it } from "vitest";
 import {
   mountThread,
-  rosterConversations,
   setConversationDetailForTest,
+  setRosterConversationsForTest,
 } from "./conversation-thread.test-helpers";
 
 describe("ConversationThread copy root agent id", () => {
   it("loads agentId from conversation detail when the thread is off the roster", () => {
-    rosterConversations.length = 0;
+    setRosterConversationsForTest([]);
     setConversationDetailForTest({
       meta: {
         title: "Channel session",

@@ -31,6 +31,24 @@ const initialEvents: TranscriptEvent[] = [
   },
 ];
 
+type RosterConversation = {
+  id: string;
+  title: string;
+  model: string;
+  agentId?: string;
+};
+
+function defaultRosterConversations(): RosterConversation[] {
+  return [
+    {
+      id: "conv-1",
+      title: "Test thread",
+      model: "composer-2.5-fast",
+      agentId: "agent-root-1",
+    },
+  ];
+}
+
 const mocks = vi.hoisted(() => ({
   transcriptState: { events: [] as TranscriptEvent[] },
   threadUi: {
@@ -40,14 +58,7 @@ const mocks = vi.hoisted(() => ({
     historyFailed: false,
     historyErrorMessage: undefined as string | undefined,
   },
-  rosterConversations: [
-    {
-      id: "conv-1",
-      title: "Test thread",
-      model: "composer-2.5-fast",
-      agentId: "agent-root-1",
-    },
-  ] as { id: string; title: string; model: string; agentId?: string }[],
+  rosterConversations: defaultRosterConversations(),
   conversationDetail: undefined as
     | { meta: { agentId?: string; title: string; model: string } }
     | undefined,
@@ -64,6 +75,12 @@ export function setConversationDetailForTest(
   detail: typeof mocks.conversationDetail,
 ) {
   mocks.conversationDetail = detail;
+}
+
+export function setRosterConversationsForTest(
+  sessions: typeof mocks.rosterConversations,
+) {
+  mocks.rosterConversations = sessions;
 }
 export const navigate = mocks.navigate;
 
@@ -160,14 +177,7 @@ function resetThreadMocks() {
   threadUi.ready = true;
   threadUi.historyFailed = false;
   threadUi.historyErrorMessage = undefined;
-  mocks.rosterConversations = [
-    {
-      id: "conv-1",
-      title: "Test thread",
-      model: "composer-2.5-fast",
-      agentId: "agent-root-1",
-    },
-  ];
+  mocks.rosterConversations = defaultRosterConversations();
   mocks.conversationDetail = undefined;
   forkMutate.mockReset();
   navigate.mockClear();
