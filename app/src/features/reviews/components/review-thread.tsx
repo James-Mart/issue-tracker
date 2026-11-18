@@ -6,6 +6,7 @@ import {
   usePostThreadEvent,
 } from "@/features/issues/api/mutations";
 import { CommentThread } from "@/features/issues/components/comments/comment-thread";
+import { CopyCommentMarkdown } from "@/features/issues/components/comments/copy-comment-markdown";
 import {
   DiffThreadComposer,
   useOptionalDiffComposer,
@@ -128,6 +129,7 @@ export function ReviewThread({
           { isPending: events.isPending, event: events.variables?.event },
         )}
         onOpenResearcher={openResearcher}
+        commentBodyAccessory={(comment) => <CopyCommentMarkdown body={comment.body} />}
       />
       {localQuote ? (
         <QuoteThreadComposer

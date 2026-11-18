@@ -25,6 +25,7 @@ type CommentEditContextValue = {
   issueId?: string;
   onEdit?: (commentId: string, body: string) => Promise<void>;
   error?: string;
+  bodyAccessory?: ReactNode;
 };
 
 const CommentEditContext = createContext<CommentEditContextValue | null>(null);
@@ -43,11 +44,14 @@ export function CommentEditScope({
   comment,
   issueId,
   onEdit,
+  bodyAccessory,
   children,
 }: {
   comment: ThreadMessage;
   issueId?: string;
   onEdit?: (commentId: string, body: string) => Promise<void>;
+  /** Shown under the displayed Markdown. Hidden while editing. */
+  bodyAccessory?: ReactNode;
   children: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
@@ -77,8 +81,9 @@ export function CommentEditScope({
       issueId,
       onEdit,
       error,
+      bodyAccessory,
     }),
-    [editing, canEdit, pending, start, stop, comment, issueId, onEdit, error],
+    [editing, canEdit, pending, start, stop, comment, issueId, onEdit, error, bodyAccessory],
   );
 
   return (
@@ -108,7 +113,7 @@ export function CommentEditAction() {
 export function CommentEditBody() {
   const edit = useCommentEditContext();
   if (!edit) return null;
-  const { editing, comment, issueId, onEdit, error, stop } = edit;
+  const { editing, comment, issueId, onEdit, error, stop, bodyAccessory } = edit;
   if (editing && onEdit && issueId) {
     const draftKey = editDraftKey(issueId, comment.id);
     return (
@@ -135,6 +140,7 @@ export function CommentEditBody() {
   return (
     <>
       <Markdown issueId={issueId}>{comment.body}</Markdown>
+      {bodyAccessory}
       <CommentSendFailure message={comment} />
       {error ? <CommentEditFailure error={error} /> : null}
     </>

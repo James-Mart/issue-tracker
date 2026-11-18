@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, Copy, MoreHorizontal } from "lucide-react";
-import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
 import type { IssueDetail, ProjectLabel } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,44 +14,15 @@ import { IssueDetailStatusChips } from "./issue-detail-status-chips";
 import { IssueTitleField } from "./issue-title-field";
 import { OutlineSourceIdeaLink } from "./outline-source-idea-link";
 import { ProjectLabelChips } from "./project-label-chips";
+import { CopyTextButton } from "./copy-text-button";
 
 function CopyIssueIdButton({ id }: { id: string }) {
-  const [copied, setCopied] = useState(false);
-  const resetCopiedRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    return () => {
-      if (resetCopiedRef.current !== undefined) {
-        clearTimeout(resetCopiedRef.current);
-      }
-    };
-  }, []);
-
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      title="Copy id"
+    <CopyTextButton
+      text={id}
+      label="Copy id"
       className="shrink-0 text-muted-foreground"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(id);
-          setCopied(true);
-          if (resetCopiedRef.current !== undefined) {
-            clearTimeout(resetCopiedRef.current);
-          }
-          resetCopiedRef.current = setTimeout(() => setCopied(false), 1500);
-        } catch {
-          toast.error("Could not copy to clipboard");
-        }
-      }}
-    >
-      {copied ? (
-        <Check className="h-3.5 w-3.5" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
-    </Button>
+    />
   );
 }
 

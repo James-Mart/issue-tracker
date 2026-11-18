@@ -62,6 +62,7 @@ export function CommentThread({
   reveal = false,
   highlighted = false,
   onOpenResearcher,
+  commentBodyAccessory,
 }: {
   thread: CommentThreadData;
   /** Absent on a flat note: no Reply control. */
@@ -100,6 +101,8 @@ export function CommentThread({
   highlighted?: boolean;
   /** Called when the reader opens this thread's researcher transcript. */
   onOpenResearcher?: () => void;
+  /** Rendered under each displayed comment body. Hidden while that comment is edited. */
+  commentBodyAccessory?: (comment: ThreadMessage) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(reveal);
   useEffect(() => {
@@ -188,6 +191,7 @@ export function CommentThread({
             issueId={issueId}
             onEdit={onEdit}
             onQuote={quote}
+            bodyAccessory={commentBodyAccessory?.(thread.root)}
             quoteSlot={quoteCommentId === thread.root.id ? quoteSlot : undefined}
             badges={
               statusBadgeHost === "root" ? (
@@ -206,6 +210,7 @@ export function CommentThread({
               issueId={issueId}
               onEdit={onEdit}
               onQuote={quote}
+              bodyAccessory={commentBodyAccessory?.(comment)}
               quoteSlot={quoteCommentId === comment.id ? quoteSlot : undefined}
             />
           ))}
@@ -552,6 +557,7 @@ function ThreadComment({
   issueId,
   onEdit,
   onQuote,
+  bodyAccessory,
   quoteSlot,
   badges,
   inclusion,
@@ -560,6 +566,7 @@ function ThreadComment({
   issueId?: string;
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onQuote?: (comment: ThreadMessage) => void;
+  bodyAccessory?: ReactNode;
   quoteSlot?: ReactNode;
   badges?: ReactNode;
   /** Right end of this comment's meta line. The root of an inline thread. */
@@ -567,7 +574,12 @@ function ThreadComment({
 }) {
   const { author, roleBadge } = commentHeaderLabels(comment.role, comment.name);
   return (
-    <CommentEditScope comment={comment} issueId={issueId} onEdit={onEdit}>
+    <CommentEditScope
+      comment={comment}
+      issueId={issueId}
+      onEdit={onEdit}
+      bodyAccessory={bodyAccessory}
+    >
       <section
         data-comment-id={comment.id}
         data-delivery={comment.delivery?.status}

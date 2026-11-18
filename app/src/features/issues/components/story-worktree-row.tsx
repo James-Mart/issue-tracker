@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, Copy, RotateCw } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { RotateCw } from "lucide-react";
 import type { IssueDetail, IssuesResponse } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import {
 } from "../api/mutations";
 import { useProjectWorktreesQuery } from "../api/queries";
 import { type IssueSupplement } from "../hooks/use-supplemented-by-id";
+import { CopyTextButton } from "./copy-text-button";
 import {
   WORKTREE_PARENT_BRANCH_SUFFIX,
   WORKTREE_REMOVE_ACTIVE_CONFIRM,
@@ -54,44 +54,13 @@ const BADGE_LABEL: Record<WorktreeCardKind, string> = {
 };
 
 function CopyPathButton({ path }: { path: string }) {
-  const [copied, setCopied] = useState(false);
-  const resetCopiedRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    return () => {
-      if (resetCopiedRef.current !== undefined) {
-        clearTimeout(resetCopiedRef.current);
-      }
-    };
-  }, []);
-
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      title="Copy path"
-      data-testid="story-worktree-copy"
+    <CopyTextButton
+      text={path}
+      label="Copy path"
+      testId="story-worktree-copy"
       className="shrink-0 text-muted-foreground"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(path);
-          setCopied(true);
-          if (resetCopiedRef.current !== undefined) {
-            clearTimeout(resetCopiedRef.current);
-          }
-          resetCopiedRef.current = setTimeout(() => setCopied(false), 1500);
-        } catch {
-          toast.error("Could not copy to clipboard");
-        }
-      }}
-    >
-      {copied ? (
-        <Check className="h-3.5 w-3.5" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
-    </Button>
+    />
   );
 }
 
