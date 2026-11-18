@@ -129,7 +129,7 @@ describe("ReviewAgentsTab", () => {
     expect(body?.textContent).not.toContain("role body that must stay out of the card");
     expect(body?.querySelector("[data-pinned]")?.getAttribute("data-pinned")).toBe("true");
     expect(card?.querySelector("[data-testid='agent-run-open-in-agents']")?.getAttribute("href")).toBe(
-      "/agents/conv-tasker",
+      "/chat/conv-tasker",
     );
 
     state.runs = [{ ...state.runs[0]!, status: "completed", endedAt: "2026-10-14T16:42:00.000Z" }];

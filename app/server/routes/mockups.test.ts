@@ -187,7 +187,7 @@ describe("GET /mockups/:conversationId/", () => {
     expect(missing.status).toBe(200);
     const missingHtml = await missing.text();
     expect(missingHtml).toContain("Mockup preview is unavailable.");
-    expect(missingHtml).toContain('href="/agents/conv-missing"');
+    expect(missingHtml).toContain('href="/chat/conv-missing"');
     expect(missingHtml).not.toContain("restart");
     expect(alpha.seen).not.toContain("/");
     expect(beta.seen).toEqual(["/"]);

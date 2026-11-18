@@ -14,7 +14,7 @@ import { currentGlow } from "@/components/ui/overlay-surfaces";
 import { useIsCoarsePointer } from "@/hooks/use-coarse-pointer";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateConversation } from "../api/mutations";
-import { AGENTS_PATH } from "../lib/links";
+import { CHAT_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 /** Pulsing current-hue dot for a roster row with an in-flight run. */
@@ -76,7 +76,7 @@ export function ConversationListItem({
       {
         onSuccess: () => {
           if (selectedConversationId === conversation.id) {
-            navigate(AGENTS_PATH);
+            navigate(CHAT_PATH);
           }
         },
       },

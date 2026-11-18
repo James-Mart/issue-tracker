@@ -5,6 +5,7 @@ import {
   LegacyPipelineRunsRedirect,
 } from "@/features/pipeline/pipeline-legacy-redirects";
 import { LegacyProjectHomeRedirect } from "@/features/issues/issues-legacy-redirects";
+import { LegacyAgentsRedirect } from "@/features/agents/agents-legacy-redirects";
 import { Suspense, lazy, useEffect } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PageShell } from "@/components/page-shell";
@@ -78,8 +79,12 @@ export function App() {
         >
           <Routes>
             <Route path="/" element={<CockpitPage />} />
-            <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/agents/:conversationId" element={<AgentsPage />} />
+            <Route path="/chat" element={<AgentsPage />} />
+            <Route path="/chat/:conversationId" element={<AgentsPage />} />
+            <Route
+              path="/agents/:conversationId?"
+              element={<LegacyAgentsRedirect />}
+            />
             <Route path="/pipelines" element={<PipelinePage />} />
             <Route path="/runs" element={<PipelinePage />} />
             <Route

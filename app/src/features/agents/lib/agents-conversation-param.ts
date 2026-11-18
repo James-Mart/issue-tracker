@@ -15,7 +15,7 @@ const NO_DECISION: AgentsConversationParamResolution = {
 };
 
 /**
- * Resolve a `/agents/:conversationId` segment against the roster.
+ * Resolve a `/chat/:conversationId` segment against the roster.
  * `conversations` is `undefined` while the list is still loading — that is
  * not treated as a missing conversation.
  */

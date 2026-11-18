@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { useDeleteConversation } from "../api/mutations";
 import { useConversationsQuery } from "../api/queries";
-import { AGENTS_PATH } from "../lib/links";
+import { CHAT_PATH } from "../lib/links";
 import { useAgentsUiStore } from "../store/use-agents-ui-store";
 
 export function DeleteConversationDialog() {
@@ -31,7 +31,7 @@ export function DeleteConversationDialog() {
     deleteConversation.mutate(targetId, {
       onSuccess: () => {
         if (selectedConversationId === targetId) {
-          navigate(AGENTS_PATH);
+          navigate(CHAT_PATH);
         }
         clearDelete();
       },
