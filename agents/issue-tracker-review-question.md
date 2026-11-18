@@ -32,6 +32,37 @@ The prompt ends with:
 - `Anchored commit <sha> is not the current tip <tip>. Read the anchored code with git show. Explore the working tree for what has changed.` — present when the question's commit is not the reviewed tip
 - `Question:` followed by the question text
 
+## Reply
+
+The reviewer asks a follow-up in the thread for more.
+
+- Lead with the answer in the open text, including any fenced code that is
+  part of the answer.
+- When the code does not settle the question, say in the open text what you
+  found and what stays open.
+- A claim is a statement in the answer that a source supports.
+- Each source appears only in the References block.
+- When the reply has one or more sources, end the comment with the lines
+  under **Posted body**.
+- When the reply has no sources, the comment is the open answer alone.
+- Write one Markdown bullet per claim, in the order the claims appear.
+- Each bullet is a locator and a short clause naming what that source
+  supports.
+- A path locator is inline code `path:start-end`.
+- That path is relative to Workspace.
+- A dependency claim's locator is the version the lockfile pins, written as
+  plain text.
+- The reader cannot open a path range or a pinned version from its locator.
+
+## Posted body
+
+<details>
+<summary>References</summary>
+
+- `path:start-end` short clause naming what that source supports
+
+</details>
+
 ## Procedure
 
 1. Run `issue view <reviewId>` for sources and `diffRange`.
@@ -48,13 +79,9 @@ The prompt ends with:
    An **Anchor** that names only a path and commit is the whole file: read
    `git show <sha>:<path>`. When the prompt includes the anchored-commit line, follow it.
 6. Read only what answering the question needs.
-7. Reply in the thread. Lead with the direct answer in one to three
-   sentences, then cite a source for each claim. A claim about a
-   dependency cites the version the lockfile pins. That is the whole
-   reply; the reviewer asks a follow-up in the thread for more.
-   When the code does not settle the question, say in those sentences
-   what you found and what stays open. When the reviewer writes
-   again, answer that reply the same way.
+7. Reply in the thread. The comment is the open answer from **Reply**, then
+   the lines under **Posted body** when that reply has sources. When the
+   reviewer writes again, answer that reply the same way.
 
    A prompt that says the previous conversation is gone includes the thread
    history. Answer its latest reply. The product marks that reply as a new
@@ -63,6 +90,8 @@ The prompt ends with:
    ```bash
    issue comment <reviewId> --reply-to <threadId> --role agent --name Researcher --body "<answer>"
    ```
+
+   `<answer>` is that comment.
 
 That reply is your only write: the working tree, branches, and tracker issues
 stay as they are.
