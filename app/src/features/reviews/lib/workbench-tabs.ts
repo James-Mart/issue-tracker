@@ -1,3 +1,4 @@
+import { AGENT_RUNS_SURFACE_LABEL } from "@/features/agents/lib/agent-runs-surface-label";
 import type { ReviewSubmission } from "@server/schemas";
 
 export type ReviewWorkbenchTab =
@@ -16,12 +17,16 @@ export const REVIEW_WORKBENCH_TABS: WorkbenchTabEntry[] = [
 ];
 
 const STANDARDS_TAB: WorkbenchTabEntry = { key: "standards", label: "Standards" };
-const AGENTS_TAB: WorkbenchTabEntry = { key: "agents", label: "Agents" };
+export const REVIEW_AGENTS_TAB_LABEL = AGENT_RUNS_SURFACE_LABEL;
+const AGENTS_TAB: WorkbenchTabEntry = {
+  key: "agents",
+  label: REVIEW_AGENTS_TAB_LABEL,
+};
 
 export const DEFAULT_REVIEW_WORKBENCH_TAB: ReviewWorkbenchTab = "conversation";
 
 /**
- * Standards joins once any submission carries an assessment. Agents is always
+ * Standards joins once any submission carries an assessment. Activity is always
  * last, including when Standards is absent.
  */
 export function reviewWorkbenchTabs(

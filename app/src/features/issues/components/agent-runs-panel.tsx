@@ -39,7 +39,10 @@ import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "../lib/issue-back";
-import { writeDiffThreadSearchParam } from "../lib/issue-detail-tabs";
+import {
+  AGENTS_DETAIL_TAB_LABEL,
+  writeDiffThreadSearchParam,
+} from "../lib/issue-detail-tabs";
 import { issueChannelPath, issuePath } from "../lib/links";
 
 /** Role recorded on a question-researcher conversation. */
@@ -447,7 +450,7 @@ export function AgentRunsPanel({
       <div data-slot="agent-runs-panel" data-testid="agent-runs-empty-state">
         <ShellState
           className="border-0 bg-transparent px-4 py-8 shadow-none"
-          eyebrow="Agents"
+          eyebrow={AGENTS_DETAIL_TAB_LABEL}
           title="No agent has run against this issue yet."
           detail={coordinatorLink}
         />

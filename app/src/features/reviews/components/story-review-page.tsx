@@ -38,7 +38,10 @@ import {
 import { isPullRequestOnlyReview, pullRequestHeadSha } from "../lib/pull-request-head";
 import { ALL_CHANGES_SCOPE } from "../lib/review-scope";
 import { reviewRunReturnFromState } from "../lib/review-run-search";
-import { reviewWorkbenchTabs } from "../lib/workbench-tabs";
+import {
+  REVIEW_AGENTS_TAB_LABEL,
+  reviewWorkbenchTabs,
+} from "../lib/workbench-tabs";
 import { ReviewAgentsTab } from "./review-agents-tab";
 import { ReviewTranscriptLinkProvider } from "./review-transcript-link";
 import { ReviewPhoneTranscript } from "./review-phone-transcript";
@@ -208,7 +211,9 @@ function StoryReviewWorkbench({
 
   const body = phoneTranscript ? (
     <ReviewPhoneTranscript
-      backLabel={tabs.find((tab) => tab.key === active)?.label ?? "Agents"}
+      backLabel={
+        tabs.find((tab) => tab.key === active)?.label ?? REVIEW_AGENTS_TAB_LABEL
+      }
       run={phoneRun}
       pending={agentRuns.isLoading}
       errorMessage={agentRuns.error ? agentRuns.error.message : null}
