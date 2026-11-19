@@ -643,6 +643,9 @@ function ThreadBody({
           {forkSeq !== undefined ? (
             <AssistantMetaRow
               at={segment.event.at}
+              markdown={
+                segment.event.type === "assistant" ? segment.event.text : ""
+              }
               onFork={() =>
                 forkConversation.mutate(
                   { id: conversationId, seq: forkSeq },
