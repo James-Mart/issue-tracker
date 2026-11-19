@@ -12,6 +12,10 @@ Absolute path for this file (Read this exact path):
 Plan prose states work context, outcomes it lands, and seams and contracts it
 builds or must honor. Out-of-scope lists and plan invariants are omitted.
 
+Plan prose describes the plan as it stands. A revision rewrites the affected
+text so the plan reads as if it was first written that way. Each choice is
+stated without the alternatives it replaced.
+
 ## Compression target
 
 A plan is a **lossy compression** of the design conversation behind it. It
