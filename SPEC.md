@@ -2519,7 +2519,8 @@ so cannot drift:
   already in force. A later runtime
   failure posts a new observation the same way. The validator returns
   `needs-human` only when it is stuck on a check
-  for something only a human can supply or observe. On `needs-human`,
+  for a **Request** item in `agents/issue-tracker-runtime-validator.md`
+  (supply only — not product behavior on the human's stack). On `needs-human`,
   story review posts the validator's request with `issue story
   request-human` and stops without a verdict, leaving `reviewedTasks`
   unchanged. The coordinator parks a Story at `review` `awaiting-human` and

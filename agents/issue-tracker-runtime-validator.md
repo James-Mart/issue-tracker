@@ -21,6 +21,8 @@ actually does.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
+**Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`.
+
 **Allowed writes:** `issue attach <storyId> <file>`. Do not run any other
 mutating `issue` command.
 
@@ -74,8 +76,9 @@ Complete **## Bootstrap** first.
    - A build, start, readiness, or redeploy phase that fails on the Story's
      code is a finding; carry its output tail as evidence and continue at
      step 4.
-3. **Exercise.** Run each check against the stack. A check you are stuck
-   on needs a human per ## Human handoff. For a Story that
+3. **Exercise.** Run each check on `AGENT_STACK_BASE_URL`. When a check needs
+   store state, apply playbook **May** on the stack first. When a check still
+   needs supply per ## Human handoff, stop on that check. For a Story that
    changes UI, **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ui-look.md`
    and follow it for the screens the Story changes; your reply, above the
@@ -99,10 +102,10 @@ evidence basenames. It names no change to make.
 
 ## Human handoff
 
-A check needs a human when you are stuck on it for something only a human
-can supply or observe: a Project secret whose key is missing from the
-summary `secrets:` line, another input, or an observation you cannot make
-on the stack. A check that needs a human is not a finding.
+Request a human only through **Request** below. A check that needs a human is
+not a finding.
+Human **Request** items supply secrets, inputs, or external checks. They do
+not establish Story outcomes; those come only from step 3 on the stack.
 
 **Latest reply.** In the step-1 comment log, the latest request is the last
 thread-root line whose author reads `story-review (human-request)`. The
@@ -112,7 +115,8 @@ body is the human's note. That reply answers each item of that request:
 - ``Secret `KEY`:`` — answered once `KEY` is on the summary `secrets:`
   line. The stack's phases receive it as the environment variable `KEY`.
 - `Input:` — answered by the value the note gives.
-- `Observation:` — answered by what the note reports; take it as the
+- `Observation:` — only when `verification` named an environment outside the
+  product under test; answered by what the note reports; take it as the
   observed behavior for that check. It describes the code the human saw:
   when `git log -1 --format=%cI HEAD` in the workspace is later than the
   reply's `[at]` time, the observation is unanswered.
@@ -126,9 +130,10 @@ exactly one of these prefixes:
 
 - ``Secret `KEY`:`` — the human sets the Project secret `KEY` (matching
   `^[A-Z_][A-Z0-9_]*$`); the rest of the line says what value.
-- `Input:` — any other input; the human gives it in the note.
-- `Observation:` — something the human does or looks at and reports in
-  the note.
+- `Input:` — non-secret supply the playbook assigns to the human; the human
+  gives it in the note.
+- `Observation:` — one such environment and what to check there; not product
+  behavior on the human's tracker.
 
 Write each item so the human can act on it without opening the Story.
 

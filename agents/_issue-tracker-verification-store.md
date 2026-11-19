@@ -8,10 +8,11 @@ Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-verification-store.md`
 
-When the verification server is started by `agent_stack_start`, it reads the
-live tracker store and refuses writes. The look role does not seed that store.
-If the state to capture is not already there, the look fails.
+Story outcomes are established on the stack `agent_stack_start` boots
+(`AGENT_STACK_BASE_URL`). The human's running tracker is a different process and
+is not that stack. A human report of product behavior is not evidence for a
+check on the Story branch.
 
-When the verification server is not `agent_stack_start`, it uses its checkout's
-store. The verifying agent seeds the fixture data the change needs, and that
-server does not write the live store.
+Seed store state with playbook **May** on `AGENT_STACK_BASE_URL`. `issue` in the
+agent shell hits the live store; the Story-scoped write there is `issue attach`.
+Fresh guest copy: `agent_stack_stop`, then `agent_stack_start`.
