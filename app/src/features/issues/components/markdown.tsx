@@ -8,8 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight } from "lucide-react";
+import { PatchDiff } from "@pierre/diffs/react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { APP_THEME } from "@/lib/theme/theme";
 import { READING_MEASURE_CLASS } from "@/components/page-shell";
 import {
   Dialog,
@@ -99,8 +101,8 @@ function mermaidFenceStillOpen(markdown: string, node: unknown): boolean {
   return !closer.test(lastLine);
 }
 
-/** Fence body for a `language-mermaid` block, including one remark left unclosed. */
-function mermaidSourceFromPre(children: ReactNode): string | null {
+/** Fence body for a `language-<lang>` block, including one remark left unclosed. */
+function fenceSourceFromPre(children: ReactNode, lang: string): string | null {
   for (const node of Children.toArray(children)) {
     if (!isValidElement<{ className?: unknown; children?: ReactNode }>(node)) {
       continue;
@@ -108,13 +110,60 @@ function mermaidSourceFromPre(children: ReactNode): string | null {
     const className = node.props.className;
     if (
       typeof className !== "string" ||
-      !className.split(/\s+/).includes("language-mermaid")
+      !className.split(/\s+/).includes(`language-${lang}`)
     ) {
       continue;
     }
     return nodeText(node.props.children).replace(/\n$/, "");
   }
   return null;
+}
+
+/**
+ * Unified patch for a `diff` fence. Fences without `---`/`+++` file lines or
+ * `@@` hunk headers get them synthesized around the whole body.
+ */
+function patchFromDiffFence(source: string): { patch: string; named: boolean } {
+  const lines = source.split("\n");
+  const at = lines.findIndex(
+    (l, i) => l.startsWith("--- ") && lines[i + 1]?.startsWith("+++ "),
+  );
+  const named = at !== -1;
+  const body = named ? [...lines.slice(0, at), ...lines.slice(at + 2)] : lines;
+  const header = named
+    ? [lines[at], lines[at + 1]]
+    : ["--- a/diff", "+++ b/diff"];
+  if (body.some((l) => l.startsWith("@@ -"))) {
+    return { patch: [...header, ...body].join("\n") + "\n", named };
+  }
+  const hunk = body.map((l) =>
+    l.startsWith("+") || l.startsWith("-") || l.startsWith(" ") ? l : ` ${l}`,
+  );
+  const oldCount = hunk.filter((l) => !l.startsWith("+")).length;
+  const newCount = hunk.filter((l) => !l.startsWith("-")).length;
+  return {
+    patch:
+      [...header, `@@ -1,${oldCount} +1,${newCount} @@`, ...hunk].join("\n") +
+      "\n",
+    named,
+  };
+}
+
+function DiffFence({ source }: { source: string }) {
+  const { patch, named } = patchFromDiffFence(source);
+  return (
+    <div className="my-3 overflow-hidden rounded-lg border border-border">
+      <PatchDiff
+        patch={patch}
+        options={{
+          disableFileHeader: !named,
+          diffStyle: "unified",
+          overflow: "wrap",
+          themeType: APP_THEME,
+        }}
+      />
+    </div>
+  );
 }
 
 function MarkdownPre({
@@ -132,12 +181,19 @@ function MarkdownPre({
   markdown?: string;
 }) {
   if (renderMermaid) {
-    const source = mermaidSourceFromPre(children);
+    const source = fenceSourceFromPre(children, "mermaid");
     const holdOpen =
       mermaidStreaming &&
       source !== null &&
       mermaidFenceStillOpen(markdown, node);
     if (source !== null && !holdOpen) return <MermaidDiagram source={source} />;
+  }
+  const diffSource = fenceSourceFromPre(children, "diff");
+  if (
+    diffSource !== null &&
+    !(mermaidStreaming && mermaidFenceStillOpen(markdown, node))
+  ) {
+    return <DiffFence source={diffSource} />;
   }
   return (
     <pre className={cn("issue-md-pre", className)} {...props}>
