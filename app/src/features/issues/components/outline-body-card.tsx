@@ -119,7 +119,7 @@ function OutlineReadBody({
   return (
     <>
       <OutlineMarkdown body={body} />
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex">
         <CopyTextButton
           text={body}
           label="Copy Markdown"
