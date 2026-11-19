@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOutlineBodyQuery, useOutlineDiffQuery } from "../api/queries";
+import { CopyTextButton } from "./copy-text-button";
 import { Markdown } from "./markdown";
 
 function versionChoices(latest: number): number[] {
@@ -102,15 +103,32 @@ function OutlineReadBody({
   latestBody: string;
 }) {
   const query = useOutlineBodyQuery(id, version, version !== latest);
-  if (version === latest) return <OutlineMarkdown body={latestBody} />;
-  const placeholder = outlineQueryPlaceholder(
-    query,
-    "Loading version…",
-    "Check the version, then reload.",
-  );
+  const placeholder =
+    version === latest
+      ? null
+      : outlineQueryPlaceholder(
+          query,
+          "Loading version…",
+          "Check the version, then reload.",
+        );
   if (placeholder) return placeholder;
-  const data = outlineQueryData(query.data, "Loading version…");
-  return <OutlineMarkdown body={data.body} />;
+  const body =
+    version === latest
+      ? latestBody
+      : outlineQueryData(query.data, "Loading version…").body;
+  return (
+    <>
+      <OutlineMarkdown body={body} />
+      <div className="mt-4 flex justify-end">
+        <CopyTextButton
+          text={body}
+          label="Copy Markdown"
+          testId="outline-copy-markdown"
+          className="text-muted-foreground"
+        />
+      </div>
+    </>
+  );
 }
 
 function OutlineVersionDiff({
