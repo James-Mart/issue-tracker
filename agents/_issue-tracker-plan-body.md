@@ -72,8 +72,8 @@ against, as concrete shape (names, fields, behavior).
 - **Names and paths.** Prose names no file paths. A name internal to a module
   appears only when the shape or a critical contract needs it.
 - **Seams.** A Task that introduces or wires an interface gives an example
-  function shape and field names. The implementor may deviate when
-  implementation forces it.
+  function shape and field names, introduced with "e.g.:". The implementor
+  may deviate when implementation forces it.
 - **One answer on important choices.** Every choice about shape, seams,
   dependencies, or contracts has one definitive answer. Detail deliberately
   left to implementation is not an open choice.
