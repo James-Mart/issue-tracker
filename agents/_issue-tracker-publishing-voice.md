@@ -17,4 +17,8 @@ and follow **Describe the work**, **Compression target**, and **Plan prose**.
 - **Area headings.** Each `##` heading is the name the reader already uses
   for that area, not a procedural task title. Prefer the section and area
   names already in the material you write from over invented labels.
-- **Tables.** A table appears only when behavior is a matrix.
+- **Tables.** Consider a table when several items share the same attributes.
+- **Skimmability.** Long areas read better broken up. Useful tools: a
+  one-line summary under the heading, `###` subsections per concern, lists
+  for parallel items, bold for a key rule, and a collapsed `<details>` block
+  for implementation detail most readers can skip.
