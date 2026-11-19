@@ -61,7 +61,7 @@ describe("ChannelTranscriptPanel", () => {
       {
         id: "archived",
         title: "Old",
-        model: "composer-2.5-fast",
+        model: "composer-2.5",
         createdAt: "2026-08-03T00:00:00.000Z",
         updatedAt: "2026-08-03T00:00:00.000Z",
         archived: true,
@@ -71,7 +71,7 @@ describe("ChannelTranscriptPanel", () => {
       {
         id: "live",
         title: "Live",
-        model: "composer-2.5-fast",
+        model: "composer-2.5",
         createdAt: "2026-08-02T00:00:00.000Z",
         updatedAt: "2026-08-02T00:00:00.000Z",
         archived: false,

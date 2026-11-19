@@ -145,7 +145,10 @@ describe("createAgent", () => {
     expect(options.local?.customTools).toBe(SAMPLE_CUSTOM_TOOLS);
     expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
-    expect(options.model).toEqual({ id: "composer-2.5" });
+    expect(options.model).toEqual({
+      id: "composer-2.5",
+      params: [{ id: "fast", value: "true" }],
+    });
     expect(options.agentId).toBe("resume-me");
     expect(options.tools).toEqual(["read", "mcp"]);
     expect(options.disallowedTools).toBeUndefined();

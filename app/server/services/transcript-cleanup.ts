@@ -12,7 +12,7 @@ import {
 import { assistantMessageText } from "./assistant-message-text.js";
 import { parseModelKey } from "./model-selection.js";
 
-export const TRANSCRIPT_CLEANUP_MODEL = parseModelKey("composer-2.5-fast");
+export const TRANSCRIPT_CLEANUP_MODEL = parseModelKey("composer-2.5");
 export const TRANSCRIPT_CLEANUP_TIMEOUT_MS = 5_000;
 
 /** Cleanup is not a role spawn, so it skips the capability manifest. */

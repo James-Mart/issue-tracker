@@ -59,7 +59,7 @@ vi.mock("../api/mutations", () => ({
 vi.mock("../api/queries", () => ({
   useAgentModelsQuery: () => ({
     data: {
-      models: [{ id: "composer-2.5-fast", displayName: "Composer" }],
+      models: [{ id: "composer-2.5", displayName: "Composer" }],
     },
     isLoading: false,
   }),
@@ -82,7 +82,7 @@ function mountComposer(): { container: HTMLDivElement; root: Root } {
     root.render(
       <Composer
         conversationId="conv-1"
-        model="composer-2.5-fast"
+        model="composer-2.5"
         runActive={false}
       />,
     );

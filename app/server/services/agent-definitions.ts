@@ -3,6 +3,7 @@ import { join } from "path";
 import type { AgentDefinition } from "@cursor/sdk";
 import { parse as parseYaml } from "yaml";
 import { pluginDir } from "../config.js";
+import { parseModelKey, toModelSelection } from "./model-selection.js";
 
 export interface AgentFrontmatter {
   name?: unknown;
@@ -54,11 +55,8 @@ function toAgentDefinition(
     frontmatter.model.length > 0 &&
     frontmatter.model !== "inherit"
   ) {
-    // The pin slug is the id this surface wants. Subagent definitions take
-    // compound slugs (`claude-opus-5-5-thinking-high`) and reject base catalog
-    // ids; `Agent.create` is the opposite, which is what
-    // `toModelSelection` exists for. Do not route this through it.
-    definition.model = { id: frontmatter.model };
+    // Same pin → selection mapping as delegate and channel sessions.
+    definition.model = toModelSelection(parseModelKey(frontmatter.model));
   }
 
   return definition;

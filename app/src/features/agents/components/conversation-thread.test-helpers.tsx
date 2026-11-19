@@ -43,7 +43,7 @@ function defaultRosterConversations(): RosterConversation[] {
     {
       id: "conv-1",
       title: "Test thread",
-      model: "composer-2.5-fast",
+      model: "composer-2.5",
       agentId: "agent-root-1",
     },
   ];

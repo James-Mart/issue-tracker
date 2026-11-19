@@ -24,8 +24,10 @@ export type ModelKey = string & { readonly [modelKeyBrand]: true };
  * for the model.
  */
 const MODEL_PINS: Record<string, ModelSelection> = {
-  "composer-2.5": { id: "composer-2.5" },
-  "composer-2.5-fast": { id: "composer-2.5-fast" },
+  "composer-2.5": {
+    id: "composer-2.5",
+    params: [{ id: "fast", value: "true" }],
+  },
   "cursor-grok-4.7": {
     id: "grok-4.7",
     params: [

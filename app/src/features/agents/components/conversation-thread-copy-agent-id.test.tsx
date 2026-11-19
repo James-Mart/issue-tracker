@@ -12,7 +12,7 @@ describe("ConversationThread copy root agent id", () => {
     setConversationDetailForTest({
       meta: {
         title: "Channel session",
-        model: "composer-2.5-fast",
+        model: "composer-2.5",
         agentId: "agent-channel-9",
       },
     });
