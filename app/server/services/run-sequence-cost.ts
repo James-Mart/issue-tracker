@@ -1,4 +1,7 @@
-import type { TranscriptEvent } from "../schemas.js";
+import type {
+  ConversationStreamEvent,
+  TranscriptEvent,
+} from "../schemas.js";
 
 type AttributableBeat = {
   kind: "spawn" | "return" | "human-turn";
@@ -22,7 +25,9 @@ function compareOrder(
   return a.at.localeCompare(b.at);
 }
 
-export function settledRunIds(transcript: readonly TranscriptEvent[]): Set<string> {
+export function settledRunIds(
+  transcript: readonly (TranscriptEvent | ConversationStreamEvent)[],
+): Set<string> {
   const settled = new Set<string>();
   for (const event of transcript) {
     if (event.type === "run_usage") settled.add(event.runId);
