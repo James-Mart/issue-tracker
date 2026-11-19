@@ -551,6 +551,10 @@ export const epicSchema = z.object({
 
 const stakeholderField = z.string().optional();
 
+// `auto` lets the code-gate verdict decide whether the root waits for a human start.
+export const executionGateSchema = z.union([z.boolean(), z.literal("auto")]);
+export type ExecutionGate = z.infer<typeof executionGateSchema>;
+
 // Project-level capture: no assignee, needs-attention, or work-status.
 // mergeBase is the optional branch the plan builds on.
 export const ideaSchema = z.object({
@@ -559,10 +563,11 @@ export const ideaSchema = z.object({
   partOf: nonEmpty,
   title: nonEmpty,
   archived: z.boolean().default(false),
-  outlineGate: z.boolean().optional(),
-  executionGate: z.boolean().optional(),
+  decompositionGate: z.boolean().default(false),
+  executionGate: executionGateSchema.default("auto"),
+  outOfBand: z.boolean().default(false),
   mergeBase: nonEmpty.optional(),
-  approvalPending: z.boolean().optional(),
+  mergePolicy: z.enum(MERGE_POLICIES).optional(),
   codeApprovalRequired: z.boolean().optional(),
   appendTo: z.string().optional(),
   stakeholder: stakeholderField,
@@ -710,9 +715,9 @@ export type CreateInput = Pick<IssueFields, "title"> &
       | "workspace"
       | "mergePolicy"
       | "stakeholder"
-      | "outlineGate"
+      | "decompositionGate"
       | "executionGate"
-      | "approvalPending"
+      | "outOfBand"
       | "codeApprovalRequired"
       | "sourceIdea"
     >
@@ -801,7 +806,6 @@ export const IDEA_STATUSES = [
   "planning",
   "outlined",
   "planned",
-  "awaiting-approval",
   "awaiting-direction",
 ] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
@@ -821,11 +825,7 @@ export function ideaHasPlanOutput(status: IdeaStatus | undefined): boolean {
 }
 
 export function ideaStatusNeedsAttention(status: IdeaStatus | undefined): boolean {
-  return (
-    status === "awaiting-approval" ||
-    status === "awaiting-direction" ||
-    ideaHasPlanOutput(status)
-  );
+  return status === "awaiting-direction" || ideaHasPlanOutput(status);
 }
 
 export interface DerivedWorktree {

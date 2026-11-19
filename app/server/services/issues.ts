@@ -26,21 +26,12 @@ import { mergeImplementingOverlay } from "./implementing-status.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
 import { mergeIssue } from "./merge.js";
+import { branchNameRenameError } from "./merge-base.js";
 import {
-  branchNameRenameError,
-  ensureMergeBaseStripped,
-} from "./merge-base.js";
-import {
-  ensureArchivedBackfilled,
   planArchivedCascade,
   type ArchivedCascadePatch,
 } from "./archived.js";
-import { ensureKindRenamed } from "./kind-rename.js";
-import { ensureSpecReviewRenamed } from "./story-review.js";
-import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
-import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
-import { ensureGithubCommentsMigrated } from "./github-comment-migration.js";
-import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
+import { runStoreMigrations } from "./store-migrations.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { recordOutlineBody } from "./outline-body.js";
@@ -61,19 +52,14 @@ import {
 import { uniqueSlug } from "./slug.js";
 import { ancestorChain } from "./subtree.js";
 import {
-  EXECUTION_GATE_STAKEHOLDER_ERROR,
   validateAppendToPatch,
-  validateExecutionGatePatch,
   validateNonClearablePatch,
   validateSourceIdeaPatch,
   validateSystemWrittenPatch,
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
 import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
-import {
-  ensureWorkQueuePositionsBackfilled,
-  planWorkQueueStamps,
-} from "./work-queue.js";
+import { planWorkQueueStamps } from "./work-queue.js";
 import {
   assertMergePolicyLattice,
   validateMergePolicyPatch,
@@ -99,7 +85,6 @@ import {
   isStoryMergeFlip,
   mergeCascade,
   stampMergedAtOnStoryMergeFlip,
-  ensureMergedAtBackfilled,
 } from "./merge-consequences.js";
 import { assertStoreWritable, refusesStoreWrites } from "./store-read-only.js";
 import { replaceFileAtomically, withIssuesStoreLock } from "./issues-store-lock.js";
@@ -175,56 +160,9 @@ export function readAll(): {
   };
 }
 
-// One-time mergeBase strip. Safe to call from list/create/apply; no-ops
-// after the marker file exists.
-export function ensureMergeBasesMigrated(): void {
-  ensureMergeBaseStripped((story) => {
-    persist(story, serializeIssue(story));
-  });
-}
-
-// One-time archived migration. Safe to call from list/create/apply; no-ops
-// after the marker file exists.
-export function ensureArchivedMigrated(): void {
-  ensureArchivedBackfilled((issue) => {
-    persist(issue, serializeIssue(issue));
-  });
-}
-
-// One-time mergedAt backfill. Safe to call from list/create/apply; no-ops
-// after the marker file exists.
-export function ensureMergedAtMigrated(): void {
-  ensureMergedAtBackfilled((story) => {
-    persist(story, serializeIssue(story));
-  });
-}
-
-export function ensureSpecReviewMigrated(): void {
-  ensureSpecReviewRenamed();
-}
-
-export function ensureSourceIdeaMigration(): void {
-  ensureSourceIdeaMigrated();
-}
-
-/** Run every one-shot on-disk migration. Prefer this over calling each ensure* alone. */
+/** Run every one-shot on-disk migration. Safe to call from list/create/apply. */
 export function ensureMigrations(): void {
-  if (refusesStoreWrites()) return;
-  // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
-  ensureKindRenamed();
-  ensureMergeBasesMigrated();
-  ensureArchivedMigrated();
-  ensureMergedAtMigrated();
-  ensureSpecReviewMigrated();
-  ensureSourceIdeaMigration();
-  ensureReviewRecordsMigrated();
-  ensureReviewThreadsMigrated();
-  ensureGithubCommentsMigrated();
-  ensureWorkQueuePositionsMigrated();
-}
-
-function ensureWorkQueuePositionsMigrated(): void {
-  ensureWorkQueuePositionsBackfilled((issue) => {
+  runStoreMigrations((issue) => {
     persist(issue, serializeIssue(issue));
   });
 }
@@ -427,20 +365,17 @@ export function create(
         assertAllowedAgentModelSlug(input.stakeholder);
         draft.stakeholder = input.stakeholder;
       }
-      if (input.outlineGate === true) {
-        draft.outlineGate = true;
+      if (input.decompositionGate !== undefined) {
+        draft.decompositionGate = input.decompositionGate;
       }
-      if (input.executionGate === true) {
-        draft.executionGate = true;
+      if (input.executionGate !== undefined) {
+        draft.executionGate = input.executionGate;
       }
-      if (input.approvalPending === true) {
-        draft.approvalPending = true;
+      if (input.outOfBand !== undefined) {
+        draft.outOfBand = input.outOfBand;
       }
       if (input.codeApprovalRequired === true) {
         draft.codeApprovalRequired = true;
-      }
-      if (draft.executionGate === true && !draft.stakeholder) {
-        throw new IssueError("conflict", EXECUTION_GATE_STAKEHOLDER_ERROR);
       }
       if (options.mergeBase) draft.mergeBase = options.mergeBase;
       if (input.stakeholder) {
@@ -608,7 +543,7 @@ export function update(
 ): Promise<IssueDetail> {
   const refreshPrFacts = options?.refreshPrFacts !== false;
   return serialize(() => {
-    ensureWorkQueuePositionsMigrated();
+    ensureMigrations();
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
@@ -631,7 +566,6 @@ export function update(
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);
     validateAppendToPatch(existing, jsonPatch, issues);
-    validateExecutionGatePatch(existing, jsonPatch);
     if (
       existing.kind === "idea" &&
       "stakeholder" in jsonPatch &&

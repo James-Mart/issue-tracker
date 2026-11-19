@@ -246,9 +246,9 @@ When the grill is ready (no extra pre-outline confirm):
 1. When the grill settled a non-trunk merge base that Bootstrap step 7 did
    not print, run `issue idea set <ideaId> mergeBase <branch>`; the
    decomposer reads the merge base from the Idea.
-2. The execution gate is `on` when `issue idea get <ideaId> executionGate`
-   prints `true` or `issue idea get <ideaId> stakeholder` prints nothing;
-   otherwise it is `off`.
+2. Read `issue idea get <ideaId> executionGate`. `true` → the execution
+   gate is `on`; `false` → `off`; `auto` → `on` when
+   `issue idea get <ideaId> stakeholder` prints nothing, otherwise `off`.
 3. Start the outline decomposer session with the Decompose request. The
    API listens on port `PORT`, or `8061` when `PORT` is unset. The body is
    `{"executionGate":"<on|off>"}`. When the merge base is not trunk, the

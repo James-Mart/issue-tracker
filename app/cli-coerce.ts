@@ -1,6 +1,18 @@
+import type { ExecutionGate } from "./server/schemas.js";
+
 export function coerceBoolean(value: string, field: string): boolean {
   if (value !== "true" && value !== "false") {
     throw new Error(`invalid ${field} "${value}" (expected: true, false)`);
+  }
+  return value === "true";
+}
+
+export function coerceExecutionGate(value: string): ExecutionGate {
+  if (value === "auto") return "auto";
+  if (value !== "true" && value !== "false") {
+    throw new Error(
+      `invalid executionGate "${value}" (expected: auto, true, false)`,
+    );
   }
   return value === "true";
 }

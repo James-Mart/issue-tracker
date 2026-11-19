@@ -120,6 +120,9 @@ const idea = {
   partOf: "platform",
   order: 0,
   archived: false,
+  decompositionGate: false,
+  executionGate: "auto" as const,
+  outOfBand: false,
   createdAt: t0,
   updatedAt: t0,
   description: "",
@@ -212,7 +215,7 @@ describe("PlanningChannelEmptyState", () => {
     ) as HTMLInputElement;
     expect(mergeBase.value).toBe("main");
     expect(
-      container.querySelector('[data-testid="detail-outline-gate"]'),
+      container.querySelector('[data-testid="detail-decomposition-gate"]'),
     ).toBeTruthy();
 
     await act(async () => {

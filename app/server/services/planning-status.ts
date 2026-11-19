@@ -30,12 +30,10 @@ type IdeaPlanningArtifact = "outline" | "planRoot";
 function statusForIdea(
   conversationIds: string[] | undefined,
   artifact: IdeaPlanningArtifact | undefined,
-  approvalPending: boolean,
 ): IdeaStatus {
   if (conversationIds?.some((id) => isRunLive(id))) return "planning";
   if (artifact === "outline") return "outlined";
   if (artifact === "planRoot") return "planned";
-  if (approvalPending) return "awaiting-approval";
   if (conversationIds?.some((id) => conversationHasTranscript(id))) {
     return "awaiting-direction";
   }
@@ -54,11 +52,7 @@ export function planningStatusById(issues: Issue[]): Record<string, IdeaStatus> 
       : planned.has(issue.id)
         ? "planRoot"
         : undefined;
-    byId[issue.id] = statusForIdea(
-      sessionsByIdea.get(issue.id),
-      artifact,
-      issue.approvalPending === true,
-    );
+    byId[issue.id] = statusForIdea(sessionsByIdea.get(issue.id), artifact);
   }
   return byId;
 }

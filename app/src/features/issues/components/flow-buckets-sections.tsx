@@ -125,16 +125,6 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
   },
 ];
 
-function needsAttentionBucketRank(item: FlowItem): number {
-  if (
-    item.issue.kind === "idea" &&
-    item.state?.ideaStatus === "awaiting-approval"
-  ) {
-    return 0;
-  }
-  return 1;
-}
-
 /** Pull flagged rows into the virtual needs-attention bucket. */
 export function partitionCockpitBuckets(buckets: FlowBuckets): {
   needsAttention: FlowItem[];
@@ -149,7 +139,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
     }
     return rest;
   };
-  const partitioned = {
+  return {
     needsAttention,
     buckets: {
       planning: take(buckets.planning),
@@ -161,10 +151,6 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
       recentlyMerged: take(buckets.recentlyMerged),
     },
   };
-  partitioned.needsAttention.sort(
-    (a, b) => needsAttentionBucketRank(a) - needsAttentionBucketRank(b),
-  );
-  return partitioned;
 }
 
 function bucketItems(

@@ -59,6 +59,9 @@ const idea: Extract<IssueRecord, { kind: "idea" }> = {
   partOf: "platform",
   order: 0,
   archived: false,
+  decompositionGate: false,
+  executionGate: "auto",
+  outOfBand: false,
   createdAt: t0,
   updatedAt: t0,
 };

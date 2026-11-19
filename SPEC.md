@@ -303,8 +303,8 @@ These are computed by `derive()` and never written to disk (see
 - **Story status** — `not-started` / `in-progress` / `pr-open` / `merged`.
 - **Epic status** — `todo` / `in-progress` / `done` (rollup of its Stories).
 - **Idea status** — `captured` / `planning` / `outlined` / `planned` /
-  `awaiting-approval` / `awaiting-direction` (planning phase from sessions,
-  live runs, `approvalPending`, and stored `sourceIdea` / outline edges); also
+  `awaiting-direction` (planning phase from sessions, live runs, and stored
+  `sourceIdea` / outline edges); also
   `issue idea get … ideaStatus`. Tree chip `status=<value>`.
 - **planRoots** — derived reverse of `sourceIdea`: the ids of Epics, root
   project-level Stories, and Stories holding Tasks whose stored `sourceIdea`
@@ -758,7 +758,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | --- | --- |
 | project | `title`, `workspace`, `setupCommand`, `trunk`, `mergePolicy`, `maxImplementingRuns`, `autonomous`, `labels`, `supportingDocs`, `runtime`, `secrets`, `description` |
 | epic | `title`, `needsAttention`, `archived`, `partOf`, `blockedBy`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `retro`, `labels`, `description` |
-| idea | `title`, `archived`, `outlineGate`, `executionGate`, `mergeBase`, `approvalPending`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
+| idea | `title`, `archived`, `decompositionGate`, `executionGate`, `outOfBand`, `mergeBase`, `mergePolicy`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `sourceOutline`, `description` |
 | outline | `title`, `archived`, `partOf`, `sourceIdea`, `description` |
@@ -1394,10 +1394,11 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `outlineGate` | boolean? | absent until set; when true, the human must answer the auto-plan outline gate (see [Roles](#roles)); written by the human; legacy stores may still hold `approvePlan` until `migrate:outline-gate` rewrites them |
-| `executionGate` | boolean? | absent until set; when true, work roots planned from this Idea are not started automatically; written by the human; requires a `stakeholder` |
+| `decompositionGate` | boolean | defaults `false`; when true, the human answers the auto-plan outline gate; when false, the gate rubric decides who answers it (see [Roles](#roles)); written by the human; no `stakeholder` required |
+| `executionGate` | `"auto"` \| boolean | defaults `"auto"`; `true` holds planned work roots for a human start; `false` starts them; `"auto"` starts them on an auto-plan Idea and holds them on a human-driven grill; written by the human; no `stakeholder` required |
+| `outOfBand` | boolean | defaults `false`; when true, the outline is implemented outside the tracker; written by the human |
 | `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset; `apply` preserves |
-| `approvalPending` | boolean? | absent until set; when true, an outline gate is posted and waiting on the human; written by the stakeholder agent; `apply` preserves it alongside `outlineGate` |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | the merge policy chosen in the grill, stored when the merge base is not trunk; `--clear` / JSON `null` clears it; `apply` preserves |
 | `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
@@ -2402,10 +2403,11 @@ preserves everything else from the existing same-kind issue.
 | `secrets` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); stored outside the repo; `apply` never touches |
 | `labels` (Project catalog) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `labels` (Epic / Idea / Story assignments) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
-| `outlineGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
+| `decompositionGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `executionGate` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
+| `outOfBand` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `mergeBase` (Idea) | stored branch; kind [`set`](#kind-scoped-get--set), the planning tab (written when a session launches from that tab); `apply` preserves |
-| `approvalPending` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
+| `mergePolicy` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `--clear` / JSON `null` clears it; `apply` preserves |
 | `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `appendTo` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
@@ -2584,12 +2586,11 @@ so cannot drift:
   run is live; `outlined` when an outline in the same Project stores
   `sourceIdea` pointing at the Idea; `planned` when an Epic or root
   project-level Story in the same Project stores `sourceIdea` pointing at the
-  Idea and no such outline exists; `awaiting-approval` when
-  `approvalPending` is true; `awaiting-direction` when a session ran and stopped
-  without a plan root and no gate is pending; `captured` when no planning
-  session has run. Computed by `planningStatusById()` (I/O over planning
-  sessions, live-run markers, and each Idea's stored `approvalPending`) and
-  merged into `derived` by `list()` — not by the pure `derive()` pass.
+  Idea and no such outline exists; `awaiting-direction` when a session ran and
+  stopped without a plan output; `captured` when no planning session has run.
+  Computed by `planningStatusById()` (I/O over planning sessions and live-run
+  markers) and merged into `derived` by `list()` — not by the pure `derive()`
+  pass.
 - **Idea `planRoots`** — the ids of Epics, root project-level Stories, and
   Stories holding Tasks whose stored `sourceIdea` equals the Idea's id, sorted
   by ascending `order` (deduplicated by Story id); `[]` when none. Computed by

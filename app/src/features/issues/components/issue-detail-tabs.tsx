@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { ConversationChannel, IdeaStatus, IssueDetail, IssueKind } from "@server/schemas";
+import type { ConversationChannel, IssueDetail, IssueKind } from "@server/schemas";
 import { RosterActiveRunIndicator } from "@/features/agents/components/conversation-list-item";
 import { TabButton } from "@/components/ui/tab-button";
 import { TabCountPill } from "@/components/ui/tab-count-pill";
@@ -19,7 +19,6 @@ import {
   AGENTS_DETAIL_TAB,
   DIFF_DETAIL_TAB,
   mobileChannelChromeForTab,
-  resolveChannelTabIndicator,
   resolveIssueDetailTab,
   writeIssueDetailTabParam,
   type IssueDetailTab,
@@ -79,8 +78,6 @@ export function IssueDetailTabs({
         overlay,
       )
     : list?.derived;
-  const ideaStatus =
-    issue.kind === "idea" ? derived?.[issue.id]?.ideaStatus : undefined;
   const active = resolveIssueDetailTab(searchParams.get("tab"), tabs);
   const isMobile = useIsMobile();
   const mobileChannelChrome = mobileChannelChromeForTab(isMobile, active, tabs);
@@ -151,7 +148,6 @@ export function IssueDetailTabs({
                 key={tab.key}
                 issue={issue}
                 channel={tab.channel}
-                ideaStatus={ideaStatus}
                 selected={active === tab.key}
                 onClick={() => setActive(tab.key)}
               >
@@ -269,25 +265,17 @@ function tabPanelVisibility(selected: boolean): Record<string, unknown> {
 function ChannelTabButton({
   issue,
   channel,
-  ideaStatus,
   selected,
   onClick,
   children,
 }: {
   issue: IssueDetail;
   channel: ConversationChannel;
-  ideaStatus: IdeaStatus | undefined;
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
-  const sessionIndicator = useChannelTabIndicator(issue.id, channel);
-  const indicator = resolveChannelTabIndicator(
-    issue,
-    channel,
-    ideaStatus,
-    sessionIndicator,
-  );
+  const indicator = useChannelTabIndicator(issue.id, channel);
   return (
     <IssueTabButton
       selected={selected}

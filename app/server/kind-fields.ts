@@ -50,6 +50,7 @@ export type FieldCoerce =
   | { type: "needsAttention" }
   | { type: "commits" }
   | { type: "agentModelSlug" }
+  | { type: "executionGate" }
   | { type: "clearOnly" }
   | { type: "intMin"; min: number };
 
@@ -95,10 +96,11 @@ export const EPIC_SET_FIELDS = {
 export const IDEA_SET_FIELDS = {
   title: { type: "string" },
   archived: { type: "boolean" },
-  outlineGate: { type: "boolean" },
-  executionGate: { type: "boolean" },
+  decompositionGate: { type: "boolean" },
+  executionGate: { type: "executionGate" },
+  outOfBand: { type: "boolean" },
   mergeBase: { type: "string" },
-  approvalPending: { type: "boolean" },
+  mergePolicy: { type: "enum", values: MERGE_POLICIES },
   codeApprovalRequired: { type: "boolean" },
   appendTo: { type: "string" },
   partOf: { type: "string" },
@@ -239,10 +241,11 @@ export const IDEA_GET_FIELDS = {
   title: STORED,
   partOf: STORED,
   archived: STORED,
-  outlineGate: STORED,
+  decompositionGate: STORED,
   executionGate: STORED,
+  outOfBand: STORED,
   mergeBase: STORED,
-  approvalPending: STORED,
+  mergePolicy: STORED,
   codeApprovalRequired: STORED,
   appendTo: STORED,
   stakeholder: STORED,

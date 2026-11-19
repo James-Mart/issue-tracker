@@ -374,19 +374,8 @@ export function createIssuesRouter(
     "/:id/channels/:channel/sessions",
     asyncRoute(async (req, res) => {
       const issueId = req.params.id;
-      const issue = readIssueOrThrow(issueId);
+      readIssueOrThrow(issueId);
       const channel = parseChannelParam(req.params.channel);
-      if (
-        channel === "planning" &&
-        issue.kind === "idea" &&
-        issue.outlineGate === true &&
-        !issue.stakeholder
-      ) {
-        throw new IssueError(
-          "conflict",
-          'outlineGate is set but this Idea has no stakeholder; outlineGate governs auto-plan only',
-        );
-      }
       const body = req.body as {
         model?: unknown;
         title?: unknown;

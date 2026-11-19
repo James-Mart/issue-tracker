@@ -145,7 +145,7 @@ function usePlanningStakeholder(issue: IdeaRecord) {
 
 function useIdeaGateToggle(
   issue: IdeaRecord,
-  field: "outlineGate" | "executionGate",
+  field: "decompositionGate" | "executionGate",
 ) {
   const stored = issue[field] === true;
   const [enabled, setEnabled] = useState(stored);
@@ -178,25 +178,25 @@ function useIdeaGateToggle(
 
 function gateControlId(
   issueId: string,
-  field: "outlineGate" | "executionGate",
+  field: "decompositionGate" | "executionGate",
 ): string {
-  return field === "outlineGate"
-    ? `outline-gate-${issueId}`
+  return field === "decompositionGate"
+    ? `decomposition-gate-${issueId}`
     : `execution-gate-${issueId}`;
 }
 
-function OutlineGateChip({
+function DecompositionGateChip({
   issue,
-  testId = "flow-row-outline-gate",
+  testId = "flow-row-decomposition-gate",
 }: {
   issue: IdeaRecord;
   testId?: string;
 }) {
-  const control = useIdeaGateToggle(issue, "outlineGate");
+  const control = useIdeaGateToggle(issue, "decompositionGate");
   return (
     <GateToggleButton
-      id={gateControlId(issue.id, "outlineGate")}
-      label="Outline gate"
+      id={gateControlId(issue.id, "decompositionGate")}
+      label="Decomposition gate"
       testId={testId}
       enabled={control.enabled}
       onToggle={control.onToggle}
@@ -234,7 +234,10 @@ function IdeaGateChips({
 }) {
   return (
     <>
-      <OutlineGateChip issue={issue} testId={`${testIdPrefix}-outline-gate`} />
+      <DecompositionGateChip
+        issue={issue}
+        testId={`${testIdPrefix}-decomposition-gate`}
+      />
       {issue.appendTo ? null : (
         <ExecutionGateChip
           issue={issue}
@@ -578,14 +581,14 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
-  const outlineGateControl = useIdeaGateToggle(issue, "outlineGate");
+  const decompositionGateControl = useIdeaGateToggle(issue, "decompositionGate");
   const mergeBaseControl = usePlanningMergeBase(issue);
   const planning = useAppendPlanningContext(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
     models,
-    outlineGateControl.enabled,
+    decompositionGateControl.enabled,
   );
   const append = planning.phase === "absent" ? undefined : planning;
   const ready = append?.phase === "ready" ? append : undefined;
@@ -712,12 +715,12 @@ export function PlanningChannelEmptyState({
             )}
             {stakeholder ? (
               <GateToggleButton
-                id={gateControlId(issue.id, "outlineGate")}
-                label="Outline gate"
-                testId="detail-outline-gate"
-                enabled={outlineGateControl.enabled}
-                onToggle={outlineGateControl.onToggle}
-                disabled={outlineGateControl.saving}
+                id={gateControlId(issue.id, "decompositionGate")}
+                label="Decomposition gate"
+                testId="detail-decomposition-gate"
+                enabled={decompositionGateControl.enabled}
+                onToggle={decompositionGateControl.onToggle}
+                disabled={decompositionGateControl.saving}
               />
             ) : null}
             {stakeholder && !append ? (

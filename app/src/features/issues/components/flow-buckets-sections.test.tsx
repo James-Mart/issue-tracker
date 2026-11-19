@@ -15,6 +15,9 @@ function idea(id: string): IssueRecord {
     createdAt: t0,
     updatedAt: t0,
     archived: false,
+    decompositionGate: false,
+    executionGate: "auto",
+    outOfBand: false,
   };
 }
 

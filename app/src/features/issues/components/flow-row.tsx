@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils/cn";
 import { AxisChips } from "./axis-chips";
 import { PlanningFlowRowGates } from "./planning-launch-control";
 import { isReadyToLandFromIndexes, leafTaskProgressCount } from "../lib/derived";
-import { projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
 import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
@@ -16,7 +15,6 @@ import {
   flowRowIsLive,
   isCapturedIdeaFlowItem,
 } from "../lib/flow";
-import { issueChannelPath } from "../lib/links";
 import type { QueueRowChrome } from "../lib/queue-reorder";
 import { formatTimeInQueue, type QueueStage } from "../lib/queue-view";
 import { issueRailNodeState } from "../lib/rail-state";
@@ -37,9 +35,7 @@ function flowRowStatusChips(
     }
   } else if (item.issue.kind === "idea") {
     const status = item.state?.ideaStatus;
-    if (status === "awaiting-approval") {
-      chips.push({ variant: "warn", label: "awaiting approval" });
-    } else if (status === "planning" || status === "awaiting-direction") {
+    if (status === "planning" || status === "awaiting-direction") {
       chips.push({ variant: "inProgress", label: "planning" });
     }
   }
@@ -53,34 +49,6 @@ function queueWait(
 ): string | undefined {
   if (item.issue.kind !== "epic" && item.issue.kind !== "story") return undefined;
   return item.issue.workQueuedAt;
-}
-
-function flowRowDrillInTo(
-  item: FlowItem,
-  indexes: TreeRowIndexes,
-  to: string | undefined,
-): string | undefined {
-  if (to == null) return undefined;
-  if (
-    item.issue.kind === "idea" &&
-    item.state?.ideaStatus === "awaiting-approval"
-  ) {
-    const projectId = projectIdOf(item.issue.id, indexes.byId);
-    if (projectId) {
-      return issueChannelPath(projectId, item.issue.id, "planning");
-    }
-  }
-  return to;
-}
-
-function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
-  if (
-    item.issue.kind === "idea" &&
-    item.state?.ideaStatus === "awaiting-approval"
-  ) {
-    return false;
-  }
-  return flowItemNeedsAttention(item);
 }
 
 export interface FlowRowProps {
@@ -137,9 +105,8 @@ export function FlowRow({
   );
   const count = leafTaskProgressCount(item.issue, indexes);
   const waitingSince = queueStage === "waiting" ? queueWait(item) : undefined;
-  const drillInTo = flowRowDrillInTo(item, indexes, to);
   const chips = flowRowStatusChips(item, indexes);
-  const attention = flowRowShowsAttentionTriangle(item);
+  const attention = flowItemNeedsAttention(item);
   const attentionReason = attention ? flowItemAttentionReason(item) : null;
   const blocked = Boolean(item.state?.blocked);
   const gates =
@@ -219,9 +186,9 @@ export function FlowRow({
               "border-b-[hsl(var(--rail-lit))]",
           )}
         >
-          {drillInTo != null ? (
+          {to != null ? (
             <Link
-              to={drillInTo}
+              to={to}
               state={drillInState}
               aria-label={
                 projectTitle
@@ -236,7 +203,7 @@ export function FlowRow({
               data-testid="cockpit-row-gates"
               className={cn(
                 "relative z-[1] inline-flex max-w-full shrink-0 flex-wrap items-center gap-1",
-                drillInTo != null && "pointer-events-auto",
+                to != null && "pointer-events-auto",
               )}
             >
               {gates}
@@ -245,7 +212,7 @@ export function FlowRow({
           <div
             className={cn(
               "relative z-[1] flex min-w-[calc(2.75rem+5ch+0.5rem)] max-w-full flex-1 items-start gap-2 shell:min-w-0",
-              drillInTo != null && "pointer-events-none",
+              to != null && "pointer-events-none",
             )}
           >
             {avatar != null ? (
@@ -255,7 +222,7 @@ export function FlowRow({
               data-testid="cockpit-row-action-slot"
               className={cn(
                 "cockpit-row-action-slot",
-                drillInTo != null && "pointer-events-auto",
+                to != null && "pointer-events-auto",
               )}
             >
               {actions}

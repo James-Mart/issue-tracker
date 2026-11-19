@@ -33,8 +33,8 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** `issue idea set <issueId> approvalPending` and
-`issue idea set <issueId> codeApprovalRequired` (**## Flow** step 3),
+**Allowed writes:** `issue idea set <issueId> codeApprovalRequired`
+(**## Flow** step 3),
 `issue comment <rootId> --role human` on the resulting root
 after a human Yes (**## Flow** step 3), plus finalize `attach` +
 `comment` — `issue idea attach` and `issue idea comment` on the archived
@@ -80,9 +80,9 @@ there is nothing to resume.
    step 3 (Idea → proceed; any other kind → refuse). Treat a refuse here as a
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
-6. **Outline-gate flag** — `issue idea get <issueId> outlineGate`. `true` → the
-   human answers the outline gate; empty output → the gate rubric decides
-   who answers it. Carry the value through the run; do not re-read it.
+6. **Decomposition-gate flag** — `issue idea get <issueId> decompositionGate`.
+   `true` → the human answers the outline gate; `false` → the gate rubric
+   decides who answers it. Carry the value through the run; do not re-read it.
 7. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult per that file using the step-1 summary output:
@@ -274,7 +274,7 @@ specifics and stop; otherwise proceed to Flow.
    planner and leaves the routing below unrun. Then route the gate by the
    first row that matches:
 
-   - Outline-gate flag `true` (**## Bootstrap** step 6) → the human's.
+   - Decomposition-gate flag `true` (**## Bootstrap** step 6) → the human's.
    - The outline clearly meets a clause under the gate rubric's
      `## Outline does not need approval when` → yours.
    - Otherwise → the human's.
@@ -288,8 +288,7 @@ specifics and stop; otherwise proceed to Flow.
    When the gate is yours, answer it from the stakeholder decision
    heuristics.
 
-   When the gate is the human's, run
-   `issue idea set <issueId> approvalPending true`, then end your turn
+   When the gate is the human's, end your turn
    with one message in this order — the planner's outline exactly as it
    was returned, a `---` rule, then a `## Stakeholder recommendation`
    heading over the answer you would have given.
@@ -297,12 +296,8 @@ specifics and stop; otherwise proceed to Flow.
    When the human replies, re-enter the same planner with its `resumeId`
    from step 2, relaying the human's answer: Yes, Not now, or Amend with
    the human's feedback. Amend comes back as the next outline version or
-   the revised draft; post it the same way as the first. Inside the turn that relays Yes or
-   Not now and before re-entering the planner, run
-   `issue idea set <issueId> approvalPending false`. The marker's
-   lifecycle across Amend rounds is fixed by
-   `issue:awaiting-approval-status`. After the planner returns on the Yes
-   path, comment when the relay-loop classification names an id: the target
+   the revised draft; post it the same way as the first. After the planner
+   returns on the Yes path, comment when the relay-loop classification names an id: the target
    Story id, or the resulting root id. The comment is
    `issue comment <id> --role human --body <text>`. The body records that a
    human approved the plan and names the Idea (`<issueId>`). This is your
@@ -313,9 +308,8 @@ specifics and stop; otherwise proceed to Flow.
    from the tracker once the planning conversation is archived.
 
    **Abandon** is the human saying to stop rather than answering the
-   gate. Run `issue idea set <issueId> approvalPending false`, leave the
-   planner un-resumed, write nothing to the tree, and end the run. The
-   Idea falls back to `awaiting-direction`.
+   gate. Leave the planner un-resumed, write nothing to the tree, and end
+   the run.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your
