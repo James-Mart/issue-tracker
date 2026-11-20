@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { FIELD_LABELS } from "@server/fields";
-import type { IssueDetail, IssueRecord } from "@server/schemas";
+import type { ConversationChannel, IssueDetail, IssueRecord } from "@server/schemas";
 import { taskHeadCommit } from "@server/services/commit-sha";
 import { Rail, RailNode } from "@/components/ui/rail";
 import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
@@ -50,9 +50,11 @@ function AppendedTasksRail({ tasks }: { tasks: TaskRecord[] }) {
 function IssueTitleLinkList({
   ids,
   byId,
+  channel,
 }: {
   ids: string[];
   byId: Map<string, IssueRecord>;
+  channel?: ConversationChannel;
 }) {
   return (
     <span className="flex flex-col gap-1">
@@ -63,6 +65,7 @@ function IssueTitleLinkList({
           <IssueLink
             key={id}
             id={id}
+            channel={channel}
             className="text-primary hover:underline"
           >
             {title}
@@ -93,7 +96,11 @@ export function IssueGeneratedIssuesField({ issue }: { issue: IdeaDetail }) {
       <MetaRow
         label={FIELD_LABELS.generatedOutline}
         value={
-          <IssueTitleLinkList ids={generatedOutlines} byId={byId} />
+          <IssueTitleLinkList
+            ids={generatedOutlines}
+            byId={byId}
+            channel="planning"
+          />
         }
       />
     );

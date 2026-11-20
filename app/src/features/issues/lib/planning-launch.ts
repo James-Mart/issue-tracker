@@ -52,16 +52,12 @@ function stakeholderDisplayName(
 export function planningLaunchCopy(
   stakeholder: string | undefined,
   models: readonly AgentModel[] = [],
-  decompositionGate = false,
 ): PlanningLaunchCopy {
   if (stakeholder) {
     const name = stakeholderDisplayName(stakeholder, models);
-    const detail = decompositionGate
-      ? `Start auto-plan with ${name} as stakeholder. The decomposition gate is on, so the run pauses for your answer on the outline before any work is created.`
-      : `Start auto-plan with ${name} as stakeholder. It answers the grill, and routes the outline to you when the Project's gate rubric does not exempt it.`;
     return {
       title: "No planning session.",
-      detail,
+      detail: `Start auto-plan with ${name} as stakeholder. It answers the grill.`,
       actionLabel: `Start auto-plan on ${name}`,
     };
   }

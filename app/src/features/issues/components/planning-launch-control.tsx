@@ -34,7 +34,12 @@ import { useAppendPlanningContext } from "../lib/use-append-planning-context";
 import { issuesById } from "../lib/build-tree";
 import { useIssuesQuery } from "../api/queries";
 import { AppendPlanningCallout } from "./append-planning-callout";
-import { IdeaPlanSettings } from "./idea-plan-settings";
+import { IdeaExecutionGateEffectLine } from "./idea-execution-gate-effect-line";
+import {
+  IdeaPlanSettings,
+  IdeaPlanSettingsControls,
+  useIdeaPlanSettings,
+} from "./idea-plan-settings";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -471,11 +476,8 @@ export function PlanningChannelEmptyState({
   const mergeBaseControl = usePlanningMergeBase(issue);
   const planning = useAppendPlanningContext(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
-  const copy = planningLaunchCopy(
-    stakeholder,
-    models,
-    issue.decompositionGate === true,
-  );
+  const planSettings = useIdeaPlanSettings(issue);
+  const copy = planningLaunchCopy(stakeholder, models);
   const append = planning.phase === "absent" ? undefined : planning;
   const ready = append?.phase === "ready" ? append : undefined;
   const research = ready
@@ -558,20 +560,8 @@ export function PlanningChannelEmptyState({
         </>
       }
       action={
-        <div
-          className={
-            append
-              ? "flex w-full max-w-md flex-col items-center gap-3"
-              : "flex flex-wrap items-center justify-center gap-2"
-          }
-        >
-          <div
-            className={
-              append
-                ? "flex flex-wrap items-center justify-center gap-2"
-                : "contents"
-            }
-          >
+        <div className="flex w-full max-w-md flex-col items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <StakeholderSelect
               id="planning-stakeholder"
               value={stakeholder}
@@ -599,7 +589,11 @@ export function PlanningChannelEmptyState({
                 onChange={mergeBaseControl.onChange}
               />
             )}
-            <IdeaPlanSettings issue={issue} testIdPrefix="detail" />
+            <IdeaPlanSettingsControls
+              issue={issue}
+              testIdPrefix="detail"
+              settings={planSettings}
+            />
             {append
               ? null
               : launchButton(
@@ -618,6 +612,10 @@ export function PlanningChannelEmptyState({
             </p>
           ) : null}
           {append ? launchButton(saving || planning.launchBlocked) : null}
+          <IdeaExecutionGateEffectLine
+            settings={planSettings}
+            className="w-full px-2"
+          />
         </div>
       }
     />
@@ -633,7 +631,7 @@ export function PlanningChannelEmptyState({
   );
 }
 
-/** Secondary header action once a planning session exists. */
+/** Gate row, execution effect, and New run once a planning session exists. */
 export function PlanningNewRunControl({
   issue,
   channel,
@@ -648,6 +646,7 @@ export function PlanningNewRunControl({
   const defaultModel = defaultConversationModel(models);
   const { stakeholder } = usePlanningStakeholder(issue);
   const planning = useAppendPlanningContext(issue);
+  const planSettings = useIdeaPlanSettings(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
 
   useEffect(() => {
@@ -657,8 +656,16 @@ export function PlanningNewRunControl({
   }, [defaultModel, selectedCatalogId]);
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
+    <div
+      className="flex min-w-0 flex-col items-stretch gap-2 sm:items-end"
+      data-testid="planning-idea-session-chrome"
+    >
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <IdeaPlanSettingsControls
+          issue={issue}
+          testIdPrefix="detail"
+          settings={planSettings}
+        />
         {!stakeholder ? (
           <PlanningSessionModelSelect
             value={selectedCatalogId}
@@ -678,6 +685,10 @@ export function PlanningNewRunControl({
           onStarted={onStarted}
         />
       </div>
+      <IdeaExecutionGateEffectLine
+        settings={planSettings}
+        className="sm:text-right"
+      />
       {planning.refusal ? (
         <p
           data-testid="planning-new-run-blocked"

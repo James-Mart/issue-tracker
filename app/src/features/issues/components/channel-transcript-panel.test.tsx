@@ -1,14 +1,44 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { describe, expect, it } from "vitest";
+import type { IssueRecord } from "@server/schemas";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { channelSessionListItem } from "../test/channel-session-list-item";
 import {
   idea,
+  issuesState,
   mountPanel,
   queryArgs,
   queryState,
 } from "./channel-transcript-panel.test-helpers";
+
+const t = "2026-08-01T00:00:00.000Z";
+
+const project: IssueRecord = {
+  kind: "project",
+  id: "platform",
+  title: "Platform",
+  trunk: "main",
+  mergePolicy: "manual",
+  maxImplementingRuns: 1,
+  order: 0,
+  createdAt: t,
+  updatedAt: t,
+};
+
+const concludedOutline: IssueRecord = {
+  kind: "outline",
+  id: "spec",
+  title: "Feature outline",
+  partOf: "platform",
+  bodyVersion: 1,
+  sourceIdea: "capture",
+  concludedAt: "2026-08-02T00:00:00.000Z",
+  archived: false,
+  order: 0,
+  createdAt: t,
+  updatedAt: t,
+};
 
 describe("ChannelTranscriptPanel", () => {
   it("keeps the waiting panel until the launch session appears, then shows that transcript", () => {
@@ -99,5 +129,39 @@ describe("ChannelTranscriptPanel", () => {
     );
     expect(thread?.getAttribute("data-conversation-id")).toBe("archived");
     expect(thread?.getAttribute("data-hide-composer")).toBe("true");
+  });
+
+  it("opens the concluded banner on the outline's planner sessions", () => {
+    issuesState.data = { issues: [project, concludedOutline] };
+    queryState.data = [
+      channelSessionListItem({
+        id: "planner",
+        archived: false,
+        createdAt: "2026-08-02T00:00:00.000Z",
+      }),
+    ];
+    const { container } = mountPanel({ ...idea, archived: true });
+
+    const banner = container.querySelector(
+      '[data-testid="planning-concluded-banner"]',
+    );
+    const link = banner?.querySelector("a");
+    expect(banner?.textContent).toContain("Planning concluded");
+    expect(banner?.textContent).toContain("Feature outline");
+    expect(link?.getAttribute("href")).toBe(
+      "/projects/platform/issues/spec?tab=planning",
+    );
+    expect(container.textContent).not.toContain("Archived session");
+    expect(
+      container.querySelector('[data-testid="planning-read-only"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="planning-new-run"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="conversation-thread"]')
+        ?.getAttribute("data-hide-composer"),
+    ).toBe("true");
   });
 });

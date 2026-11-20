@@ -3,7 +3,6 @@ import { outlinePlanningSessionTitle } from "../../src/features/issues/lib/outli
 import type {
   ConversationMeta,
   DelegationRecordWithEnd,
-  Issue,
   TranscriptEvent,
 } from "../schemas.js";
 import {
@@ -34,7 +33,7 @@ import {
   serialize,
   type BusyLookup,
 } from "./conversations.js";
-import { appendTargetOutlineId } from "./append-target.js";
+import { concludedOutlineId } from "./concluded-outline.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import { readAll, readOutlineOrThrow } from "./issues.js";
@@ -92,27 +91,6 @@ export function concludedPlannerHandoff(
       ? { forkOrigin: { conversationId: forkedFrom, seq: forkedAtSeq } }
       : {}),
   };
-}
-
-/**
- * The outline an archived Idea concluded onto. An Idea's own outline carries
- * `concludedAt`; an append Idea concluded when conclude recorded its verdict,
- * and its outline is the target Story's.
- */
-function concludedOutlineId(
-  issues: readonly Issue[],
-  idea: Extract<Issue, { kind: "idea" }>,
-): string | undefined {
-  if (idea.appendTo) {
-    if (idea.codeApprovalRequired === undefined) return undefined;
-    return appendTargetOutlineId(issues, idea.appendTo);
-  }
-  return issues.find(
-    (issue) =>
-      issue.kind === "outline" &&
-      issue.sourceIdea === idea.id &&
-      issue.concludedAt !== undefined,
-  )?.id;
 }
 
 /**

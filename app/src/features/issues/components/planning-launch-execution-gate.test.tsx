@@ -132,5 +132,15 @@ describe("Planning plan settings", () => {
     expect(
       container.querySelector('[data-testid="detail-execution-gate"]'),
     ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="idea-execution-gate-effect"]'),
+    ).toBeNull();
+  });
+
+  it("does not show execution-gate effect lines on the overview", () => {
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+    expect(
+      container.querySelector('[data-testid="idea-execution-gate-effect"]'),
+    ).toBeNull();
   });
 });

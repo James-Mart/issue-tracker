@@ -21,11 +21,15 @@ vi.mock("../hooks/use-issues-with-archived", () => ({
 vi.mock("./issue-link", () => ({
   IssueLink: ({
     id,
+    channel,
     children,
   }: {
     id: string;
+    channel?: string;
     children: React.ReactNode;
-  }) => <a href={`#${id}`}>{children}</a>,
+  }) => (
+    <a href={channel ? `#${id}?tab=${channel}` : `#${id}`}>{children}</a>
+  ),
 }));
 
 const t0 = "2026-07-01T00:00:00.000Z";
@@ -104,7 +108,9 @@ describe("IssueGeneratedIssuesField", () => {
     expect(container.textContent).not.toContain(FIELD_LABELS.generatedIssues);
     const links = container.querySelectorAll("a");
     expect(links[0]?.textContent).toBe("First pass");
+    expect(links[0]?.getAttribute("href")).toBe("#o-first?tab=planning");
     expect(links[1]?.textContent).toBe("Second pass");
+    expect(links[1]?.getAttribute("href")).toBe("#o-second?tab=planning");
   });
 
 });
