@@ -59,12 +59,7 @@ import {
   validateSystemWrittenPatch,
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
-import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
-import { planWorkQueueStamps } from "./work-queue.js";
-import {
-  assertMergePolicyLattice,
-  validateMergePolicyPatch,
-} from "./merge-policy.js";
+import { validateMergePolicyPatch } from "./merge-policy.js";
 import {
   guardRootMergeSettingsPatch,
   type RootMergeSettingsMode,
@@ -700,33 +695,6 @@ export function update(
     for (const sibling of mergeSiblingWrites) {
       writes.push({ issue: sibling });
     }
-    const codeGateMergePolicyWrites = planCodeGateMergePolicyLowering(
-      existing,
-      jsonPatch,
-      issues,
-    ).map((issue) => ({ ...issue, updatedAt: now }));
-    const issuesForQueue = issues.map((issue) => {
-      const lowered = codeGateMergePolicyWrites.find(
-        (root) => root.id === issue.id,
-      );
-      return lowered ?? issue;
-    });
-    const workQueueWrites = planWorkQueueStamps(
-      existing,
-      jsonPatch,
-      issuesForQueue,
-      now,
-    );
-    const companionWrites = new Map<string, Issue>();
-    for (const root of codeGateMergePolicyWrites) {
-      companionWrites.set(root.id, root);
-    }
-    for (const root of workQueueWrites) {
-      companionWrites.set(root.id, root);
-    }
-    for (const root of companionWrites.values()) {
-      writes.push({ issue: root });
-    }
     // Only `archived` changes on these reviews, which integrity does not
     // constrain, so they stay out of the scoped-check decision below.
     const reviewArchiveWrites = archiveReviewsOfClosingStories(
@@ -746,11 +714,7 @@ export function update(
       reviewArchiveWrites,
     );
 
-    if (
-      cascaded.length === 0 &&
-      mergeSiblingWrites.length === 0 &&
-      companionWrites.size === 0
-    ) {
+    if (cascaded.length === 0 && mergeSiblingWrites.length === 0) {
       // Single-node write: keep the historical scoped check so unrelated
       // pre-existing integrity problems do not block this update.
       assertWritable(parsed.issue, issues);
@@ -768,9 +732,6 @@ export function update(
           "validation",
           problems.map((p) => p.message).join("; "),
         );
-      }
-      if (codeGateMergePolicyWrites.length > 0) {
-        assertMergePolicyLattice([...prospective.values()]);
       }
     }
 

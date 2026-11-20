@@ -1,6 +1,5 @@
 import { MERGE_POLICY_RANK } from "../fields.js";
-import type { Issue, IssuePatch, MergePolicy } from "../schemas.js";
-import { derive } from "./derive.js";
+import type { Issue, MergePolicy } from "../schemas.js";
 import {
   effectiveMergePolicy,
   mergePolicyCeiling,
@@ -43,27 +42,20 @@ function violatesMergePolicyCeiling(
   );
 }
 
-/** Lower plan roots to manual when archiving an Idea with a code-approval verdict. */
+/**
+ * Lower a work root, and any descendant left above the new ceiling, to
+ * `manual` because its code needs approval. Nodes already at effective
+ * `manual` get no redundant stored override.
+ */
 export function planCodeGateMergePolicyLowering(
-  existing: Issue,
-  patch: IssuePatch,
+  rootId: string,
   issues: Issue[],
 ): Issue[] {
-  if (existing.kind !== "idea" || existing.archived) return [];
-  if (patch.archived !== true) return [];
-  if (existing.codeApprovalRequired !== true) return [];
-
-  const planRoots = derive(issues).byId[existing.id]?.planRoots ?? [];
-  if (planRoots.length === 0) return [];
-
   const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  const touchIds = new Set<string>();
-  for (const rootId of planRoots) {
-    touchIds.add(rootId);
-    for (const id of mergePolicyDescendantIds(rootId, issues)) {
-      touchIds.add(id);
-    }
-  }
+  const touchIds = new Set<string>([
+    rootId,
+    ...mergePolicyDescendantIds(rootId, issues),
+  ]);
 
   const patchesById = new Map<string, MergePolicyNode>();
   const prospective = (): Map<string, Issue> => {

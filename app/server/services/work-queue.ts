@@ -61,20 +61,16 @@ export function nextQueuePosition(
 
 /**
  * A blocker allows a dependent onto the queue when that blocker is already
- * in the queue (waiting, holding a slot, or joining in this same enqueue)
- * or its loop is finished (done, merged, or ready to land).
+ * in the queue (waiting or holding a slot) or its loop is finished (done,
+ * merged, or ready to land).
  */
-const NO_ROOTS_JOINING = new Set<string>();
-
 function blockerAllowsEnqueue(
   blockerId: string,
   byId: Map<string, Issue>,
   issues: Issue[],
   derived: ReturnType<typeof derive>,
   slotHolders: Set<string>,
-  queuedNow: Set<string>,
 ): boolean {
-  if (queuedNow.has(blockerId)) return true;
   const blocker = byId.get(blockerId);
   if (blocker?.kind !== "epic" && blocker?.kind !== "story") return false;
   if (blocker.workQueuedAt || blocker.workParkedAt || slotHolders.has(blocker.id)) {
@@ -86,7 +82,7 @@ function blockerAllowsEnqueue(
 /**
  * First `blockedBy` root that is neither in the queue (waiting or holding a
  * slot) nor finished (done, merged, or ready to land). Manual enqueue refuses
- * that root; idea-archive enqueue leaves it unstamped.
+ * that root; release leaves it unqueued.
  */
 export function firstBlockingEnqueueBlocker(
   root: WorkRoot,
@@ -97,16 +93,7 @@ export function firstBlockingEnqueueBlocker(
 ): { id: string; title: string } | undefined {
   const blockerIds = blockersOf(root);
   for (const blockerId of blockerIds) {
-    if (
-      blockerAllowsEnqueue(
-        blockerId,
-        byId,
-        issues,
-        derived,
-        slotHolders,
-        NO_ROOTS_JOINING,
-      )
-    ) {
+    if (blockerAllowsEnqueue(blockerId, byId, issues, derived, slotHolders)) {
       continue;
     }
     const blocker = byId.get(blockerId);
@@ -115,6 +102,65 @@ export function firstBlockingEnqueueBlocker(
         ? blocker.title
         : blockerId;
     return { id: blockerId, title };
+  }
+  return undefined;
+}
+
+export const ENQUEUE_ALREADY_QUEUED = "already-queued";
+export const ENQUEUE_HOLDS_SLOT = "holds-slot";
+
+type QueueRefusal = { reason: string; message: string };
+
+/**
+ * Why `root` cannot join its Project's queue now: archived, finished,
+ * already queued or parked, holding a slot, or behind a blocker that is
+ * neither queued nor finished. Undefined when it can join.
+ */
+export function queueRefusal(
+  root: WorkRoot,
+  issues: Issue[],
+  byId: Map<string, Issue>,
+): QueueRefusal | undefined {
+  if (root.archived) {
+    return { reason: "archived", message: `work root "${root.title}" is archived` };
+  }
+  const derived = derive(issues);
+  if (isWorkRootFinished(root, issues, derived.byId)) {
+    return { reason: "finished", message: `work root "${root.title}" is finished` };
+  }
+  if (root.workQueuedAt || root.workParkedAt) {
+    return {
+      reason: ENQUEUE_ALREADY_QUEUED,
+      message: `work root "${root.title}" is already queued`,
+    };
+  }
+  const projectId = projectContaining(root, byId);
+  if (!projectId) {
+    throw new IssueError("validation", `work root "${root.id}" has no project`);
+  }
+  const slotHolders = slotHoldingRootIds(projectId, {
+    issues,
+    derived: derived.byId,
+    byId,
+  });
+  if (slotHolders.has(root.id)) {
+    return {
+      reason: ENQUEUE_HOLDS_SLOT,
+      message: `work root "${root.title}" already holds an implementing slot`,
+    };
+  }
+  const blocker = firstBlockingEnqueueBlocker(
+    root,
+    issues,
+    derived,
+    byId,
+    slotHolders,
+  );
+  if (blocker) {
+    return {
+      reason: "blocked",
+      message: `Blocked by ${blocker.title}, so it must be queued after it`,
+    };
   }
   return undefined;
 }
@@ -136,123 +182,6 @@ export function withQueueStamp(
     workQueuePosition: nextQueuePosition(projectId, issues, byId),
     updatedAt: now,
   };
-}
-
-function enqueueOrder(
-  candidates: WorkRoot[],
-  allows: (blockerId: string, queuedNow: Set<string>) => boolean,
-): WorkRoot[] {
-  const queuedNow = new Set<string>();
-  const ordered: WorkRoot[] = [];
-  let pending = candidates;
-  while (pending.length > 0) {
-    const ready = pending.filter((root) =>
-      blockersOf(root).every((id) => allows(id, queuedNow)),
-    );
-    if (ready.length === 0) {
-      // A blocker outside the queue that has not finished holds these roots
-      // and their dependents out. They stay unchanged, with no needsAttention.
-      break;
-    }
-    for (const root of ready) {
-      queuedNow.add(root.id);
-      ordered.push(root);
-    }
-    const taken = new Set(ready.map((root) => root.id));
-    pending = pending.filter((root) => !taken.has(root.id));
-  }
-  return ordered;
-}
-
-function workRootOf(
-  planRootId: string,
-  byId: Map<string, Issue>,
-): WorkRoot | undefined {
-  const issue = byId.get(planRootId);
-  if (!issue) return undefined;
-  if (issue.kind === "epic") return issue;
-  if (issue.kind !== "story") return undefined;
-  const parent = byId.get(issue.partOf);
-  if (parent?.kind === "epic") return parent;
-  if (parent?.kind === "project") return issue;
-  return undefined;
-}
-
-/**
- * Stamp `workQueuedAt` and append `workQueuePosition` on each plan root's
- * work root when an auto-planned Idea archives. Append Ideas (`appendTo`)
- * never stamp. Roots already queued are left as they are. Roots are ordered
- * so each sits after its `blockedBy`
- * Epics. A root whose blocker is outside the queue and not finished is
- * left unchanged — not queued, and not marked needs-attention — and so is
- * every root that depends on it.
- */
-export function planWorkQueueStamps(
-  existing: Issue,
-  patch: IssuePatch,
-  issues: Issue[],
-  now: string,
-): Issue[] {
-  if (existing.kind !== "idea" || existing.archived) return [];
-  if (patch.archived !== true) return [];
-  if (!existing.stakeholder) return [];
-  if (existing.appendTo) return [];
-  if (existing.executionGate === true) return [];
-
-  const derived = derive(issues);
-  const planRoots = derived.byId[existing.id]?.planRoots ?? [];
-  if (planRoots.length === 0) return [];
-
-  const byId = new Map(issues.map((issue) => [issue.id, issue]));
-  const project = byId.get(existing.partOf);
-  const slotHolders =
-    project?.kind === "project"
-      ? slotHoldingRootIds(existing.partOf, {
-          issues,
-          derived: derived.byId,
-          byId,
-        })
-      : new Set<string>();
-
-  const seen = new Set<string>();
-  const candidates: WorkRoot[] = [];
-  for (const rootId of planRoots) {
-    const workRoot = workRootOf(rootId, byId);
-    if (
-      !workRoot ||
-      workRoot.workQueuedAt ||
-      workRoot.workParkedAt ||
-      seen.has(workRoot.id)
-    ) {
-      continue;
-    }
-    seen.add(workRoot.id);
-    candidates.push(workRoot);
-  }
-
-  const ordered = enqueueOrder(candidates, (blockerId, queuedNow) =>
-    blockerAllowsEnqueue(
-      blockerId,
-      byId,
-      issues,
-      derived,
-      slotHolders,
-      queuedNow,
-    ),
-  );
-
-  let position = nextQueuePosition(existing.partOf, issues, byId);
-  const stamped = new Map<string, Issue>();
-  for (const root of ordered) {
-    stamped.set(root.id, {
-      ...root,
-      workQueuedAt: now,
-      workQueuePosition: position,
-      updatedAt: now,
-    });
-    position += 1;
-  }
-  return [...stamped.values()];
 }
 
 export interface WorkQueuePositionBackfillResult {

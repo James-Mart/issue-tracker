@@ -46,7 +46,7 @@ function planNotFinalOf(
     const parent = byId.get(issue.partOf);
     if (parent?.kind !== "project") return false;
   }
-  return !idea.archived;
+  return !issue.releasedAt;
 }
 
 function stampOlderThanLatest(

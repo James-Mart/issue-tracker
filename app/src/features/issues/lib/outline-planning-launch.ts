@@ -12,15 +12,15 @@ import {
 export const OUTLINE_PLANNING_GROK_MODEL = "cursor-grok-4.7";
 export const OUTLINE_PLANNING_OPUS_MODEL = "claude-opus-5-5-thinking-high";
 
-/** Execution gate for one decomposer run. `off` queues the new root after polish. */
+/** Execution gate for one root. `on` waits for a human start; `off` queues the root at release. */
 export type OutlineExecutionGate = "on" | "off";
 
 /**
- * Gate a decomposer run is told, from the outline's stored settings.
- * `on` waits for a human start. `off` starts the root when decompose finishes.
- * `auto` follows `codeApprovalRequired`: required waits, otherwise start.
+ * Execution gate from the outline's stored settings, as release applies it
+ * and a decomposer run is told it. `auto` follows `codeApprovalRequired`:
+ * required waits, otherwise start.
  */
-export function decomposerExecutionGate(
+export function resolveExecutionGate(
   executionGate: "auto" | boolean | undefined,
   codeApprovalRequired: boolean | undefined,
 ): OutlineExecutionGate {

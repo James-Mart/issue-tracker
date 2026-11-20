@@ -51,6 +51,9 @@ export function validateSystemWrittenPatch(patch: IssuePatch): void {
   if (patch.concludedAt !== undefined) {
     throw new IssueError("validation", "concludedAt is system-written");
   }
+  if (patch.releasedAt !== undefined) {
+    throw new IssueError("validation", "releasedAt is system-written");
+  }
 }
 
 export function validateSourceIdeaPatch(

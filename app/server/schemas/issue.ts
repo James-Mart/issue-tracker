@@ -544,6 +544,8 @@ export const epicSchema = z.object({
   workQueuePosition: z.number().int().positive().optional(),
   workParkedAt: z.string().optional(),
   workResumeNote: z.string().optional(),
+  // System-written by `issue release`. Patches are refused.
+  releasedAt: nonEmpty.optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,
@@ -603,6 +605,8 @@ export const storySchema = z.object({
   workQueuePosition: z.number().int().positive().optional(),
   workParkedAt: z.string().optional(),
   workResumeNote: z.string().optional(),
+  // System-written by `issue release` on a project-level Story. Patches are refused.
+  releasedAt: nonEmpty.optional(),
   ...mutableCommon,
   ...orderField,
   ...timestamps,
@@ -898,7 +902,7 @@ export interface DerivedState {
    * live-run clause is applied by `list()`, not the pure `derive()` pass.
    */
   readyToDecompose?: boolean;
-  /** True when sourceIdea names an Idea present in the set and not archived. */
+  /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**
    * True when `sourceOutline` names a version older than that outline's latest

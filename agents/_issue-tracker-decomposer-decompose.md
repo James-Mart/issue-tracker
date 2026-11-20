@@ -9,7 +9,6 @@ Absolute path for this file (Read this exact path):
 
 ## Inputs (from invoking prompt)
 
-- **Execution gate** — `on` or `off`
 - **Merge policy** — optional; the merge policy for a root built on a
   merge-base branch
 
@@ -39,15 +38,4 @@ Absolute path for this file (Read this exact path):
 4. **Polish.** **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
    and follow it on the root.
-5. **Execution gate.**
-   - `on` — leave the root unqueued.
-   - `off` — when `issue get <rootId> workQueuedAt` prints nothing, queue the
-     root. The API listens on port `PORT`, or `8061` when `PORT` is unset:
-
-     ```bash
-     curl -sS --fail-with-body -X POST "http://127.0.0.1:${PORT:-8061}/api/issues/<rootId>/queue"
-     ```
-
-     A failed POST leaves the root unqueued.
-6. Your final message is the root id on its first line. When step 5's POST
-   failed, its response follows on the next lines.
+5. Your final message is the root id on its first line.

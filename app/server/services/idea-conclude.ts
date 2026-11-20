@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { decomposerExecutionGate } from "../../src/features/issues/lib/outline-planning-launch.js";
+import { resolveExecutionGate } from "../../src/features/issues/lib/outline-planning-launch.js";
 import { outlineChannelForRole } from "../../src/features/issues/lib/outline-session-role.js";
 import type { Issue } from "../schemas.js";
 import { formatZodError, parseIssue } from "../schemas.js";
@@ -14,6 +14,7 @@ import {
   serialize,
 } from "./issues.js";
 import { checkIntegrity } from "./integrity.js";
+import { withIdeaPlanSettings } from "./outline-plan-settings.js";
 import { startOutlinePlanningSession } from "./outline-planning-session.js";
 import { requireProjectWorkspace } from "./project-workspace.js";
 
@@ -126,7 +127,7 @@ export async function concludeIdea(
         outlineId: prepared.start.outlineId,
         role: "decomposer",
         version: prepared.start.version,
-        executionGate: decomposerExecutionGate(
+        executionGate: resolveExecutionGate(
           prepared.start.executionGate,
           prepared.start.codeApprovalRequired,
         ),
@@ -156,9 +157,11 @@ function concludeWrite(
     codeApprovalRequired,
     updatedAt: now,
   });
-  const outlineNext = parseStoredIssue(
-    copyPlanSettings(outline, idea, codeApprovalRequired, now),
-  );
+  const outlineNext = parseStoredIssue({
+    ...withIdeaPlanSettings(outline, idea, codeApprovalRequired),
+    concludedAt: now,
+    updatedAt: now,
+  });
   const start =
     idea.outOfBand || idea.decompositionGate
       ? undefined
@@ -171,27 +174,6 @@ function concludeWrite(
           mergePolicy: outlineNext.mergePolicy,
         };
   return { idea: ideaNext, outline: outlineNext, start };
-}
-
-function copyPlanSettings(
-  outline: OutlineIssue,
-  idea: IdeaIssue,
-  codeApprovalRequired: boolean,
-  now: string,
-): OutlineIssue {
-  const next: OutlineIssue = {
-    ...outline,
-    executionGate: idea.executionGate,
-    codeApprovalRequired,
-    outOfBand: idea.outOfBand,
-    concludedAt: now,
-    updatedAt: now,
-  };
-  if (idea.mergeBase === undefined) delete next.mergeBase;
-  else next.mergeBase = idea.mergeBase;
-  if (idea.mergePolicy === undefined) delete next.mergePolicy;
-  else next.mergePolicy = idea.mergePolicy;
-  return next;
 }
 
 function parseStoredIssue<T extends Issue>(issue: T): T {
