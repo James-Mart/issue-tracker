@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import type { Server } from "http";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -8,6 +8,7 @@ import {
   createFakeAgentSdk,
 } from "../services/agent-sdk.fake.js";
 import type { AgentSessions } from "../services/agent-sessions.js";
+import { skillPath } from "../../src/lib/plugin-paths.js";
 
 const AT = "2026-08-10T12:00:00.000Z";
 
@@ -54,7 +55,12 @@ beforeEach(async () => {
     kind: "outline",
     title: "Feature outline",
     partOf: "p",
-    bodyVersion: 1,
+    bodyVersion: 3,
+    executionGate: "auto",
+    codeApprovalRequired: false,
+    mergeBase: "main",
+    mergePolicy: "pull-request",
+    outOfBand: false,
     order: 0,
     archived: false,
     createdAt: AT,
@@ -116,5 +122,39 @@ describe("outline planning and decomposition channels", () => {
     });
     expect(sessions.getActiveRun(plannerId)).toBeUndefined();
     expect(sessions.getActiveRun(decomposerId)).toBeTruthy();
+  });
+
+  it("archives the current planner and starts a session from the brief", async () => {
+    const previousId = await startedId(
+      await post("/api/issues/spec/channels/planning/sessions", {
+        model: "composer-2.5",
+      }),
+    );
+    const res = await post("/api/issues/spec/planning/sessions", {
+      brief: "  Tighten the lock copy  ",
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; title: string; model: string };
+    expect(body).toMatchObject({
+      title: "Plan Feature outline",
+      model: "cursor-grok-4.7",
+    });
+
+    const { listConversations } = await import("../services/conversations.js");
+    expect(listConversations().find((meta) => meta.id === previousId)).toMatchObject({
+      archived: true,
+    });
+    const { transcriptPathOf } = await import(
+      "../services/conversation-transcript-seq.js"
+    );
+    const line = readFileSync(transcriptPathOf(body.id), "utf8").trim();
+    expect(JSON.parse(line).text).toBe(
+      "Start a new planning session on spec in the issue tracker. " +
+        `Read ${skillPath("issue-tracker-plan")} and follow it. ` +
+        "Outline: `spec`. Version: `3`. " +
+        "Execution gate: `auto`. Code approval required: `false`. " +
+        "Merge base: `main`. Merge policy: `pull-request`. Out of band: `false`.\n" +
+        "Brief:\nTighten the lock copy",
+    );
   });
 });

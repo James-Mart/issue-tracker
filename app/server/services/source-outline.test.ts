@@ -42,6 +42,9 @@ describe("sourceOutline", () => {
     expect(await kindGetValue("epic", "epic-a", "behind")).toBe("true");
     expect(await kindGetValue("story", "b2", "behind")).toBe("true");
     expect(await kindGetValue("task", "c1", "behind")).toBe("true");
+    expect(await kindGetValue("outline", "outline-a", "reconciliationNeeded")).toBe(
+      "true",
+    );
   });
 
   it("keeps the stamp when the plan is re-applied", async () => {

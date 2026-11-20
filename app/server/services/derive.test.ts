@@ -193,6 +193,28 @@ describe("derive - effective mergePolicy", () => {
   });
 });
 
+describe("derive - reconciliation needed", () => {
+  const stamp = (version: number) => ({ outline: "o", version });
+
+  it("ignores a merged root, a done epic, a nested story, and an archived root", () => {
+    const issues = [
+      project("p"),
+      outline("o", "p", 1, { bodyVersion: 3 }),
+      epic("done-epic", "p", 2, { sourceOutline: stamp(1) }),
+      branch("done-child", "done-epic", { merged: true, sourceOutline: stamp(1) }),
+      branch("merged-root", "p", { merged: true, sourceOutline: stamp(1) }, 3),
+      branch("archived-root", "p", { archived: true, sourceOutline: stamp(1) }, 4),
+      epic("open-epic", "p", 5, { sourceOutline: stamp(3) }),
+      branch("nested", "open-epic", { sourceOutline: stamp(1) }),
+    ];
+    const derived = derive(issues).byId;
+    expect(derived["done-epic"].behind).toBe(false);
+    expect(derived["archived-root"].behind).toBe(true);
+    expect(derived.nested.behind).toBe(true);
+    expect(derived.o.reconciliationNeeded).toBe(false);
+  });
+});
+
 describe("derive - idea generatedOutlines", () => {
   it("lists outlines in the same Project whose stored sourceIdea points at the Idea", () => {
     const issues = [

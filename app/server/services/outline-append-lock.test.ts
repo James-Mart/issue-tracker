@@ -81,5 +81,20 @@ describe("outline append lock", () => {
         appendPlanningIdle,
       ),
     ).rejects.toBeInstanceOf(IssueError);
+    const { startOutlinePlanningSession } = await import(
+      "./outline-planning-session.js"
+    );
+    await expect(
+      startOutlinePlanningSession(
+        { outlineId: "spec", role: "planner", brief: "Revise the lock" },
+        {
+          ...appendPlanningIdle,
+          getActiveRun: () => undefined,
+          sendPrompt: async () => {
+            throw new Error("planner should not start");
+          },
+        },
+      ),
+    ).rejects.toThrow(/new planning session is refused/);
   });
 });

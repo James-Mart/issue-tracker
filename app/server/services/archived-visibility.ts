@@ -13,10 +13,10 @@ export function isArchived(issue: Issue): boolean {
  * Structure, cockpit, and the default `issue tree` use `outlineIssues`.
  */
 export function visibleIssues<T extends Issue>(
-  issues: T[],
+  issues: readonly T[],
   showArchived: boolean,
 ): T[] {
-  if (showArchived) return issues;
+  if (showArchived) return issues as T[];
   return issues.filter((issue) => !isArchived(issue));
 }
 
