@@ -47,6 +47,7 @@ import {
   recordDelegation,
 } from "./delegation-index.js";
 import {
+  channelPredecessors,
   forgetConversationMeta,
   listIndexedConversationMetas,
   persistConversationMeta,
@@ -67,6 +68,7 @@ import { list, readIssueOrThrow, update } from "./issues.js";
 import { forkAppendPlanningSession } from "./append-planner-fork.js";
 import { refuseAppendPlanningCreate } from "./refuse-append-planning.js";
 import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
+import { refuseOutlineAppendLockCreate } from "./outline-append-lock.js";
 import { queueDeparturePatch } from "./work-queue.js";
 import { uniqueSlug } from "./slug.js";
 import { refuseIfNoFreeSlot } from "./work-slots.js";
@@ -378,18 +380,7 @@ export function archiveConversation(
   );
 }
 
-/** Non-archived sessions a new session on `issueId` + `channel` replaces. */
-export function channelPredecessors(
-  issueId: string,
-  channel: ConversationChannel,
-): ConversationMeta[] {
-  return listIndexedConversationMetas().filter(
-    (existing) =>
-      existing.issueId === issueId &&
-      existing.channel === channel &&
-      !existing.archived,
-  );
-}
+export { channelPredecessors };
 
 /**
  * Refuse creating a session while a predecessor on the same issue and channel
@@ -504,6 +495,7 @@ export async function createIssueChannelSession(
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
     refuseAppendPlanningCreate(issueId, input.channel);
+    refuseOutlineAppendLockCreate(issueId, input.channel, input.outlineRole);
     refuseArchivedIdeaPlanning(issueId, input.channel);
 
     for (const existing of channelPredecessors(issueId, input.channel)) {
@@ -513,7 +505,7 @@ export async function createIssueChannelSession(
     const meta =
       forkAppendPlanningSession(
         { issueId, channel: input.channel, projectId, title, initialPrompt },
-        { predecessors: channelPredecessors, persist: persistForkedConversation },
+        { persist: persistForkedConversation },
       ) ??
       persistNewConversation(
         {

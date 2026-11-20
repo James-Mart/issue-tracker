@@ -1,7 +1,7 @@
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { conversationsDir } from "../config.js";
-import type { ConversationMeta } from "../schemas.js";
+import type { ConversationChannel, ConversationMeta } from "../schemas.js";
 import { storedConversationMetas } from "./conversation-ids.js";
 
 /**
@@ -22,6 +22,19 @@ function index(): Map<string, ConversationMeta> {
 
 export function listIndexedConversationMetas(): ConversationMeta[] {
   return [...index().values()];
+}
+
+/** Non-archived sessions a new session on `issueId` + `channel` replaces. */
+export function channelPredecessors(
+  issueId: string,
+  channel: ConversationChannel,
+): ConversationMeta[] {
+  return listIndexedConversationMetas().filter(
+    (existing) =>
+      existing.issueId === issueId &&
+      existing.channel === channel &&
+      !existing.archived,
+  );
 }
 
 /** Write `meta.json` and keep the in-memory index on the same object. */

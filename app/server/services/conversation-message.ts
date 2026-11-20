@@ -1,5 +1,6 @@
 import type { AgentSessions, StartClaim } from "./agent-sessions.js";
 import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
+import { refuseOutlinePlannerLockPrompt } from "./outline-append-lock.js";
 import {
   deliverLivePrompt,
   readConversationMeta,
@@ -50,6 +51,11 @@ function refuseMessageOnArchivedIdea(conversationId: string): void {
   if (issueId && channel) refuseArchivedIdeaPlanning(issueId, channel);
 }
 
+function refusePlanningConversationMessage(conversationId: string): void {
+  refuseMessageOnArchivedIdea(conversationId);
+  refuseOutlinePlannerLockPrompt(conversationId);
+}
+
 /**
  * Deliver a user message the way `POST /api/conversations/:id/messages` does:
  * steer a live run, queue it when steer does not accept it, or start a turn
@@ -66,7 +72,7 @@ export async function postConversationMessage(
   const activeRun = sessions.getActiveRun(conversationId);
   if (activeRun) {
     assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_MESSAGE);
-    refuseMessageOnArchivedIdea(conversationId);
+    refusePlanningConversationMessage(conversationId);
     if (attachments.length > 0) {
       await setPendingMessage(conversationId, prompt, attachments);
       return { status: "pending" };
@@ -79,7 +85,7 @@ export async function postConversationMessage(
     };
   }
 
-  refuseMessageOnArchivedIdea(conversationId);
+  refusePlanningConversationMessage(conversationId);
   refuseTurnOnParkedRoot(conversationId);
   const result = await startIdleConversationTurn(conversationId, prompt, sessions, {
     attachments,

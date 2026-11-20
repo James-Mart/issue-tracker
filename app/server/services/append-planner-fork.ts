@@ -9,6 +9,7 @@ import {
 } from "./conversation-fork.js";
 import { lastTranscriptSeq } from "./conversation-transcript-seq.js";
 import { IssueError } from "./errors.js";
+import { activeOutlinePlanner } from "./outline-append-lock.js";
 import { readAll } from "./issues.js";
 
 type IdeaIssue = Extract<Issue, { kind: "idea" }>;
@@ -25,10 +26,6 @@ type PersistFork = (input: {
 }) => ConversationMeta;
 
 export type AppendPlanningForkDeps = {
-  predecessors: (
-    issueId: string,
-    channel: ConversationChannel,
-  ) => ConversationMeta[];
   persist: PersistFork;
 };
 
@@ -59,7 +56,7 @@ export function forkAppendPlanningSession(
   const { idea } = append;
   const outlineId = appendTargetOutlineId(issues, append.appendTo);
   if (!outlineId) return undefined;
-  const planner = activeOutlinePlanner(outlineId, deps.predecessors);
+  const planner = activeOutlinePlanner(outlineId);
   if (!planner) return undefined;
 
   const forkedAtSeq = forkTranscriptSeq(planner.id);
@@ -104,19 +101,6 @@ function appendIdea(
   const issue = issues.find((item) => item.id === issueId);
   if (issue?.kind !== "idea" || !issue.appendTo) return undefined;
   return { idea: issue, appendTo: issue.appendTo };
-}
-
-/** The outline's one live planning session, which is its planner. */
-function activeOutlinePlanner(
-  outlineId: string,
-  predecessors: AppendPlanningForkDeps["predecessors"],
-): ConversationMeta | undefined {
-  const [session] = predecessors(outlineId, "planning");
-  if (!session) return undefined;
-  if (session.outlineRole !== undefined && session.outlineRole !== "planner") {
-    return undefined;
-  }
-  return session;
 }
 
 function forkTranscriptSeq(conversationId: string): number {
