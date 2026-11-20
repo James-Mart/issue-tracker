@@ -1,5 +1,5 @@
 import { AGENT_RUNS_SURFACE_LABEL } from "@/features/agents/lib/agent-runs-surface-label";
-import { channelForIssue } from "@server/kind";
+import { channelForIssue, offersDecompositionChannel } from "@server/kind";
 import type { ConversationChannel, Issue, IssueKind } from "@server/schemas";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
@@ -55,9 +55,21 @@ export function diffTabForIssue(issue: Issue): boolean {
   return issue.kind === "task" || issue.kind === "story";
 }
 
+function appendChannelTab(
+  tabs: IssueDetailTab[],
+  channel: ConversationChannel,
+): void {
+  tabs.push({
+    key: channel,
+    label: ISSUE_DETAIL_TAB_LABELS[channel],
+    channel,
+  });
+}
+
 /**
- * Page-level tab set for issue detail: Overview always; optional channel,
- * Activity, and Diff. The project issue uses the home bar instead of this set.
+ * Page-level tab set for issue detail: Overview always; channel tabs,
+ * Activity, and Diff. An outline has Planning and Decomposition. The project
+ * issue uses the home bar instead of this set.
  */
 export function tabsForIssueDetail(
   issue: Issue,
@@ -69,13 +81,12 @@ export function tabsForIssueDetail(
       label: ISSUE_DETAIL_TAB_LABELS.overview,
     },
   ];
-  const channel = channelTabForIssue(issue, parentKind);
-  if (channel) {
-    tabs.push({
-      key: channel,
-      label: ISSUE_DETAIL_TAB_LABELS[channel],
-      channel,
-    });
+  if (offersDecompositionChannel(issue)) {
+    appendChannelTab(tabs, "planning");
+    appendChannelTab(tabs, "decomposition");
+  } else {
+    const channel = channelTabForIssue(issue, parentKind);
+    if (channel) appendChannelTab(tabs, channel);
   }
   if (agentsTabForIssue(issue, parentKind)) {
     tabs.push({
@@ -123,7 +134,28 @@ export function issueDetailTabTitleSuffix(
   return suffixForUnloadedTabKey(tabParam);
 }
 
-/** Parse `tab` query value against the eligible set; unknown/ineligible → overview. */
+/** True when the tabs are an outline's Planning and Decomposition pair. */
+export function isOutlinePlanningDecompositionTabSet(
+  tabs: readonly IssueDetailTab[],
+): boolean {
+  return (
+    tabs.some((tab) => tab.key === "planning") &&
+    tabs.some((tab) => tab.key === "decomposition")
+  );
+}
+
+/** Visible name for an outline channel tab. */
+export function issueDetailChannelLabel(
+  channel: "planning" | "decomposition",
+): "Planning" | "Decomposition" {
+  return ISSUE_DETAIL_TAB_LABELS[channel];
+}
+
+/**
+ * Parse `tab` against the eligible set. An outline tab set with no `tab`,
+ * or an ineligible one, opens Planning so a link to the outline page shows
+ * planner sessions. Every other missing or ineligible value opens Overview.
+ */
 export function resolveIssueDetailTab(
   value: string | null,
   tabs: readonly IssueDetailTab[],
@@ -131,6 +163,7 @@ export function resolveIssueDetailTab(
   if (value != null && tabs.some((tab) => tab.key === value)) {
     return value as IssueDetailTabKey;
   }
+  if (isOutlinePlanningDecompositionTabSet(tabs)) return "planning";
   return DEFAULT_ISSUE_DETAIL_TAB;
 }
 

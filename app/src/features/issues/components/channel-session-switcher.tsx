@@ -44,7 +44,6 @@ export function ChannelSessionSwitcher({
   selectedId,
   onSelectedIdChange,
   showSelect = true,
-  channelForSession,
   trailing,
   className,
 }: {
@@ -55,18 +54,13 @@ export function ChannelSessionSwitcher({
   onSelectedIdChange: (id: string) => void;
   /** Hide the session picker (e.g. when only one session remains). */
   showSelect?: boolean;
-  /** Storage channel for a row, when it is not this tab's channel. */
-  channelForSession?: (session: ChannelSessionListItem) => ConversationChannel;
   /** Extra controls aligned to the header row (e.g. New run). */
   trailing?: ReactNode;
   className?: string;
 }) {
   const ordered = orderChannelSessionsForSwitcher(sessions);
   const selected = sessions.find((session) => session.id === selectedId);
-  const deleteChannel = selected
-    ? (channelForSession?.(selected) ?? channel)
-    : channel;
-  const deleteSession = useDeleteChannelSession(issueId, deleteChannel);
+  const deleteSession = useDeleteChannelSession(issueId, channel);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const confirmDelete = () => {

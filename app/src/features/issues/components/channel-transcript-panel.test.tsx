@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { describe, expect, it } from "vitest";
-import type { IssueRecord } from "@server/schemas";
+import type { IssueDetail, IssueRecord } from "@server/schemas";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { channelSessionListItem } from "../test/channel-session-list-item";
 import {
@@ -24,6 +24,20 @@ const project: IssueRecord = {
   order: 0,
   createdAt: t,
   updatedAt: t,
+};
+
+const outline: Extract<IssueDetail, { kind: "outline" }> = {
+  kind: "outline",
+  id: "spec",
+  title: "Feature outline",
+  partOf: "platform",
+  bodyVersion: 3,
+  archived: false,
+  order: 0,
+  createdAt: t,
+  updatedAt: t,
+  description: "",
+  version: "1",
 };
 
 const concludedOutline: IssueRecord = {
@@ -163,5 +177,47 @@ describe("ChannelTranscriptPanel", () => {
         .querySelector('[data-testid="conversation-thread"]')
         ?.getAttribute("data-hide-composer"),
     ).toBe("true");
+  });
+
+  it("says the other channel is live once, above the composer, and links the run", () => {
+    queryState.byChannel = {
+      planning: [channelSessionListItem({ id: "planner", title: "Plan spec" })],
+      decomposition: [
+        channelSessionListItem({
+          id: "decomposer",
+          outlineRole: "decomposer",
+          title: "Decompose spec",
+          activeRun: true,
+        }),
+      ],
+    };
+    const { container } = mountPanel(outline, { projectId: "platform" });
+
+    const notes = container.querySelectorAll(
+      '[data-testid="outline-channel-busy"]',
+    );
+    expect(notes).toHaveLength(1);
+    const note = notes[0];
+    expect(note?.textContent).toContain(
+      "Composer paused while Decomposition run",
+    );
+    expect(note?.textContent).toContain("Decompose spec");
+    expect(note?.textContent).toContain("is live on this outline.");
+    expect(note?.querySelector("a")?.getAttribute("href")).toBe(
+      "/projects/platform/issues/spec?tab=decomposition",
+    );
+    const thread = container.querySelector(
+      '[data-testid="conversation-thread"]',
+    );
+    expect(thread?.contains(note!)).toBe(true);
+    expect(thread?.getAttribute("data-composer-disabled")).toBe("true");
+    expect(
+      (
+        container.querySelector(
+          '[data-testid="outline-new-planning-session"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(container.textContent).not.toContain("Sessions");
   });
 });

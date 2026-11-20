@@ -32,7 +32,7 @@ function forgetDraftSave(save: Promise<unknown>): void {
 
 /**
  * The outline's one pending draft. Typing stays on the draft until Update
- * publishes the next version and opens Planning.
+ * publishes the next version and opens Decomposition on that session.
  */
 export function OutlinePendingDraftCard({
   issue,
@@ -96,7 +96,7 @@ export function OutlinePendingDraftCard({
         update.mutate(undefined, {
           onSuccess: () => {
             setSearchParams(
-              (prev) => writeIssueDetailTabParam(prev, "planning"),
+              (prev) => writeIssueDetailTabParam(prev, "decomposition"),
               { replace: true },
             );
           },

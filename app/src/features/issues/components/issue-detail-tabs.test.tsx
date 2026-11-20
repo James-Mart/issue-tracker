@@ -49,8 +49,7 @@ function idea(): IssueDetail {
   };
 }
 
-function mountTabs(): HTMLDivElement {
-  const issue = idea();
+function mountTabs(issue: IssueDetail = idea()): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);

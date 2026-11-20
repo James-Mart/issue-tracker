@@ -18,9 +18,11 @@ import {
 import { cn } from "@/lib/utils/cn";
 import {
   defaultChannelSession,
-  outlinePlanningSessionList,
+  labelPlanningSessions,
+  type StartedChannelSession,
 } from "../api/channel-sessions";
-import { outlineChannelForRole } from "../lib/outline-session-role";
+import { issueDetailChannelLabel } from "../lib/issue-detail-tabs";
+import { otherOutlineChannel } from "../lib/outline-session-role";
 import { useChannelSessionsQuery } from "../api/queries";
 import {
   cockpitLaunchOverlayForIssue,
@@ -50,6 +52,8 @@ import {
   PlanningChannelEmptyState,
   PlanningNewRunControl,
 } from "./planning-launch-control";
+import { OutlineChannelBusyNote } from "./outline-channel-busy-note";
+import { OutlineNewPlanningSessionControl } from "./outline-new-planning-session";
 import {
   PlanningConcludedBanner,
   PlanningReadOnlyBadge,
@@ -66,14 +70,30 @@ function isPlanningIdea(
   return channel === "planning" && issue?.kind === "idea";
 }
 
-function isPlanningOutline(
+function outlineOnChannel(
   channel: ConversationChannel,
   issue: IssueDetail | undefined,
-): issue is OutlineDetail {
-  return channel === "planning" && issue?.kind === "outline";
+): { issue: OutlineDetail; channel: "planning" | "decomposition" } | undefined {
+  if (
+    issue?.kind !== "outline" ||
+    (channel !== "planning" && channel !== "decomposition")
+  ) {
+    return undefined;
+  }
+  return { issue, channel };
 }
 
-function OutlinePlanningChannelEmptyState({ label }: { label: string }) {
+function OutlinePlanningChannelEmptyState({
+  label,
+  outline,
+  blocked,
+  onStarted,
+}: {
+  label: string;
+  outline: OutlineDetail;
+  blocked: boolean;
+  onStarted: (session: StartedChannelSession) => void;
+}) {
   return (
     <div data-testid="outline-planning-empty">
       <ShellState
@@ -82,17 +102,21 @@ function OutlinePlanningChannelEmptyState({ label }: { label: string }) {
         title={OUTLINE_PLANNING_EMPTY_TITLE}
         detail={OUTLINE_PLANNING_EMPTY_DETAIL}
       />
+      <div className="px-4 pb-4">
+        <OutlineNewPlanningSessionControl
+          outline={outline}
+          disabled={blocked}
+          onStarted={onStarted}
+        />
+      </div>
     </div>
   );
 }
 
-type StartedSession = Pick<
-  ChannelSessionListItem,
-  "id" | "title" | "model"
->;
-
 /** Placeholder until the channel-sessions list refetch includes the new id. */
-function pendingChannelSession(started: StartedSession): ChannelSessionListItem {
+function pendingChannelSession(
+  started: StartedChannelSession,
+): ChannelSessionListItem {
   const now = new Date().toISOString();
   return {
     id: started.id,
@@ -160,7 +184,9 @@ export function ChannelTranscriptPanel({
   onBackToOverview?: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | undefined>();
-  const [pendingStart, setPendingStart] = useState<StartedSession | undefined>();
+  const [pendingStart, setPendingStart] = useState<
+    StartedChannelSession | undefined
+  >();
   const pending = useCockpitLaunchStore((s) => s.pending);
   const ack = useCockpitLaunchStore((s) => s.ack);
   const fault = useCockpitLaunchStore((s) => s.fault);
@@ -168,23 +194,26 @@ export function ChannelTranscriptPanel({
   const launchingThis = launchOverlaysChannel(issueId, channel, overlay);
   const pendingLaunch =
     launchingThis && pending?.issueId === issueId ? pending : null;
-  const planningOutline = isPlanningOutline(channel, issue) ? issue : undefined;
-  const combineOutlineChannels = planningOutline !== undefined;
+  const outlineView = outlineOnChannel(channel, issue);
+  const outlineChannel = outlineView?.channel;
+  const planningOutline =
+    outlineView && outlineView.channel === "planning"
+      ? outlineView.issue
+      : undefined;
+  const otherChannel = outlineView
+    ? otherOutlineChannel(outlineView.channel)
+    : undefined;
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel, {
     awaitingLaunchSession: Boolean(pendingLaunch && !pendingLaunch.resumeSession),
   });
-  const decompositionSessions = useChannelSessionsQuery(
+  // Channel is unused while the paired-channel query is disabled.
+  const otherSessions = useChannelSessionsQuery(
     issueId,
-    "decomposition",
-    { enabled: combineOutlineChannels },
+    otherChannel ?? "decomposition",
+    { enabled: otherChannel !== undefined },
   );
-  const listLoading =
-    (isLoading && !data) ||
-    (combineOutlineChannels &&
-      decompositionSessions.isLoading &&
-      !decompositionSessions.data);
-  const listError =
-    error ?? (combineOutlineChannels ? decompositionSessions.error : null);
+  const listLoading = isLoading && !data;
+  const listError = error;
   const parkedResume = useParkedRootResume(issueId, channel);
   const thisFault =
     fault?.issueId === issueId &&
@@ -207,9 +236,19 @@ export function ChannelTranscriptPanel({
     ? issue
     : undefined;
 
-  const sessions = combineOutlineChannels
-    ? outlinePlanningSessionList(data ?? [], decompositionSessions.data ?? [])
-    : (data ?? []);
+  const listed = data ?? [];
+  const sessions =
+    outlineChannel === "planning" ? labelPlanningSessions(listed) : listed;
+  const busyRun = otherSessions.data?.find((session) => session.activeRun);
+  const busyNote =
+    busyRun && otherChannel && projectId ? (
+      <OutlineChannelBusyNote
+        projectId={projectId}
+        issueId={issueId}
+        channel={otherChannel}
+        runTitle={busyRun.title}
+      />
+    ) : null;
   const launchFromList = pendingLaunch
     ? launchTranscriptSession(pendingLaunch, sessions)
     : undefined;
@@ -321,7 +360,7 @@ export function ChannelTranscriptPanel({
     pendingSession ??
     defaultSession;
 
-  const onSessionStarted = (session: StartedSession) => {
+  const onSessionStarted = (session: StartedChannelSession) => {
     setSelectedId(session.id);
     setPendingStart(session);
   };
@@ -372,7 +411,12 @@ export function ChannelTranscriptPanel({
         onStarted={onSessionStarted}
       />
     ) : planningOutline ? (
-      <OutlinePlanningChannelEmptyState label={label} />
+      <OutlinePlanningChannelEmptyState
+        label={label}
+        outline={planningOutline}
+        blocked={Boolean(busyRun)}
+        onStarted={onSessionStarted}
+      />
     ) : implementingWorkRoot && projectId ? (
       <ImplementingChannelEmptyState issue={implementingWorkRoot} />
     ) : (
@@ -387,6 +431,7 @@ export function ChannelTranscriptPanel({
       <>
         {launchFaultBanner}
         {emptyAction}
+        {busyNote}
       </>
     );
 
@@ -409,13 +454,15 @@ export function ChannelTranscriptPanel({
   }
 
   const showSessionSelect = sessions.length >= 2;
-  const channelForSession = combineOutlineChannels
-    ? (session: ChannelSessionListItem) =>
-        session.outlineRole !== undefined
-          ? outlineChannelForRole(session.outlineRole)
-          : channel
-    : undefined;
   const showSessionControls = sessions.length >= 1;
+  const newPlanningSession = planningOutline ? (
+    <OutlineNewPlanningSessionControl
+      outline={planningOutline}
+      disabled={Boolean(busyRun)}
+      className="w-auto shrink-0"
+      onStarted={onSessionStarted}
+    />
+  ) : null;
   const planningNewRun =
     planningIdea && !planningIdea.archived ? (
       <PlanningNewRunControl
@@ -448,7 +495,7 @@ export function ChannelTranscriptPanel({
     ) : null;
 
   const overflowActions =
-    showSessionControls || channelHeaderActions ? (
+    showSessionControls || channelHeaderActions || newPlanningSession ? (
       <ChannelSessionOverflowMenu>
         {showSessionControls ? (
           <ChannelSessionSwitcher
@@ -458,10 +505,10 @@ export function ChannelTranscriptPanel({
             selectedId={selectedSession.id}
             onSelectedIdChange={setSelectedId}
             showSelect={showSessionSelect}
-            channelForSession={channelForSession}
             className="border-0 px-0 py-0"
           />
         ) : null}
+        {newPlanningSession}
         {channelHeaderActions ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             {channelHeaderActions}
@@ -471,9 +518,10 @@ export function ChannelTranscriptPanel({
     ) : null;
 
   const sessionTrailing =
-    readOnlyBadge || channelHeaderActions ? (
+    readOnlyBadge || channelHeaderActions || newPlanningSession ? (
       <>
         {channelHeaderActions}
+        {newPlanningSession}
         {readOnlyBadge}
       </>
     ) : null;
@@ -485,7 +533,6 @@ export function ChannelTranscriptPanel({
       selectedId={selectedSession.id}
       onSelectedIdChange={setSelectedId}
       showSelect={showSessionSelect}
-      channelForSession={channelForSession}
       trailing={sessionTrailing}
     />
   ) : sessionTrailing ? (
@@ -507,6 +554,13 @@ export function ChannelTranscriptPanel({
         hideComposer={
           selectedSession.archived || Boolean(planningIdea?.archived)
         }
+        composerDisabled={!selectedSession.archived && Boolean(busyRun)}
+        composerDisabledPlaceholder={
+          otherChannel
+            ? `Open ${issueDetailChannelLabel(otherChannel)} to supervise the live run.`
+            : undefined
+        }
+        composerNote={busyNote}
         pauseCancel={channel === "implementing"}
         parkedResume={parkedResume}
         onBack={mobileBack?.onBack}

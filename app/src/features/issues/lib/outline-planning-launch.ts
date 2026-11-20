@@ -145,7 +145,7 @@ export function outlineCheckSessionMessage(input: {
   );
 }
 
-/** Empty planning tab on an outline. The server starts the run. */
+/** Empty Planning tab on an outline. New planning session starts the run. */
 export const OUTLINE_PLANNING_EMPTY_TITLE = "No planning session.";
 export const OUTLINE_PLANNING_EMPTY_DETAIL =
-  "No planner or decomposer run has been started on this outline. When one starts, it opens here.";
+  "No planner has been started on this outline. Start one to amend the saved version.";

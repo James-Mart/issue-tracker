@@ -6,7 +6,7 @@ import { writeIssueDetailTabParam } from "../lib/issue-detail-tabs";
 import type { OutlineExecutionGate } from "../lib/outline-planning-launch";
 import { OutlineDecomposeDialog } from "./outline-decompose-dialog";
 
-/** Decompose button and dialog for one outline. Confirm opens Planning. */
+/** Decompose button and dialog for one outline. Confirm opens Decomposition. */
 export function OutlineDecomposeControl({
   outlineId,
   version,
@@ -25,7 +25,7 @@ export function OutlineDecomposeControl({
         onSuccess: () => {
           setOpen(false);
           setSearchParams(
-            (prev) => writeIssueDetailTabParam(prev, "planning"),
+            (prev) => writeIssueDetailTabParam(prev, "decomposition"),
             { replace: true },
           );
         },

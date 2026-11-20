@@ -11,8 +11,10 @@ import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import {
   createChannelSession,
+  startOutlinePlanningSession,
   type CreateChannelSessionBody,
   type CreateChannelSessionResult,
+  type StartedChannelSession,
 } from "./channel-sessions";
 import {
   type ChannelSessionListItem,
@@ -573,11 +575,6 @@ export function useDequeueWorkRoot(issueId: string) {
   });
 }
 
-export type DecomposeOutlineResult = {
-  id: string;
-  title: string;
-  model: string;
-};
 
 function invalidateStartedChannelSession(
   qc: QueryClient,
@@ -626,16 +623,34 @@ function rememberStartedChannelSession(
   );
 }
 
+/** Start a planner from New planning session. */
+export function useStartOutlinePlanningSession(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<StartedChannelSession, Error, { brief: string }>({
+    mutationFn: ({ brief }) => startOutlinePlanningSession(outlineId, brief),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      rememberStartedChannelSession(qc, outlineId, "planning", {
+        ...data,
+        outlineRole: "planner",
+      });
+    },
+    onSettled: () => {
+      invalidateStartedChannelSession(qc, outlineId, "planning");
+    },
+  });
+}
+
 /** Start a decomposer on the outline's decomposition channel at its latest version. */
 export function useDecomposeOutline(outlineId: string) {
   const qc = useQueryClient();
   return useMutation<
-    DecomposeOutlineResult,
+    StartedChannelSession,
     Error,
     { executionGate: OutlineExecutionGate }
   >({
     mutationFn: (body) =>
-      request<DecomposeOutlineResult>(
+      request<StartedChannelSession>(
         `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
         { method: "POST", body },
       ),
