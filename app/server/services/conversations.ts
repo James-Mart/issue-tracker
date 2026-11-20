@@ -13,11 +13,13 @@ import { conversationsDir } from "../config.js";
 import type { AgentImage, AgentSteerOutcome } from "./agent-sdk.js";
 import { getConversationAttachment } from "./conversation-attachments.js";
 import {
+  outlineRoleChannelError,
   parseConversationMeta,
   parseDelegationEndRecordInput,
   parseDelegationRecordInput,
   parseTranscriptEventInput,
   type ConversationChannel,
+  type OutlineSessionRole,
   type ConversationDetail,
   type Issue,
   type ConversationMeta,
@@ -32,7 +34,11 @@ import {
   type TranscriptEvent,
   type TranscriptEventInput,
 } from "../schemas.js";
-import { channelForIssue, offersReviewChannel } from "../kind.js";
+import {
+  channelForIssue,
+  offersDecompositionChannel,
+  offersReviewChannel,
+} from "../kind.js";
 import type { AgentSessions, StartClaim } from "./agent-sessions.js";
 import { publishFrame, nextConversationSeq } from "./conversation-stream.js";
 import { readDelegationLines, type ParsedDelegationLine } from "./delegation-log.js";
@@ -145,6 +151,7 @@ function channelsOfferedBy(issue: Issue): ConversationChannel[] {
       : channelForIssue(issue);
   const channels: ConversationChannel[] = [];
   if (primary) channels.push(primary);
+  if (offersDecompositionChannel(issue)) channels.push("decomposition");
   if (offersReviewChannel(issue)) channels.push("review");
   return channels;
 }
@@ -309,6 +316,8 @@ export type CreateIssueChannelSessionInput = {
   projectId: string;
   title: string;
   model: string;
+  /** Required on `decomposition`; must match the channel it runs on. */
+  outlineRole?: OutlineSessionRole;
   /** When set, the first prompt event is persisted in the same write turn. */
   message?: string;
 };
@@ -381,12 +390,12 @@ export function channelPredecessors(
  * `implementing` channel this is the work-root lock: each branch has its own
  * git worktree, so what must not be shared is one work root's checkout.
  */
-export function refuseIfPredecessorBusy(
+function refuseIfPredecessorBusy(
   issueId: string,
   channel: ConversationChannel,
-  predecessors: ConversationMeta[],
   sessions: BusyLookup,
 ): void {
+  const predecessors = channelPredecessors(issueId, channel);
   if (!predecessors.some((existing) => sessions.isBusy(existing.id))) return;
   const holder = readIssueOrThrow(issueId);
   throw new IssueError(
@@ -397,6 +406,45 @@ export function refuseIfPredecessorBusy(
       holderIssueTitle: holder.title,
     },
   );
+}
+
+/**
+ * The channel that shares one live run with `channel` on the same issue. Only
+ * outlines offer `decomposition`, and an outline allows one live run across it
+ * and `planning`.
+ */
+export function sharedRunChannel(
+  channel: ConversationChannel,
+): ConversationChannel | undefined {
+  if (channel === "planning") return "decomposition";
+  if (channel === "decomposition") return "planning";
+  return undefined;
+}
+
+/**
+ * Refuse a start or prompt on `issueId` + `channel` while the channel sharing
+ * its live run is busy. The `conflict` names that busy channel.
+ */
+export function refuseIfSharedRunBusy(
+  issueId: string,
+  channel: ConversationChannel,
+  sessions: BusyLookup,
+): void {
+  const shared = sharedRunChannel(channel);
+  if (shared) refuseIfPredecessorBusy(issueId, shared, sessions);
+}
+
+/**
+ * Refuse a new session on `issueId` + `channel` while a session there, or on
+ * the channel sharing its live run, is busy.
+ */
+export function refuseIfChannelBusy(
+  issueId: string,
+  channel: ConversationChannel,
+  sessions: BusyLookup,
+): void {
+  refuseIfPredecessorBusy(issueId, channel, sessions);
+  refuseIfSharedRunBusy(issueId, channel, sessions);
 }
 
 /** Drop a work root's queue fields once an implementing start has taken its slot. */
@@ -418,7 +466,8 @@ export async function clearWorkQueueFields(issueId: string): Promise<void> {
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event and claim its start — one `serialize()` turn so concurrent
  * POSTs cannot leave two active sessions, and refused requests write nothing.
- * A busy predecessor refuses the creation. An implementing session needs a
+ * A busy predecessor refuses the creation, as does a busy session on the
+ * outline channel sharing this one's live run. An implementing session needs a
  * free slot in its Project unless the root already holds one. Queue fields
  * stay until the caller clears them: the launcher does that only after the
  * prompt has started, and the channel route does it once the start has been
@@ -441,19 +490,27 @@ export async function createIssueChannelSession(
 
     // Refuse before any mutation.
     validateAnchor(issueId, input.channel);
-    const predecessors = channelPredecessors(issueId, input.channel);
-    refuseIfPredecessorBusy(issueId, input.channel, predecessors, sessions);
+    const roleError = outlineRoleChannelError(input.channel, input.outlineRole);
+    if (roleError) throw new IssueError("validation", roleError);
+    refuseIfChannelBusy(issueId, input.channel, sessions);
     if (input.channel === "implementing") {
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
     refuseAppendPlanningCreate(issueId, input.channel);
 
-    for (const existing of predecessors) {
+    for (const existing of channelPredecessors(issueId, input.channel)) {
       archiveIdleConversation(existing, sessions);
     }
 
     const meta = persistNewConversation(
-      { title, projectId, model, issueId, channel: input.channel },
+      {
+        title,
+        projectId,
+        model,
+        issueId,
+        channel: input.channel,
+        ...(input.outlineRole ? { outlineRole: input.outlineRole } : {}),
+      },
       initialPrompt ? { initialPrompt } : undefined,
     );
     if (!initialPrompt) return { meta };

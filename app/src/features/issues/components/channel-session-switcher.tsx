@@ -19,10 +19,23 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
 import {
-  formatChannelSessionSwitcherLabel,
+  channelSessionSwitcherParts,
+  formatSessionStartTime,
   orderChannelSessionsForSwitcher,
+  outlineSessionRoleLabel,
 } from "../api/channel-sessions";
 import { useDeleteChannelSession } from "../api/mutations";
+
+function SessionSwitcherLabel({ session }: { session: ChannelSessionListItem }) {
+  const { role, when } = channelSessionSwitcherParts(session);
+  if (role === undefined) return <span className="font-mono">{when}</span>;
+  return (
+    <>
+      <span className="font-sans">{role}</span>
+      <span className="font-mono text-muted-foreground"> · {when}</span>
+    </>
+  );
+}
 
 export function ChannelSessionSwitcher({
   issueId,
@@ -31,6 +44,7 @@ export function ChannelSessionSwitcher({
   selectedId,
   onSelectedIdChange,
   showSelect = true,
+  channelForSession,
   trailing,
   className,
 }: {
@@ -41,13 +55,18 @@ export function ChannelSessionSwitcher({
   onSelectedIdChange: (id: string) => void;
   /** Hide the session picker (e.g. when only one session remains). */
   showSelect?: boolean;
+  /** Storage channel for a row, when it is not this tab's channel. */
+  channelForSession?: (session: ChannelSessionListItem) => ConversationChannel;
   /** Extra controls aligned to the header row (e.g. New run). */
   trailing?: ReactNode;
   className?: string;
 }) {
   const ordered = orderChannelSessionsForSwitcher(sessions);
   const selected = sessions.find((session) => session.id === selectedId);
-  const deleteSession = useDeleteChannelSession(issueId, channel);
+  const deleteChannel = selected
+    ? (channelForSession?.(selected) ?? channel)
+    : channel;
+  const deleteSession = useDeleteChannelSession(issueId, deleteChannel);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const confirmDelete = () => {
@@ -72,24 +91,33 @@ export function ChannelSessionSwitcher({
       {showSelect ? (
         <Select value={selectedId} onValueChange={onSelectedIdChange}>
           <SelectTrigger
-            className="h-8 min-w-0 flex-1 font-mono text-xs"
+            className="h-8 min-w-0 flex-1 text-xs"
             aria-label="Channel session"
             data-testid="channel-session-select"
           >
             <SelectValue>
-              {selected
-                ? formatChannelSessionSwitcherLabel(selected)
-                : "Select session"}
+              {selected ? (
+                <SessionSwitcherLabel session={selected} />
+              ) : (
+                "Select session"
+              )}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {ordered.map((session) => (
               <SelectItem key={session.id} value={session.id}>
-                {formatChannelSessionSwitcherLabel(session)}
+                <SessionSwitcherLabel session={session} />
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      ) : selected?.outlineRole ? (
+        <div
+          className="min-w-0 flex-1 truncate text-xs"
+          data-testid="channel-session-label"
+        >
+          <SessionSwitcherLabel session={selected} />
+        </div>
       ) : null}
       <Button
         type="button"
@@ -111,13 +139,16 @@ export function ChannelSessionSwitcher({
             <DialogTitle>Delete session</DialogTitle>
             <DialogDescription>
               Permanently remove this{" "}
-              {selected?.archived ? "archived " : ""}session
+              {selected?.archived ? "archived " : ""}
+              {selected?.outlineRole
+                ? `${outlineSessionRoleLabel(selected.outlineRole)} session`
+                : "session"}
               {selected ? (
                 <>
                   {" "}
-                  started{" "}
+                  {selected.outlineRole ? "from" : "started"}{" "}
                   <span className="text-foreground">
-                    {formatChannelSessionSwitcherLabel(selected)}
+                    {formatSessionStartTime(selected.createdAt)}
                   </span>
                 </>
               ) : null}

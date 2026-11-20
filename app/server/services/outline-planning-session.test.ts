@@ -69,7 +69,7 @@ describe("startOutlinePlanningSession", () => {
     });
   });
 
-  it("starts a decomposer session on the outline planning channel", async () => {
+  it("starts a decomposer session on the outline decomposition channel", async () => {
     const { sessions, started } = fakeLauncherSessions();
     const { startOutlinePlanningSession } = await import(
       "./outline-planning-session.js"
@@ -94,7 +94,8 @@ describe("startOutlinePlanningSession", () => {
     const [meta] = listConversations();
     expect(meta).toMatchObject({
       issueId: "feature-outline",
-      channel: "planning",
+      channel: "decomposition",
+      outlineRole: "decomposer",
       model: "cursor-grok-4.7",
       title: "Decompose Feature outline",
     });

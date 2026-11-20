@@ -21,9 +21,14 @@ vi.mock("../api/queries", () => ({
   useChannelSessionsQuery: (
     _issueId: string,
     _channel: string,
-    options?: { awaitingLaunchSession?: boolean },
+    options?: { awaitingLaunchSession?: boolean; enabled?: boolean },
   ) => {
-    fixtures.queryArgs.awaitingLaunchSession = options?.awaitingLaunchSession;
+    if (options && "awaitingLaunchSession" in options) {
+      fixtures.queryArgs.awaitingLaunchSession = options.awaitingLaunchSession;
+    }
+    if (options?.enabled === false) {
+      return { data: undefined, isLoading: false, error: null };
+    }
     return {
       data: fixtures.queryState.data,
       isLoading: false,

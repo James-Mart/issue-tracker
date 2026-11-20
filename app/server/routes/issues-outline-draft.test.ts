@@ -167,7 +167,8 @@ describe("outline draft HTTP API", () => {
     expect(meta).toMatchObject({
       id: body.id,
       issueId: "spec",
-      channel: "planning",
+      channel: "decomposition",
+      outlineRole: "reconcile",
       title: "Reconcile Feature outline",
     });
     const line = readFileSync(transcriptPathOf(meta!.id), "utf8").trim();

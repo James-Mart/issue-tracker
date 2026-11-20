@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
-import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
-  channelPredecessors,
-  refuseIfPredecessorBusy,
-} from "./conversations.js";
+  formatZodError,
+  outlineChannelForRole,
+  type ConversationMeta,
+  type Issue,
+} from "../schemas.js";
+import type { ConversationMessageSessions } from "./conversation-message.js";
+import { refuseIfChannelBusy } from "./conversations.js";
 import { IssueError } from "./errors.js";
 import {
   commitIssueBatch,
@@ -90,8 +92,8 @@ export async function discardOutlineDraft(id: string): Promise<void> {
 
 /**
  * Save the pending draft as the next version and start reconciliation.
- * The busy check and the version write share one store turn so a planning
- * session cannot start between them. The session itself starts after that
+ * The busy check and the version write share one store turn so no outline
+ * session can start between them. The session itself starts after that
  * turn; a failure there leaves the new version in place.
  */
 export async function publishOutlineDraft(
@@ -109,12 +111,7 @@ export async function publishOutlineDraft(
       sourceIdea: resolveSourceIdea(input.sourceIdea, targetStory),
     };
     requireProjectWorkspace(outline.partOf);
-    refuseIfPredecessorBusy(
-      outline.id,
-      "planning",
-      channelPredecessors(outline.id, "planning"),
-      sessions,
-    );
+    refuseIfChannelBusy(outline.id, outlineChannelForRole("reconcile"), sessions);
     const version = saveDraftAsVersion(outline, draft);
     return { version, scope };
   });

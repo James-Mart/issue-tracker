@@ -17,9 +17,10 @@ import {
 } from "@/features/agents/components/conversation-thread";
 import { cn } from "@/lib/utils/cn";
 import {
-  currentChannelSession,
   defaultChannelSession,
+  outlinePlanningSessionList,
 } from "../api/channel-sessions";
+import { outlineChannelForRole } from "../lib/outline-session-role";
 import { useChannelSessionsQuery } from "../api/queries";
 import {
   cockpitLaunchOverlayForIssue,
@@ -162,9 +163,23 @@ export function ChannelTranscriptPanel({
   const launchingThis = launchOverlaysChannel(issueId, channel, overlay);
   const pendingLaunch =
     launchingThis && pending?.issueId === issueId ? pending : null;
+  const planningOutline = isPlanningOutline(channel, issue) ? issue : undefined;
+  const combineOutlineChannels = planningOutline !== undefined;
   const { data, isLoading, error } = useChannelSessionsQuery(issueId, channel, {
     awaitingLaunchSession: Boolean(pendingLaunch && !pendingLaunch.resumeSession),
   });
+  const decompositionSessions = useChannelSessionsQuery(
+    issueId,
+    "decomposition",
+    { enabled: combineOutlineChannels },
+  );
+  const listLoading =
+    (isLoading && !data) ||
+    (combineOutlineChannels &&
+      decompositionSessions.isLoading &&
+      !decompositionSessions.data);
+  const listError =
+    error ?? (combineOutlineChannels ? decompositionSessions.error : null);
   const parkedResume = useParkedRootResume(issueId, channel);
   const thisFault =
     fault?.issueId === issueId &&
@@ -175,12 +190,13 @@ export function ChannelTranscriptPanel({
     <ChannelLaunchFaultBanner fault={thisFault} />
   ) : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
-  const planningOutline = isPlanningOutline(channel, issue) ? issue : undefined;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
     : undefined;
 
-  const sessions = data ?? [];
+  const sessions = combineOutlineChannels
+    ? outlinePlanningSessionList(data ?? [], decompositionSessions.data ?? [])
+    : (data ?? []);
   const launchFromList = pendingLaunch
     ? launchTranscriptSession(pendingLaunch, sessions)
     : undefined;
@@ -217,7 +233,7 @@ export function ChannelTranscriptPanel({
         }
       : undefined;
 
-  if (isLoading && !data) {
+  if (listLoading) {
     if (mobileFullViewport && mobileBack) {
       return (
         <ChannelPanelFrame mobileFullViewport>
@@ -235,7 +251,7 @@ export function ChannelTranscriptPanel({
     return <ShellLoadingState label={`Loading ${label.toLowerCase()} channel…`} />;
   }
 
-  if (error) {
+  if (listError) {
     const fault = (
       <ShellState
         tone="blocked"
@@ -243,7 +259,7 @@ export function ChannelTranscriptPanel({
         title={`Could not load the ${label.toLowerCase()} channel.`}
         detail={
           <ShellFaultDetail
-            message={error.message}
+            message={listError.message}
             hint="Check the server, then reload."
           />
         }
@@ -371,6 +387,12 @@ export function ChannelTranscriptPanel({
   }
 
   const showSessionSelect = sessions.length >= 2;
+  const channelForSession = combineOutlineChannels
+    ? (session: ChannelSessionListItem) =>
+        session.outlineRole !== undefined
+          ? outlineChannelForRole(session.outlineRole)
+          : channel
+    : undefined;
   const showSessionControls = sessions.length >= 1;
   const planningNewRun = planningIdea ? (
     <PlanningNewRunControl
@@ -412,6 +434,7 @@ export function ChannelTranscriptPanel({
             selectedId={selectedSession.id}
             onSelectedIdChange={setSelectedId}
             showSelect={showSessionSelect}
+            channelForSession={channelForSession}
             className="border-0 px-0 py-0"
           />
         ) : null}
@@ -431,6 +454,7 @@ export function ChannelTranscriptPanel({
       selectedId={selectedSession.id}
       onSelectedIdChange={setSelectedId}
       showSelect={showSessionSelect}
+      channelForSession={channelForSession}
       trailing={channelHeaderActions}
     />
   ) : channelHeaderActions ? (

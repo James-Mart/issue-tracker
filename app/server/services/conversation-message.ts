@@ -1,8 +1,11 @@
-import type { AgentSessions } from "./agent-sessions.js";
+import type { AgentSessions, StartClaim } from "./agent-sessions.js";
 import {
   deliverLivePrompt,
   readConversationMeta,
+  refuseIfSharedRunBusy,
+  serialize,
   setPendingMessage,
+  sharedRunChannel,
   startConversationPrompt,
 } from "./conversations.js";
 import {
@@ -69,9 +72,44 @@ export async function postConversationMessage(
   }
 
   refuseTurnOnParkedRoot(conversationId);
-  const result = await startConversationPrompt(conversationId, prompt, sessions, {
+  const result = await startIdleConversationTurn(conversationId, prompt, sessions, {
     attachments,
   });
   if (!result.ok) return { status: "failed", message: result.message };
   return { status: "started", runId: result.runId };
+}
+
+/**
+ * Refuse while the channel sharing this conversation's live run is busy, and
+ * claim this conversation's start in the same write turn so a start there
+ * sees this one as busy. Conversations on other channels need no claim.
+ */
+function claimSharedRunTurn(
+  conversationId: string,
+  sessions: ConversationMessageSessions,
+): Promise<StartClaim | undefined> {
+  return serialize(() => {
+    const { issueId, channel } = readConversationMeta(conversationId);
+    if (!issueId || !channel || !sharedRunChannel(channel)) return undefined;
+    refuseIfSharedRunBusy(issueId, channel, sessions);
+    return sessions.claimStart(conversationId);
+  });
+}
+
+/**
+ * Start a turn on an idle conversation. On an outline, a live run on its other
+ * channel refuses the turn with a `conflict` naming that channel.
+ */
+export async function startIdleConversationTurn(
+  conversationId: string,
+  prompt: string,
+  sessions: ConversationMessageSessions,
+  options?: { attachments?: string[] },
+): ReturnType<typeof startConversationPrompt> {
+  const claim = await claimSharedRunTurn(conversationId, sessions);
+  try {
+    return await startConversationPrompt(conversationId, prompt, sessions, options);
+  } finally {
+    claim?.release();
+  }
 }

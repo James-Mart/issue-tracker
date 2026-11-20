@@ -4,6 +4,7 @@ import { ensureGithubCommentsMigrated } from "./github-comment-migration.js";
 import { ensureKindRenamed } from "./kind-rename.js";
 import { ensureMergeBaseStripped } from "./merge-base.js";
 import { ensureMergedAtBackfilled } from "./merge-consequences.js";
+import { ensureOutlineChannelsMigrated } from "./outline-channel-migration.js";
 import { ensurePlanSettingsMigrated } from "./plan-settings-migration.js";
 import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
 import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
@@ -28,6 +29,7 @@ export function runStoreMigrations(persistIssue: (issue: Issue) => void): void {
   ensurePlanSettingsMigrated(persistIssue);
   ensureReviewRecordsMigrated();
   ensureReviewThreadsMigrated();
+  ensureOutlineChannelsMigrated();
   ensureGithubCommentsMigrated();
   ensureWorkQueuePositionsBackfilled(persistIssue);
 }

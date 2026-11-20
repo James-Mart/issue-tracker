@@ -9,7 +9,12 @@ import {
   type OutlineExecutionGate,
   type OutlineReconcileScope,
 } from "../../src/features/issues/lib/outline-planning-launch.js";
-import { formatZodError, type ConversationMeta, type Issue } from "../schemas.js";
+import {
+  formatZodError,
+  outlineChannelForRole,
+  type ConversationMeta,
+  type Issue,
+} from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import {
   createIssueChannelSession,
@@ -84,8 +89,9 @@ export function parseDecomposeRequest(body: unknown): DecomposeRequest {
 }
 
 /**
- * Open a planner, decomposer, reconcile, or check session on an outline's
- * planning channel and start its first turn.
+ * Open a planner session on an outline's planning channel, or a decomposer,
+ * reconcile, or check session on its decomposition channel, and start its
+ * first turn.
  */
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
@@ -119,7 +125,8 @@ export async function createOutlinePlanningSession(
       title,
       model,
       issueId: outline.id,
-      channel: "planning",
+      channel: outlineChannelForRole(input.role),
+      outlineRole: input.role,
       message,
     },
     sessions,

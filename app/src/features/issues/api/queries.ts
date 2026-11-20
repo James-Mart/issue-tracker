@@ -215,12 +215,13 @@ export function usePlanningWorkRootQuery(
 export function useChannelSessionsQuery(
   issueId: string,
   channel: ConversationChannel,
-  options?: { awaitingLaunchSession?: boolean },
+  options?: { awaitingLaunchSession?: boolean; enabled?: boolean },
 ): UseQueryResult<ChannelSessionListItem[], Error> {
   return useQuery({
     queryKey: issuesKeys.channelSessions(issueId, channel),
     queryFn: () => loadChannelSessions(issueId, channel),
-    enabled: Boolean(issueId) && Boolean(channel),
+    enabled:
+      (options?.enabled ?? true) && Boolean(issueId) && Boolean(channel),
     refetchOnWindowFocus: true,
     refetchInterval: options?.awaitingLaunchSession
       ? LAUNCH_SESSION_POLL_MS
