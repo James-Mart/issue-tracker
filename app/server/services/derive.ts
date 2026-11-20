@@ -11,10 +11,8 @@ import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
 import { effectiveMergePolicy } from "./merge-policy.js";
 import { mergeSettingsLockFor } from "./merge-settings-lock.js";
-import {
-  outlineIdsWithLinkedRoot,
-  outlineReadyToDecompose,
-} from "./ready-to-decompose.js";
+import { stampedBoardRoots } from "./linked-roots.js";
+import { outlineReadyToDecompose } from "./ready-to-decompose.js";
 import { projectContaining, projectTrunk } from "./subtree.js";
 
 export interface DeriveResult {
@@ -264,11 +262,20 @@ export function derive(issues: Issue[]): DeriveResult {
     };
   }
 
-  const linkedRoots = outlineIdsWithLinkedRoot(issues, byId);
+  const linkedRoots = new Set<string>();
+  const openBehindOutlines = new Set<string>();
+  for (const root of stampedBoardRoots(issues, state, true)) {
+    linkedRoots.add(root.outlineId);
+    if (!root.archived && root.open && root.behind) {
+      openBehindOutlines.add(root.outlineId);
+    }
+  }
   for (const issue of issues) {
     if (issue.kind !== "outline") continue;
     const existing = state[issue.id] ?? { blocked: false };
     existing.readyToDecompose = outlineReadyToDecompose(issue, linkedRoots);
+    existing.reconciliationNeeded =
+      Boolean(issue.pendingAppends?.length) || openBehindOutlines.has(issue.id);
     state[issue.id] = existing;
   }
 

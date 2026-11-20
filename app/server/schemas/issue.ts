@@ -917,6 +917,11 @@ export interface DerivedState {
    * live-run clause is applied by `list()`, not the pure `derive()` pass.
    */
   readyToDecompose?: boolean;
+  /**
+   * Outline only. True when a pending append is waiting, or an open linked
+   * root is behind. `behind` on that root stays derived from its `sourceOutline`.
+   */
+  reconciliationNeeded?: boolean;
   /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**

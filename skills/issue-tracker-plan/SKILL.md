@@ -1,13 +1,7 @@
 ---
 name: issue-tracker-plan
 disable-model-invocation: true
-description: >-
-  Grill an Idea into a saved outline and conclude it, judging the code-gate
-  verdict and running issue idea conclude, or, when appendTo is set, amend
-  the target Story's outline as a draft and conclude, which publishes that
-  draft; checks which affected screens to mock or skip before any mockup
-  round. Use when the user asks to plan an Idea, flesh out a tracker plan,
-  or run issue-tracker-plan.
+description: Grill an Idea to an outline and conclude, publish an append draft on conclude, or amend an outline in place.
 ---
 
 # Issue Tracker — Plan (grill → outline)
@@ -17,7 +11,9 @@ user, check which affected screens get a mockup round, run those rounds, save
 the outline, and conclude the Idea. Conclude records the code-gate verdict,
 archives the Idea, and starts a decomposer when the Idea's gates say so. An
 Idea with `appendTo` amends the target Story's outline as a pending draft,
-and conclude publishes that draft. A stop before conclude leaves the
+and conclude publishes that draft. A planner session on an outline answers
+a context question from the current version, or saves a revision as the next
+version without starting reconciliation. A stop before conclude leaves the
 outline's current version unchanged. Do not implement product code; this
 skill only authors the plan artifact.
 
@@ -31,7 +27,7 @@ asked.
 
 ## Argument
 
-An **Idea** id.
+An **Idea** id, or an **Outline** id for a planner session on that outline.
 
 If none is given:
 
@@ -51,7 +47,7 @@ Before grilling:
    then consult `codingStandards` per that file using the step-1 summary output
    (to avoid locking a plan direction the standards forbid — not for
    implementation detail in Task prose).
-3. Kind gate — **Idea** → proceed; any other kind → refuse.
+3. Kind gate — **Outline** → **## Outline session** and stop. **Idea** → steps 4–7. Any other kind → refuse.
 4. `issue view <id>` — load the full capture (`description.md`).
 5. `issue project get <projectId> trunk` — Project trunk (`<projectId>` from
    step 1).
@@ -81,6 +77,30 @@ the session follows the target Story's context. `<storyId>` is the
    yet. Start its work loop or resolve its merge base before planning."
    Otherwise tell the user the Story's merge base is unresolved. Stop
    either way.
+
+## Outline session
+
+When Bootstrap's kind gate landed here, this section is the whole session.
+An Idea follows **## Grill-me protocol**.
+
+`issue outline view <outlineId>` prints the latest body.
+
+A message that asks for the outline text to change is a revision. Any other
+message is context.
+
+**Context.** Answer from the latest body. The saved version stays the current one.
+
+**Revision.**
+
+1. **Write the next body.** **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
+   and follow it. Revise the latest body so the change is folded into the
+   `##` sections it belongs to, keeping the outline shape from **## Conclude**
+   step 1.
+2. **Save it.** `issue outline set <outlineId> description --file <path>`.
+   That save is the next version and does not start reconciliation. The final
+   message reports `<outlineId>` and the version from `issue outline get
+   <outlineId> version`.
 
 ## Grill-me protocol (inline)
 
@@ -304,7 +324,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea.
+- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea. An outline session's revision is the description save in **## Outline session** and does not start reconciliation.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.

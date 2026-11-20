@@ -54,10 +54,11 @@ Every issue has a `kind`, one of:
 - **Idea** — a Project-level capture item (title, description, attachments,
   archive, optional `stakeholder` model slug, and optional `labels` assignments
   from the Project catalog — see [Project labels](#project-labels)) that agents
-  and humans mine later into real work. The sole valid seed for
-  `issue-tracker-plan` and `issue-tracker-auto-plan` — re-shaping an existing
-  tree uses `issue-tracker-plan-polish`; authoring a tree directly uses
-  `issue-tracker-authoring`. Leaf kind: no children, no
+  and humans mine later into real work. An Idea is the seed for
+  `issue-tracker-plan` and `issue-tracker-auto-plan`. A planner session on
+  an outline also runs `issue-tracker-plan` to amend that outline in place.
+  Re-shaping an existing tree uses `issue-tracker-plan-polish`; authoring a
+  tree directly uses `issue-tracker-authoring`. Leaf kind: no children, no
   assignee/needs-attention, no stored status or git fields (planning phase is
   derived as **`ideaStatus`** — see [Derived state](#derived-state)). `stakeholder` picks who
   holds the stakeholder seat (see [Roles](#roles)): a model slug means an
@@ -330,6 +331,12 @@ These are computed by `derive()` and never written to disk (see
   unmerged unless its Story is merged. An Epic is unmerged when its derived
   status is not `done`. Also `issue epic|story|task get … behind`. Tree chip
   `behind` when true. `issue view` prints `behind: true` when the flag holds.
+- **Reconciliation needed** — derived on Outlines. `true` when any open
+  linked root is behind the outline's latest version, or `pendingAppends`
+  is non-empty; otherwise `false`. An open linked root is the set
+  `issue outline open-roots` lists. Behind stays derived from that root's
+  `sourceOutline` (see **behind**). Also `issue outline get <id>
+  reconciliationNeeded`, which prints `true` or `false`.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -690,7 +697,10 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
   version when the text differs and keeps the prior snapshot. The same text
-  does not add a version. Title and `partOf` sets do not add a version.
+  does not add a version. A planner session on the outline uses this
+  description save for a revision and does not start reconciliation. A
+  context question in that session leaves the saved body unchanged. Title
+  and `partOf` sets do not add a version.
 
 ### Global ops
 
@@ -741,7 +751,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `generatedOutlines`, `readyToDecompose`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `generatedOutlines`, `readyToDecompose`, `reconciliationNeeded`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -1200,6 +1210,8 @@ A later [release](#plan-release) of that root leaves this lowered merge policy a
 
 **Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The outline page's Linked work empty state reads **Ready to decompose** when it is true, with the existing Decompose control as the next move.
 
+**Reconciliation needed** is derived. `issue outline get <outlineId> reconciliationNeeded` prints `true` or `false`. It is true when any open linked root is behind the current version, or `pendingAppends` is non-empty. Otherwise it is false. Behind stays derived from each root's `sourceOutline`. A planner revision saves the next version with `issue outline set <id> description` and does not start reconciliation. Review-driven draft publish starts reconcile on the outline's `decomposition` channel when an amended submission becomes `done`.
+
 <a id="planner-handoff"></a>
 
 **Planner handoff.** The handoff runs when a run settles on a non-archived `planning` conversation of an archived Idea that concluded onto an outline: the Idea is the `sourceIdea` of an outline with `concludedAt` set, or the Idea has `appendTo` and stores `codeApprovalRequired`, and the outline is its target Story's. When that run's end starts a queued pending message, the handoff waits for that turn to settle. The handoff creates the outline's planner session on its `planning` channel with `outlineRole` `planner` and the title `Plan <outline title>`, through the Idea's Planning conversation's last transcript seq, so it includes the planner's final reply. Its `forkedFrom` is the Idea's Planning conversation and its `forkedAtSeq` is that last seq. For an append whose Planning conversation was forked from the outline's planner, `forkedFrom` and `forkedAtSeq` are that conversation's own: the outline planner it was forked from and the seq it was forked at. The handoff starts no run. It archives any earlier planner session on the outline, which stays listed read-only, and the Idea's Planning conversation.
@@ -1499,7 +1511,7 @@ Outline — the common-to-every-kind fields plus:
 No assignee, needs-attention, stored status, worktree, comments, or
 attachments. Not a board child: `issue tree` does not render it; `issue list outline`
 does. Deleting an outline removes its `versions/` snapshots with the directory.
-Derived **`readyToDecompose`** on get / list (see [Derived state](#derived-state) and [Conclude](#conclude)).
+Derived **`readyToDecompose`** and **`reconciliationNeeded`** on get / list (see [Derived state](#derived-state) and [Conclude](#conclude)).
 
 Story — the Epic/Story/Task needs-attention common fields plus:
 
@@ -1861,10 +1873,10 @@ run that ends while `waiting` holds for the human's answer. A run that ends
 while `checking`, or ends other than `finished`, fails the submission with
 that error. Retry resumes the recorded check conversation, or opens a new
 check session when that conversation is archived. When an amended
-submission becomes `done`, the server starts reconciliation at the settled
-version with the review's Story as `Target story` and the submission's
-Tasks as `Covered by`; a start failure is logged and leaves linked roots
-`behind`. The review header shows `Checking outline` while checking, then
+submission becomes `done`, the server starts reconciliation on the outline's
+`decomposition` channel at the settled version with the review's Story as
+`Target story` and the submission's Tasks as `Covered by`; a start failure
+is logged and leaves linked roots `behind`. The review header shows `Checking outline` while checking, then
 `Waiting on outline update` linking to the outline's Planning tab while
 waiting, then the tasking label.
 
@@ -2686,6 +2698,12 @@ so cannot drift:
   stored half for every Outline. `list()` clears it while a decomposition
   run is live. `issue outline get <id> readyToDecompose` prints `true` or
   `false`. See [Conclude](#conclude).
+- **Outline `reconciliationNeeded`** — `true` when `pendingAppends` is
+  non-empty, or any open linked root has derived `behind`; otherwise
+  `false`. An open linked root is the set `issue outline open-roots` lists.
+  `behind` stays derived from that root's `sourceOutline`. Computed by
+  `derive()`. `issue outline get <id> reconciliationNeeded` prints `true`
+  or `false`. See [Conclude](#conclude).
 - **Epic / root Story `planNotFinal`** — `true` when the issue stores
   `sourceIdea`, the referenced Idea is present in the pass's issue set, and the
   issue stores no `releasedAt`; otherwise `false` (including when `sourceIdea`

@@ -7,6 +7,7 @@ import {
   type IssueRecord,
   type DerivedState,
 } from "@server/schemas";
+import { isIssueComplete } from "@server/services/issue-complete";
 import type { BadgeProps } from "@/components/ui/badge";
 import {
   leafTaskProgressOf,
@@ -110,21 +111,7 @@ export function hasInFlightWork(
   );
 }
 
-/**
- * True when an issue is complete for progress/bucket purposes:
- * task done, story merged (derived or `merged` flag), epic done.
- */
-export function isIssueComplete(
-  issue: IssueRecord,
-  state: DerivedState | undefined,
-): boolean {
-  if (issue.kind === "task") return issue.status === "done";
-  if (issue.kind === "story") {
-    return state?.storyStatus === "merged" || issue.merged === true;
-  }
-  if (issue.kind === "epic") return state?.epicStatus === "done";
-  return false;
-}
+export { isIssueComplete };
 
 type TaskRecord = Extract<IssueRecord, { kind: "task" }>;
 

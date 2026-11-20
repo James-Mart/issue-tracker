@@ -1,9 +1,7 @@
 ---
 name: issue-tracker-planner-grok
 model: cursor-grok-4.7
-description: >-
-  Runs issue-tracker-plan on a given issue id and owns the grill through
-  conclude. Used by issue-tracker-auto-plan.
+description: Runs issue-tracker-plan for an Idea grill or an Outline amend session.
 readonly: false
 ---
 
