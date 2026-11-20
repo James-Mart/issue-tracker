@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { coerceBoolean, coerceEnum, coerceJson } from "./cli-coerce.js";
+import { coerceBoolean, coerceEnum, coerceExecutionGate, coerceJson } from "./cli-coerce.js";
 import { readCliFileArg } from "./cli-io.js";
 import { resolveRuntimeSet, RUNTIME_PHASES_HELP } from "./cli-runtime-set.js";
 import { resolveSecretsSet } from "./cli-project-secrets.js";
@@ -713,6 +713,8 @@ export function coerceSetPatch(
     }
     case "boolean":
       return { [storeKey]: coerceBoolean(raw, field) } as IssuePatch;
+    case "executionGate":
+      return { executionGate: coerceExecutionGate(raw) };
     case "enum":
       return { [storeKey]: coerceEnum(raw, field, spec.values) } as IssuePatch;
     case "sourceOutline":

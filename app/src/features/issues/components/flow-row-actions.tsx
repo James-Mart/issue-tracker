@@ -44,7 +44,7 @@ export function FlowRowActions({
   return (
     <>
       {capturedIdea ? (
-        <PlanningFlowRowLaunch issue={capturedIdea} gates={false} />
+        <PlanningFlowRowLaunch issue={capturedIdea} />
       ) : null}
       {runningWork ? <QueuePauseControl issueId={runningWork.id} /> : null}
       {pausedWork ? (

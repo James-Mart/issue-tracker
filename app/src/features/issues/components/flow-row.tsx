@@ -5,18 +5,15 @@ import type { DerivedState, IssueRecord } from "@server/schemas";
 import { RailNode } from "@/components/ui/rail";
 import { cn } from "@/lib/utils/cn";
 import { AxisChips } from "./axis-chips";
-import { PlanningFlowRowGates } from "./planning-launch-control";
+import { IdeaPlanSettings } from "./idea-plan-settings";
 import { isReadyToLandFromIndexes, leafTaskProgressCount } from "../lib/derived";
-import { projectIdOf } from "../lib/build-tree";
 import type { FlowItem } from "../lib/flow";
 import type { TreeRowIndexes } from "../lib/tree-row-indexes";
 import {
   flowItemAttentionReason,
   flowItemNeedsAttention,
   flowRowIsLive,
-  isCapturedIdeaFlowItem,
 } from "../lib/flow";
-import { issueChannelPath } from "../lib/links";
 import type { QueueRowChrome } from "../lib/queue-reorder";
 import { formatTimeInQueue, type QueueStage } from "../lib/queue-view";
 import { issueRailNodeState } from "../lib/rail-state";
@@ -37,9 +34,7 @@ function flowRowStatusChips(
     }
   } else if (item.issue.kind === "idea") {
     const status = item.state?.ideaStatus;
-    if (status === "awaiting-approval") {
-      chips.push({ variant: "warn", label: "awaiting approval" });
-    } else if (status === "planning" || status === "awaiting-direction") {
+    if (status === "planning" || status === "awaiting-direction") {
       chips.push({ variant: "inProgress", label: "planning" });
     }
   }
@@ -53,34 +48,6 @@ function queueWait(
 ): string | undefined {
   if (item.issue.kind !== "epic" && item.issue.kind !== "story") return undefined;
   return item.issue.workQueuedAt;
-}
-
-function flowRowDrillInTo(
-  item: FlowItem,
-  indexes: TreeRowIndexes,
-  to: string | undefined,
-): string | undefined {
-  if (to == null) return undefined;
-  if (
-    item.issue.kind === "idea" &&
-    item.state?.ideaStatus === "awaiting-approval"
-  ) {
-    const projectId = projectIdOf(item.issue.id, indexes.byId);
-    if (projectId) {
-      return issueChannelPath(projectId, item.issue.id, "planning");
-    }
-  }
-  return to;
-}
-
-function flowRowShowsAttentionTriangle(item: FlowItem): boolean {
-  if (
-    item.issue.kind === "idea" &&
-    item.state?.ideaStatus === "awaiting-approval"
-  ) {
-    return false;
-  }
-  return flowItemNeedsAttention(item);
 }
 
 export interface FlowRowProps {
@@ -105,7 +72,7 @@ export interface FlowRowProps {
 
 /**
  * Cockpit flow row: state disc on the bucket rail, a reserved icon slot left
- * of the title, gate toggles left of that slot, chips snug after the title.
+ * of the title, plan settings left of that slot, chips snug after the title.
  */
 export function FlowRow({
   item,
@@ -137,15 +104,12 @@ export function FlowRow({
   );
   const count = leafTaskProgressCount(item.issue, indexes);
   const waitingSince = queueStage === "waiting" ? queueWait(item) : undefined;
-  const drillInTo = flowRowDrillInTo(item, indexes, to);
   const chips = flowRowStatusChips(item, indexes);
-  const attention = flowRowShowsAttentionTriangle(item);
+  const attention = flowItemNeedsAttention(item);
   const attentionReason = attention ? flowItemAttentionReason(item) : null;
   const blocked = Boolean(item.state?.blocked);
-  const gates =
-    isCapturedIdeaFlowItem(item) && item.issue.stakeholder ? (
-      <PlanningFlowRowGates issue={item.issue} />
-    ) : null;
+  const ideaIssue =
+    item.issue.kind === "idea" && !item.issue.archived ? item.issue : undefined;
   const meta =
     waitingSince ? (
       <time
@@ -210,7 +174,10 @@ export function FlowRow({
           data-queue-stage={queueStage}
           data-queue-dragging={queueChrome?.dragging ? "true" : undefined}
           className={cn(
-            "relative flex min-w-0 flex-1 flex-wrap items-start gap-2 rounded-lg border border-border bg-card px-3.5 py-[11px] shell:flex-nowrap shell:items-center",
+            "relative flex min-w-0 flex-1 flex-wrap items-start gap-2 rounded-lg border border-border bg-card px-3.5 py-[11px]",
+            ideaIssue
+              ? "items-center"
+              : "shell:flex-nowrap shell:items-center",
             queueStage === "parked" && "opacity-60",
             queueChrome?.dragging && "opacity-50",
             queueChrome?.dropEdge === "before" &&
@@ -219,9 +186,9 @@ export function FlowRow({
               "border-b-[hsl(var(--rail-lit))]",
           )}
         >
-          {drillInTo != null ? (
+          {to != null ? (
             <Link
-              to={drillInTo}
+              to={to}
               state={drillInState}
               aria-label={
                 projectTitle
@@ -231,21 +198,24 @@ export function FlowRow({
               className="absolute inset-0 z-0 rounded-lg"
             />
           ) : null}
-          {gates ? (
+          {ideaIssue ? (
             <span
               data-testid="cockpit-row-gates"
               className={cn(
                 "relative z-[1] inline-flex max-w-full shrink-0 flex-wrap items-center gap-1",
-                drillInTo != null && "pointer-events-auto",
+                to != null && "pointer-events-auto",
               )}
             >
-              {gates}
+              <IdeaPlanSettings issue={ideaIssue} testIdPrefix="flow-row" />
             </span>
           ) : null}
           <div
             className={cn(
-              "relative z-[1] flex min-w-[calc(2.75rem+5ch+0.5rem)] max-w-full flex-1 items-start gap-2 shell:min-w-0",
-              drillInTo != null && "pointer-events-none",
+              "relative z-[1] flex max-w-full flex-1 items-start gap-2",
+              ideaIssue
+                ? "min-w-[12rem]"
+                : "min-w-[calc(2.75rem+5ch+0.5rem)] shell:min-w-0",
+              to != null && "pointer-events-none",
             )}
           >
             {avatar != null ? (
@@ -255,7 +225,7 @@ export function FlowRow({
               data-testid="cockpit-row-action-slot"
               className={cn(
                 "cockpit-row-action-slot",
-                drillInTo != null && "pointer-events-auto",
+                to != null && "pointer-events-auto",
               )}
             >
               {actions}

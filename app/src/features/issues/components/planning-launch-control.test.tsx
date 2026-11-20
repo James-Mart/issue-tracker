@@ -120,6 +120,9 @@ const idea = {
   partOf: "platform",
   order: 0,
   archived: false,
+  decompositionGate: false,
+  executionGate: "auto" as const,
+  outOfBand: false,
   createdAt: t0,
   updatedAt: t0,
   description: "",
@@ -168,6 +171,15 @@ describe("PlanningChannelEmptyState", () => {
       '[data-testid="planning-merge-base"]',
     ) as HTMLInputElement;
     expect(mergeBase.value).toBe("main");
+    expect(
+      container.querySelector('[data-testid="detail-decomposition-gate"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="detail-execution-gate"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="detail-out-of-band"]'),
+    ).toBeTruthy();
 
     await act(async () => {
       (
@@ -212,7 +224,7 @@ describe("PlanningChannelEmptyState", () => {
     ) as HTMLInputElement;
     expect(mergeBase.value).toBe("main");
     expect(
-      container.querySelector('[data-testid="detail-outline-gate"]'),
+      container.querySelector('[data-testid="detail-decomposition-gate"]'),
     ).toBeTruthy();
 
     await act(async () => {

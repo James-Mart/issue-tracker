@@ -112,18 +112,8 @@ describe("planningStatusById", () => {
     expect(statusOf()).toBe("outlined");
   });
 
-  it("is awaiting-approval when approvalPending is set and no run is live", async () => {
+  it("is awaiting-direction when a session stopped without a plan output", async () => {
     seedProjectAndIdea();
-    writeIssue("capture", {
-      kind: "idea",
-      title: "Capture",
-      partOf: "platform",
-      order: 0,
-      archived: false,
-      approvalPending: true,
-      createdAt: AT,
-      updatedAt: AT,
-    });
     const { statusOf, createConversation, appendEvent } = await load();
     const meta = await createConversation({
       title: "Plan capture",
@@ -136,6 +126,6 @@ describe("planningStatusById", () => {
       type: "assistant",
       text: "Does this outline look right?",
     });
-    expect(statusOf()).toBe("awaiting-approval");
+    expect(statusOf()).toBe("awaiting-direction");
   });
 });

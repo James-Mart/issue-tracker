@@ -59,6 +59,9 @@ const idea: Extract<IssueRecord, { kind: "idea" }> = {
   partOf: "platform",
   order: 0,
   archived: false,
+  decompositionGate: false,
+  executionGate: "auto",
+  outOfBand: false,
   createdAt: t0,
   updatedAt: t0,
 };
@@ -78,29 +81,56 @@ afterEach(() => {
   mutateAsync.mockReset();
 });
 
-describe("Planning execution gate chip", () => {
-  it("toggles executionGate through the Idea update endpoint from overview", async () => {
-    mutateAsync.mockResolvedValueOnce({});
-    const ideaWithStakeholder = {
-      ...idea,
-      id: "overview-exec-toggle",
-      stakeholder: "claude-opus-5",
-    };
-    const { container } = mount(
-      <PlanningOverviewLaunch issue={ideaWithStakeholder} />,
-    );
+function click(container: HTMLElement, testId: string) {
+  return act(async () => {
+    (container.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement).click();
+  });
+}
 
-    await act(async () => {
-      (
-        container.querySelector(
-          '[data-testid="detail-execution-gate"]',
-        ) as HTMLButtonElement
-      ).click();
-    });
+describe("Planning plan settings", () => {
+  it("saves Auto, On, and Off through the Idea update from overview", async () => {
+    mutateAsync.mockResolvedValue({});
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
 
+    expect(
+      container.querySelector('[data-testid="detail-execution-gate"]')
+        ?.getAttribute("data-value"),
+    ).toBe("auto");
+    expect(container.textContent).toContain("Auto");
+    expect(container.textContent).toContain("On");
+    expect(container.textContent).toContain("Off");
+
+    await click(container, "detail-execution-gate-auto");
+    expect(mutateAsync).not.toHaveBeenCalled();
+
+    await click(container, "detail-execution-gate-on");
     expect(mutateAsync).toHaveBeenCalledWith({
-      id: "overview-exec-toggle",
+      id: "capture",
       patch: { executionGate: true },
     });
+
+    await click(container, "detail-execution-gate-off");
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "capture",
+      patch: { executionGate: false },
+    });
+  });
+
+  it("hides the other gates when implemented out of band is turned on", async () => {
+    mutateAsync.mockResolvedValueOnce({});
+    const { container } = mount(<PlanningOverviewLaunch issue={idea} />);
+
+    await click(container, "detail-out-of-band");
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      id: "capture",
+      patch: { outOfBand: true },
+    });
+    expect(
+      container.querySelector('[data-testid="detail-decomposition-gate"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="detail-execution-gate"]'),
+    ).toBeNull();
   });
 });
