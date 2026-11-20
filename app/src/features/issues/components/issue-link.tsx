@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import type { ConversationChannel } from "@server/schemas";
 import { toast } from "sonner";
 import { projectIdOf } from "../lib/build-tree";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "../lib/issue-back";
-import { issuePath, linkNotFoundMessage } from "../lib/links";
+import { issueChannelPath, issuePath, linkNotFoundMessage } from "../lib/links";
 import {
   IssueLinkResolution,
   type IssueSupplement,
@@ -15,7 +16,20 @@ import {
 
 export type { IssueSupplement };
 
-export function useBoundNavigate(supplement: IssueSupplement): {
+function issueHref(
+  projectId: string,
+  targetId: string,
+  channel?: ConversationChannel,
+): string {
+  return channel
+    ? issueChannelPath(projectId, targetId, channel)
+    : issuePath(projectId, targetId);
+}
+
+export function useBoundNavigate(
+  supplement: IssueSupplement,
+  channel?: ConversationChannel,
+): {
   go: (targetId: string) => void;
   hrefFor: (targetId: string) => string;
 } & IssueSupplement {
@@ -25,7 +39,7 @@ export function useBoundNavigate(supplement: IssueSupplement): {
 
   const hrefFor = (targetId: string): string => {
     const projectId = projectIdOf(targetId, supplement.byId) ?? routeProjectId;
-    return projectId ? issuePath(projectId, targetId) : "#";
+    return projectId ? issueHref(projectId, targetId, channel) : "#";
   };
 
   const go = (targetId: string) => {
@@ -53,7 +67,7 @@ export function useBoundNavigate(supplement: IssueSupplement): {
       (location.state as IssueBackLocationState | null)?.issueBackStack,
     );
     navigate(
-      issuePath(projectId, targetId),
+      issueHref(projectId, targetId, channel),
       navigateState ? { state: navigateState } : undefined,
     );
   };
@@ -61,9 +75,9 @@ export function useBoundNavigate(supplement: IssueSupplement): {
   return { go, hrefFor, ...supplement };
 }
 
-export function useIssueLinkNavigate(id: string) {
+export function useIssueLinkNavigate(id: string, channel?: ConversationChannel) {
   const supplement = useSupplementedById(id ? [id] : []);
-  return useBoundNavigate(supplement);
+  return useBoundNavigate(supplement, channel);
 }
 
 function IssueAnchor({
@@ -106,12 +120,14 @@ function IssueLinkOwned({
   id,
   children,
   className,
+  channel,
 }: {
   id: string;
   children: ReactNode;
   className?: string;
+  channel?: ConversationChannel;
 }) {
-  const nav = useIssueLinkNavigate(id);
+  const nav = useIssueLinkNavigate(id, channel);
   return (
     <IssueAnchor
       id={id}
@@ -129,13 +145,15 @@ function IssueLinkShared({
   children,
   className,
   supplement,
+  channel,
 }: {
   id: string;
   children: ReactNode;
   className?: string;
   supplement: IssueSupplement;
+  channel?: ConversationChannel;
 }) {
-  const nav = useBoundNavigate(supplement);
+  const nav = useBoundNavigate(supplement, channel);
   return (
     <IssueAnchor id={id} className={className} nav={nav} resolve={false}>
       {children}
@@ -148,11 +166,14 @@ export function IssueLink({
   children,
   className,
   supplement,
+  channel,
 }: {
   id: string;
   children: ReactNode;
   className?: string;
   supplement?: IssueSupplement;
+  /** Channel tab on the target issue, such as an outline's planner sessions. */
+  channel?: ConversationChannel;
 }) {
   if (supplement) {
     return (
@@ -160,13 +181,14 @@ export function IssueLink({
         id={id}
         className={className}
         supplement={supplement}
+        channel={channel}
       >
         {children}
       </IssueLinkShared>
     );
   }
   return (
-    <IssueLinkOwned id={id} className={className}>
+    <IssueLinkOwned id={id} className={className} channel={channel}>
       {children}
     </IssueLinkOwned>
   );

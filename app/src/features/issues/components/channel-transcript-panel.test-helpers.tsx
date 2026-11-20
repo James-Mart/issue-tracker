@@ -1,7 +1,8 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
-import type { ChannelSessionListItem, IssueDetail } from "@server/schemas";
+import type { ChannelSessionListItem, IssueDetail, IssueRecord } from "@server/schemas";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 
@@ -12,10 +13,14 @@ const fixtures = vi.hoisted(() => ({
   queryArgs: {
     awaitingLaunchSession: undefined as boolean | undefined,
   },
+  issuesState: {
+    data: undefined as { issues: IssueRecord[] } | undefined,
+  },
 }));
 
 export const queryState = fixtures.queryState;
 export const queryArgs = fixtures.queryArgs;
+export const issuesState = fixtures.issuesState;
 
 vi.mock("../api/queries", () => ({
   useChannelSessionsQuery: (
@@ -41,6 +46,11 @@ vi.mock("../api/queries", () => ({
     isError: false,
     error: null,
   }),
+  useIssuesQuery: () => ({
+    data: fixtures.issuesState.data,
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 vi.mock("../hooks/use-parked-root-resume", () => ({
@@ -51,7 +61,7 @@ vi.mock("./planning-launch-control", () => ({
   PlanningChannelEmptyState: () => (
     <div data-testid="planning-channel-empty-state" />
   ),
-  PlanningNewRunControl: () => null,
+  PlanningNewRunControl: () => <div data-testid="planning-new-run" />,
 }));
 
 vi.mock("./channel-retro-control", () => ({
@@ -132,12 +142,14 @@ export function mountPanel(issue?: IssueDetail): {
   const rerender = () => {
     act(() => {
       root.render(
-        <ChannelTranscriptPanel
-          issueId={issue?.id ?? "capture"}
-          issue={issue}
-          channel="planning"
-          label="Planning"
-        />,
+        <MemoryRouter>
+          <ChannelTranscriptPanel
+            issueId={issue?.id ?? "capture"}
+            issue={issue}
+            channel="planning"
+            label="Planning"
+          />
+        </MemoryRouter>,
       );
     });
   };
@@ -145,7 +157,7 @@ export function mountPanel(issue?: IssueDetail): {
   return { container, root, rerender };
 }
 
-export const idea: IssueDetail = {
+export const idea: Extract<IssueDetail, { kind: "idea" }> = {
   kind: "idea",
   id: "capture",
   title: "Capture",
@@ -165,6 +177,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   queryState.data = undefined;
   queryArgs.awaitingLaunchSession = undefined;
+  issuesState.data = undefined;
   resetCockpitLaunchStore();
 });
 

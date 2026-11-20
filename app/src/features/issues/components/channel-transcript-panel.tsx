@@ -50,6 +50,11 @@ import {
   PlanningChannelEmptyState,
   PlanningNewRunControl,
 } from "./planning-launch-control";
+import {
+  PlanningConcludedBanner,
+  PlanningReadOnlyBadge,
+  useConcludedPlanningOutline,
+} from "./planning-concluded-banner";
 
 type IdeaDetail = Extract<IssueDetail, { kind: "idea" }>;
 type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
@@ -190,6 +195,14 @@ export function ChannelTranscriptPanel({
     <ChannelLaunchFaultBanner fault={thisFault} />
   ) : null;
   const planningIdea = isPlanningIdea(channel, issue) ? issue : undefined;
+  const concludedOutline = useConcludedPlanningOutline(planningIdea);
+  const concludedBanner =
+    planningIdea?.archived && concludedOutline ? (
+      <PlanningConcludedBanner
+        outlineId={concludedOutline.id}
+        outlineTitle={concludedOutline.title}
+      />
+    ) : null;
   const implementingWorkRoot = isImplementingWorkRoot(channel, issue, parentKind)
     ? issue
     : undefined;
@@ -343,7 +356,16 @@ export function ChannelTranscriptPanel({
   }
 
   if (!selectedSession) {
-    const emptyAction = planningIdea ? (
+    const emptyAction = planningIdea?.archived ? (
+      concludedBanner ?? (
+        <ShellState
+          className="border-0 bg-transparent px-4 py-8 shadow-none"
+          eyebrow={label}
+          title="This Idea is archived."
+          detail="Its planning conversation is read-only."
+        />
+      )
+    ) : planningIdea ? (
       <PlanningChannelEmptyState
         issue={planningIdea}
         channel={channel}
@@ -394,13 +416,15 @@ export function ChannelTranscriptPanel({
           : channel
     : undefined;
   const showSessionControls = sessions.length >= 1;
-  const planningNewRun = planningIdea ? (
-    <PlanningNewRunControl
-      issue={planningIdea}
-      channel={channel}
-      onStarted={onSessionStarted}
-    />
-  ) : null;
+  const planningNewRun =
+    planningIdea && !planningIdea.archived ? (
+      <PlanningNewRunControl
+        issue={planningIdea}
+        channel={channel}
+        onStarted={onSessionStarted}
+      />
+    ) : null;
+  const readOnlyBadge = planningIdea?.archived ? <PlanningReadOnlyBadge /> : null;
   const implementingNewRun =
     implementingWorkRoot && projectId ? (
       <ImplementingNewRunControl issue={implementingWorkRoot} />
@@ -446,6 +470,13 @@ export function ChannelTranscriptPanel({
       </ChannelSessionOverflowMenu>
     ) : null;
 
+  const sessionTrailing =
+    readOnlyBadge || channelHeaderActions ? (
+      <>
+        {channelHeaderActions}
+        {readOnlyBadge}
+      </>
+    ) : null;
   const desktopHeader = showSessionControls ? (
     <ChannelSessionSwitcher
       issueId={issueId}
@@ -455,14 +486,14 @@ export function ChannelTranscriptPanel({
       onSelectedIdChange={setSelectedId}
       showSelect={showSessionSelect}
       channelForSession={channelForSession}
-      trailing={channelHeaderActions}
+      trailing={sessionTrailing}
     />
-  ) : channelHeaderActions ? (
+  ) : sessionTrailing ? (
     <div
       className="flex min-w-0 items-center justify-end gap-2 border-b border-border px-4 py-2"
       data-testid="channel-panel-header"
     >
-      {channelHeaderActions}
+      {sessionTrailing}
     </div>
   ) : null;
 
@@ -473,13 +504,29 @@ export function ChannelTranscriptPanel({
         key={selectedSession.id}
         conversationId={selectedSession.id}
         meta={{ title: selectedSession.title, model: selectedSession.model }}
-        hideComposer={selectedSession.archived}
+        hideComposer={
+          selectedSession.archived || Boolean(planningIdea?.archived)
+        }
         pauseCancel={channel === "implementing"}
         parkedResume={parkedResume}
         onBack={mobileBack?.onBack}
         backAriaLabel={mobileBack?.backAriaLabel}
-        headerActions={mobileFullViewport ? overflowActions : undefined}
-        banner={launchFaultBanner ?? undefined}
+        headerActions={
+          mobileFullViewport && (readOnlyBadge || overflowActions) ? (
+            <>
+              {readOnlyBadge}
+              {overflowActions}
+            </>
+          ) : undefined
+        }
+        banner={
+          launchFaultBanner || concludedBanner ? (
+            <>
+              {launchFaultBanner}
+              {concludedBanner}
+            </>
+          ) : undefined
+        }
       />
     </ChannelPanelFrame>
   );
