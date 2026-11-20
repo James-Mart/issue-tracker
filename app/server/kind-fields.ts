@@ -159,6 +159,7 @@ export const OUTLINE_SET_FIELDS = {
   archived: { type: "boolean" },
   partOf: { type: "string" },
   sourceIdea: { type: "string" },
+  outOfBand: { type: "boolean" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
 
@@ -233,6 +234,7 @@ export const EPIC_GET_FIELDS = {
   workQueuePosition: STORED,
   workParkedAt: STORED,
   workResumeNote: STORED,
+  releasedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const IDEA_GET_FIELDS = {
@@ -302,6 +304,7 @@ export const STORY_GET_FIELDS = {
   workQueuePosition: STORED,
   workParkedAt: STORED,
   workResumeNote: STORED,
+  releasedAt: STORED,
 } as const satisfies Record<string, GetFieldSpec>;
 
 export const TASK_GET_FIELDS = {
@@ -336,6 +339,13 @@ export const OUTLINE_GET_FIELDS = {
   archived: STORED,
   version: { source: "stored", storeAs: "bodyVersion" },
   sourceIdea: STORED,
+  executionGate: STORED,
+  codeApprovalRequired: STORED,
+  mergeBase: STORED,
+  mergePolicy: STORED,
+  outOfBand: STORED,
+  concludedAt: STORED,
+  readyToDecompose: DERIVED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

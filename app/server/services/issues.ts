@@ -23,6 +23,7 @@ import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
+import { clearReadyDuringLiveDecomposition } from "./ready-to-decompose.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
 import { mergeIssue } from "./merge.js";
@@ -58,12 +59,7 @@ import {
   validateSystemWrittenPatch,
 } from "./patch.js";
 import { validateCommitsPatch } from "./commit-sha.js";
-import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
-import { planWorkQueueStamps } from "./work-queue.js";
-import {
-  assertMergePolicyLattice,
-  validateMergePolicyPatch,
-} from "./merge-policy.js";
+import { validateMergePolicyPatch } from "./merge-policy.js";
 import {
   guardRootMergeSettingsPatch,
   type RootMergeSettingsMode,
@@ -182,6 +178,7 @@ export function list(): IssuesResponse {
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
   mergeImplementingOverlay(issues, derived.byId);
+  clearReadyDuringLiveDecomposition(derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.
@@ -236,6 +233,18 @@ export function readOutlineOrThrow(
   const issue = readIssueOrThrow(id);
   if (issue.kind !== "outline") {
     throw new IssueError("validation", `issue "${id}" is not an outline`);
+  }
+  return issue;
+}
+
+/** Read an Idea. `as` is the noun in the refusal (`issue`, `source idea`). */
+export function readIdeaOrThrow(
+  id: string,
+  as = "issue",
+): Extract<Issue, { kind: "idea" }> {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "idea") {
+    throw new IssueError("validation", `${as} "${id}" is not an idea`);
   }
   return issue;
 }
@@ -686,33 +695,6 @@ export function update(
     for (const sibling of mergeSiblingWrites) {
       writes.push({ issue: sibling });
     }
-    const codeGateMergePolicyWrites = planCodeGateMergePolicyLowering(
-      existing,
-      jsonPatch,
-      issues,
-    ).map((issue) => ({ ...issue, updatedAt: now }));
-    const issuesForQueue = issues.map((issue) => {
-      const lowered = codeGateMergePolicyWrites.find(
-        (root) => root.id === issue.id,
-      );
-      return lowered ?? issue;
-    });
-    const workQueueWrites = planWorkQueueStamps(
-      existing,
-      jsonPatch,
-      issuesForQueue,
-      now,
-    );
-    const companionWrites = new Map<string, Issue>();
-    for (const root of codeGateMergePolicyWrites) {
-      companionWrites.set(root.id, root);
-    }
-    for (const root of workQueueWrites) {
-      companionWrites.set(root.id, root);
-    }
-    for (const root of companionWrites.values()) {
-      writes.push({ issue: root });
-    }
     // Only `archived` changes on these reviews, which integrity does not
     // constrain, so they stay out of the scoped-check decision below.
     const reviewArchiveWrites = archiveReviewsOfClosingStories(
@@ -732,11 +714,7 @@ export function update(
       reviewArchiveWrites,
     );
 
-    if (
-      cascaded.length === 0 &&
-      mergeSiblingWrites.length === 0 &&
-      companionWrites.size === 0
-    ) {
+    if (cascaded.length === 0 && mergeSiblingWrites.length === 0) {
       // Single-node write: keep the historical scoped check so unrelated
       // pre-existing integrity problems do not block this update.
       assertWritable(parsed.issue, issues);
@@ -754,9 +732,6 @@ export function update(
           "validation",
           problems.map((p) => p.message).join("; "),
         );
-      }
-      if (codeGateMergePolicyWrites.length > 0) {
-        assertMergePolicyLattice([...prospective.values()]);
       }
     }
 

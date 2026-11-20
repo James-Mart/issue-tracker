@@ -1,9 +1,7 @@
 import type { IssueDetail } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
-import { derive } from "./derive.js";
 import { IssueError } from "./errors.js";
 import { problemsFor } from "./integrity.js";
-import { isWorkRootFinished } from "../../src/features/issues/lib/derived.js";
 import {
   commitIssueBatch,
   ensureMigrations,
@@ -12,20 +10,13 @@ import {
   readIssueOrThrow,
   serialize,
 } from "./issues.js";
-import { projectContaining } from "./subtree.js";
 import {
-  firstBlockingEnqueueBlocker,
+  queueRefusal,
   refuseWorkQueueConflict,
   withQueueStamp,
 } from "./work-queue.js";
 import { drainWorkQueue } from "./work-queue-launcher.js";
-import {
-  implementingWorkRootFromIssue,
-  slotHoldingRootIds,
-} from "./work-slots.js";
-
-export const ENQUEUE_ALREADY_QUEUED = "already-queued";
-export const ENQUEUE_HOLDS_SLOT = "holds-slot";
+import { implementingWorkRootFromIssue } from "./work-slots.js";
 
 /**
  * Queue an unarchived, unfinished work root that is not already in the queue.
@@ -51,47 +42,8 @@ export async function enqueueWorkRoot(
         `issue "${id}" is not an implementing work root`,
       );
     }
-    if (root.archived) {
-      refuseWorkQueueConflict("archived", `work root "${root.title}" is archived`);
-    }
-    const derived = derive(issues);
-    if (isWorkRootFinished(root, issues, derived.byId)) {
-      refuseWorkQueueConflict("finished", `work root "${root.title}" is finished`);
-    }
-    if (root.workQueuedAt || root.workParkedAt) {
-      refuseWorkQueueConflict(
-        ENQUEUE_ALREADY_QUEUED,
-        `work root "${root.title}" is already queued`,
-      );
-    }
-    const projectId = projectContaining(root, byId);
-    if (!projectId) {
-      throw new IssueError("validation", `work root "${root.id}" has no project`);
-    }
-    const slotHolders = slotHoldingRootIds(projectId, {
-      issues,
-      derived: derived.byId,
-      byId,
-    });
-    if (slotHolders.has(root.id)) {
-      refuseWorkQueueConflict(
-        ENQUEUE_HOLDS_SLOT,
-        `work root "${root.title}" already holds an implementing slot`,
-      );
-    }
-    const blocker = firstBlockingEnqueueBlocker(
-      root,
-      issues,
-      derived,
-      byId,
-      slotHolders,
-    );
-    if (blocker) {
-      refuseWorkQueueConflict(
-        "blocked",
-        `Blocked by ${blocker.title}, so it must be queued after it`,
-      );
-    }
+    const refusal = queueRefusal(root, issues, byId);
+    if (refusal) refuseWorkQueueConflict(refusal.reason, refusal.message);
     const stamped = withQueueStamp(root, issues, byId, new Date().toISOString());
     const prospective = issues.map((issue) =>
       issue.id === stamped.id ? stamped : issue,

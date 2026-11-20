@@ -71,6 +71,7 @@ import {
   outlineVersionDiff,
   parseOutlineVersion,
 } from "../services/outline-body.js";
+import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
   parseDecomposeRequest,
   startOutlinePlanningSession,
@@ -211,6 +212,20 @@ export function createIssuesRouter(
         title: meta.title,
         model: meta.model,
       });
+    }),
+  );
+
+  router.post(
+    "/:id/conclude",
+    asyncRoute(async (req, res) => {
+      const request = parseConcludeRequest(req.body);
+      const result = await concludeIdea(
+        req.params.id,
+        request.outlineId,
+        request.codeGateVerdict,
+        sessions,
+      );
+      res.status(201).json(result);
     }),
   );
 

@@ -7,6 +7,7 @@ import { ensureMergedAtBackfilled } from "./merge-consequences.js";
 import { ensureOutlineChannelsMigrated } from "./outline-channel-migration.js";
 import { ensurePlanSettingsMigrated } from "./plan-settings-migration.js";
 import { ensureReviewRecordsMigrated } from "./review-record-migration.js";
+import { ensureReleaseMigrated } from "./release-migration.js";
 import { ensureReviewThreadsMigrated } from "./review-thread-migration.js";
 import { ensureSourceIdeaMigrated } from "./source-idea-migration.js";
 import { refusesStoreWrites } from "./store-read-only.js";
@@ -32,4 +33,5 @@ export function runStoreMigrations(persistIssue: (issue: Issue) => void): void {
   ensureOutlineChannelsMigrated();
   ensureGithubCommentsMigrated();
   ensureWorkQueuePositionsBackfilled(persistIssue);
+  ensureReleaseMigrated(persistIssue);
 }

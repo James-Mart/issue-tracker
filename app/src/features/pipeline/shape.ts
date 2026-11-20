@@ -103,9 +103,9 @@ const planning: Pipeline = {
       source: "agents/issue-tracker-mockup-author.md",
     },
     {
-      id: "outline-gate",
-      name: "Outline gate",
-      kind: "gate",
+      id: "conclude",
+      name: "Conclude",
+      kind: "step",
       pipeline: "planning",
       source: PLAN_SKILL,
     },
@@ -191,10 +191,10 @@ const planning: Pipeline = {
     { from: "grill", to: "mockup-round", kind: "flow" },
     { from: "mockup-round", to: "design-conformance", kind: "spawn" },
     { from: "design-conformance", to: "mockup-author", kind: "spawn" },
-    { from: "mockup-round", to: "outline-gate", kind: "flow" },
-    // Decomposition starts through the outline Decompose request, so this
-    // edge has no spawn stub for the drift guard to match.
-    { from: "outline-gate", to: "decomposer", kind: "flow" },
+    { from: "mockup-round", to: "conclude", kind: "flow" },
+    // Conclude starts the decomposer when the gates say so. This edge has
+    // no spawn stub for the drift guard to match.
+    { from: "conclude", to: "decomposer", kind: "flow" },
     { from: "decomposer", to: "research", kind: "spawn" },
     { from: "decomposer", to: "polish", kind: "flow" },
     { from: "polish", to: "check-dry", kind: "spawn" },

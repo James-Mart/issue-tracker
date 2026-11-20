@@ -3,15 +3,12 @@ import {
   type ConversationMessageSessions,
 } from "./conversation-message.js";
 import { activeImplementingConversationId } from "./conversations.js";
-import {
-  ENQUEUE_ALREADY_QUEUED,
-  ENQUEUE_HOLDS_SLOT,
-  enqueueWorkRoot,
-} from "./enqueue-work-root.js";
+import { enqueueWorkRoot } from "./enqueue-work-root.js";
 import { IssueError } from "./errors.js";
 import { implementingResumePrompt } from "./implementing-launch.js";
 import { readIssueOrThrow } from "./issues.js";
 import { resumeParkedWorkRoot } from "./resume-work-root.js";
+import { ENQUEUE_ALREADY_QUEUED, ENQUEUE_HOLDS_SLOT } from "./work-queue.js";
 
 function enqueueReason(err: unknown): string | undefined {
   if (!(err instanceof IssueError)) return undefined;

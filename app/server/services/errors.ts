@@ -61,3 +61,14 @@ export class IssueError extends Error {
     return STATUS[this.code];
   }
 }
+
+/** The write already committed. Say why the follow-up (a session start) failed. */
+export function errorAfterCommit(error: unknown, committed: string): IssueError {
+  const reason = error instanceof Error ? error.message : String(error);
+  const code = error instanceof IssueError ? error.code : "validation";
+  return new IssueError(
+    code,
+    `${committed}: ${reason}`,
+    error instanceof IssueError ? error.details : undefined,
+  );
+}

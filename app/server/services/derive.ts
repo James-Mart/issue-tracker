@@ -11,6 +11,10 @@ import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
 import { effectiveMergePolicy } from "./merge-policy.js";
 import { mergeSettingsLockFor } from "./merge-settings-lock.js";
+import {
+  outlineIdsWithLinkedRoot,
+  outlineReadyToDecompose,
+} from "./ready-to-decompose.js";
 import { projectContaining, projectTrunk } from "./subtree.js";
 
 export interface DeriveResult {
@@ -42,7 +46,7 @@ function planNotFinalOf(
     const parent = byId.get(issue.partOf);
     if (parent?.kind !== "project") return false;
   }
-  return !idea.archived;
+  return !issue.releasedAt;
 }
 
 function stampOlderThanLatest(
@@ -258,6 +262,14 @@ export function derive(issues: Issue[]): DeriveResult {
       planRoots: roots.map((r) => r.id),
       generatedOutlines,
     };
+  }
+
+  const linkedRoots = outlineIdsWithLinkedRoot(issues, byId);
+  for (const issue of issues) {
+    if (issue.kind !== "outline") continue;
+    const existing = state[issue.id] ?? { blocked: false };
+    existing.readyToDecompose = outlineReadyToDecompose(issue, linkedRoots);
+    state[issue.id] = existing;
   }
 
   return { byId: state, problems };

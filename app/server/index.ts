@@ -68,6 +68,9 @@ const { startWorkQueueLauncher } = await import(
 );
 startWorkQueueLauncher(agentSessions);
 
+const { startPlannerHandoffs } = await import("./services/planner-handoff.js");
+startPlannerHandoffs(agentSessions);
+
 const { registerPrSyncStep, startPrSyncDriver } = await import(
   "./services/pr-sync-driver.js"
 );

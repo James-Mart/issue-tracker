@@ -38,6 +38,7 @@ import {
   update,
 } from "./server/services/issues.js";
 import { refreshRecordedPrFacts } from "./server/services/pr-facts-read.js";
+import { releaseWorkRoot } from "./server/services/release-work-root.js";
 import { formatReviewDiffRange } from "./server/services/review-diff.js";
 import { reviewStatus } from "./server/services/review-lifecycle.js";
 import {
@@ -247,6 +248,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
     }
     if (detail.workParkedAt) lines.push(`workParkedAt: ${detail.workParkedAt}`);
     if (detail.workResumeNote) lines.push(`workResumeNote: ${detail.workResumeNote}`);
+    if (detail.releasedAt) lines.push(`releasedAt: ${detail.releasedAt}`);
   }
   if (detail.kind === "epic" || detail.kind === "story" || detail.kind === "task") {
     if (detail.sourceIdea) lines.push(`sourceIdea: ${detail.sourceIdea}`);
@@ -847,6 +849,18 @@ export function registerBareIdOps(program: Command, run: Run): void {
       run(async () => {
         resolveIssueKind(id);
         await printDetach(id, name);
+      }),
+    );
+
+  program
+    .command("release")
+    .argument("<rootId>", "Epic or project-level Story id")
+    .description(
+      "mark the root's plan final from its outline's settings: lower merge policy when code approval is required, and queue it when the execution gate starts it",
+    )
+    .action((rootId: string) =>
+      run(async () => {
+        process.stdout.write(`${await releaseWorkRoot(rootId)}\n`);
       }),
     );
 

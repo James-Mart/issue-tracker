@@ -137,20 +137,15 @@ After all five check agents return, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/references/aggregate-apply-summary.md`
 and follow it.
 
-## Archive source Idea
+## Release
 
 When a root's polish completes successfully — aggregate → apply → summary
-finished without an unresolved escalate — archive its source Idea when safe:
-
-1. Read `issue get <rootId> sourceIdea`. When absent, stop.
-2. Read `issue idea get <ideaId> planRoots`. When that array is exactly this
-   one root, run `issue idea set <ideaId> archived true`.
-3. When `planRoots` lists more than one root, leave the Idea unarchived —
-   archiving on this root's polish would hand out the others as ready before
-   their own polish had run.
+finished without an unresolved escalate — and the root is an Epic or a
+project-level Story whose `issue get <rootId> sourceOutline` prints a value,
+run `issue release <rootId>` as the last step.
 
 On an escalation or any exit that is not a successful completion, leave the
-Idea unarchived.
+root unreleased.
 
 ## Rules
 

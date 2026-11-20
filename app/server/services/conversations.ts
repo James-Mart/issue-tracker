@@ -65,6 +65,7 @@ import {
 } from "./guest-agent-launch.js";
 import { list, readIssueOrThrow, update } from "./issues.js";
 import { refuseAppendPlanningCreate } from "./refuse-append-planning.js";
+import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
 import { queueDeparturePatch } from "./work-queue.js";
 import { uniqueSlug } from "./slug.js";
 import { refuseIfNoFreeSlot } from "./work-slots.js";
@@ -235,6 +236,9 @@ export type CreateForkedConversationInput = {
   agentId: string;
   forkedFrom: string;
   forkedAtSeq: number;
+  role?: string;
+  /** Issue channel the fork is a session on. */
+  anchor?: Pick<ConversationMeta, "issueId" | "channel" | "outlineRole">;
 };
 
 /** Write fork meta + empty transcript/delegations. Caller must hold `serialize()`. */
@@ -264,6 +268,8 @@ export function persistForkedConversation(
     agentId,
     forkedFrom,
     forkedAtSeq: input.forkedAtSeq,
+    ...(input.role ? { role: input.role } : {}),
+    ...input.anchor,
   });
 }
 
@@ -497,6 +503,7 @@ export async function createIssueChannelSession(
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
     refuseAppendPlanningCreate(issueId, input.channel);
+    refuseArchivedIdeaPlanning(issueId, input.channel);
 
     for (const existing of channelPredecessors(issueId, input.channel)) {
       archiveIdleConversation(existing, sessions);

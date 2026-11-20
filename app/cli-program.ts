@@ -3,6 +3,7 @@ import { format } from "util";
 import { Command, CommanderError } from "commander";
 import { parse as parseYaml } from "yaml";
 import { list, readAll, update } from "./server/services/issues.js";
+import { registerIdeaCommands } from "./cli-idea.js";
 import { registerOutlineCommands } from "./cli-outline.js";
 import { KINDS } from "./server/issue-constants.js";
 import {
@@ -379,6 +380,9 @@ function createIssueProgram(run: Run): Command {
     if (kind === "review") {
       registerReviewStandardsCommands(kindCmd, run);
       registerReviewOutlineCheckCommands(kindCmd, run);
+    }
+    if (kind === "idea") {
+      registerIdeaCommands(kindCmd, run);
     }
     if (kind === "outline") {
       registerOutlineCommands(kindCmd, run);

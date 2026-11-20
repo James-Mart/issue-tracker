@@ -22,7 +22,7 @@ import {
   type FirstPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { readIssueOrThrow, readOutlineOrThrow } from "./issues.js";
+import { readIdeaOrThrow, readOutlineOrThrow } from "./issues.js";
 
 type OutlineIssue = Extract<Issue, { kind: "outline" }>;
 type IdeaIssue = Extract<Issue, { kind: "idea" }>;
@@ -139,11 +139,7 @@ export async function createOutlinePlanningSession(
 
 /** The Idea a `sourceIdea` field names. Any other kind is refused. */
 export function readSourceIdeaOrThrow(id: string): IdeaIssue {
-  const idea = readIssueOrThrow(id);
-  if (idea.kind !== "idea") {
-    throw new IssueError("validation", `source idea "${id}" is not an idea`);
-  }
-  return idea;
+  return readIdeaOrThrow(id, "source idea");
 }
 
 function sessionMessage(

@@ -7,7 +7,7 @@ import {
 } from "../schemas.js";
 import type { ConversationMessageSessions } from "./conversation-message.js";
 import { refuseIfChannelBusy } from "./conversations.js";
-import { IssueError } from "./errors.js";
+import { errorAfterCommit, IssueError } from "./errors.js";
 import {
   commitIssueBatch,
   readDescription,
@@ -127,12 +127,9 @@ export async function publishOutlineDraft(
     );
     return { version: prepared.version, meta };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    const code = error instanceof IssueError ? error.code : "validation";
-    throw new IssueError(
-      code,
-      `outline "${id}" was saved as version ${prepared.version}, but reconciliation did not start: ${reason}`,
-      error instanceof IssueError ? error.details : undefined,
+    throw errorAfterCommit(
+      error,
+      `outline "${id}" was saved as version ${prepared.version}, but reconciliation did not start`,
     );
   }
 }

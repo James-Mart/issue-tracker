@@ -49,6 +49,7 @@ export const EPIC_IMPERATIVE_ONLY_KEYS = [
   "workQueuePosition",
   "workParkedAt",
   "workResumeNote",
+  "releasedAt",
 ] as const;
 
 export const EPIC_RUNTIME_OPTIONAL_KEYS = EPIC_IMPERATIVE_ONLY_KEYS;
@@ -80,6 +81,7 @@ export const STORY_IMPERATIVE_ONLY_KEYS = [
   "workQueuePosition",
   "workParkedAt",
   "workResumeNote",
+  "releasedAt",
 ] as const;
 
 export const STORY_FIELD_KEYS = [
@@ -108,6 +110,7 @@ export const STORY_RUNTIME_OPTIONAL_KEYS = [
   "workQueuePosition",
   "workParkedAt",
   "workResumeNote",
+  "releasedAt",
 ] as const;
 
 // Imperative Idea fields `apply` preserves from disk.

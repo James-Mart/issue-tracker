@@ -136,13 +136,10 @@ Run these commands in order (use `<rootId>` throughout):
    `tree` hide archived rows by default; pass `--show-archived` when you need
    them — see [SPEC.md](../../SPEC.md#archived-visibility).)
 5. For both root kinds (`<rootKind>` `epic` or `story`): `issue get <rootId>
-   planNotFinal` — if stdout is `true`, the root's plan is not final (its
-   source Idea is still unarchived). **Stop and hand back to the user** rather
-   than working any Task. What clears it: let the plan's polish finish, or
-   archive the source Idea with `issue idea set <ideaId> archived true` (read
-   `<ideaId>` from `issue get <rootId> sourceIdea`) — the same escape hatch
-   the Cockpit's archive control performs. There is nothing stored on the root
-   to change.
+   planNotFinal` — if stdout is `true`, the root's plan is not final (it has
+   not been released). **Stop and hand back to the user** rather than working
+   any Task. What clears it: let the plan's polish finish, which ends with
+   `issue release <rootId>`.
 6. **Epic only** (`<rootKind>` = `epic`): `issue epic get <rootId> blocked` —
    if stdout is `true`, the Epic is `blockedBy` a blocker that has not fully
    merged, so — per Argument — it **cannot start**. Stop and hand back to the

@@ -317,11 +317,11 @@ These are computed by `derive()` and never written to disk (see
   (JSON array; `[]` when none).
 - **planNotFinal** — derived on Epics and root project-level Stories: `true`
   when the issue stores `sourceIdea`, the referenced Idea is present in the
-  issue set, and that Idea's `archived` is not true; otherwise `false`; also
+  issue set, and the root has no `releasedAt`; otherwise `false`; also
   `issue epic get … planNotFinal` / `issue story get … planNotFinal`. Tree
   chip `plan not final` when true. A work root reports ready on every surface
-  a worker reads only when `planNotFinal` is `false`; archiving the source
-  Idea is the act that declares planning finished.
+  a worker reads only when `planNotFinal` is `false`; [release](#plan-release)
+  is the act that declares planning finished.
 - **behind** — derived on Epics, Stories, and Tasks. `true` when
   `sourceOutline` names a version older than that outline's latest and the
   item is unmerged; otherwise `false` (including when `sourceOutline` is
@@ -734,7 +734,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
   default: an Epic with no blockers prints `[]` (arrays as JSON), not empty
   stdout.
 - Readable surface is **wider than set**: any stored field for that kind plus
-  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `generatedOutlines`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
+  derived fields (`epicStatus`, `storyStatus`, `ideaStatus`, `planRoots`, `generatedOutlines`, `readyToDecompose`, `planNotFinal`, `behind`, `blocked`, `mergeBase`, `mergeBaseRef`, `behindMergeBase`, `mergeSettingsLock`, `worktree`, `openLinkedThreadRoots`, …).
 - Includes `description` and `attentionReason` as readable fields.
 
 #### `set`
@@ -761,7 +761,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | idea | `title`, `archived`, `decompositionGate`, `executionGate`, `outOfBand`, `mergeBase`, `mergePolicy`, `codeApprovalRequired`, `appendTo`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `sourceOutline`, `description` |
-| outline | `title`, `archived`, `partOf`, `sourceIdea`, `description` |
+| outline | `title`, `archived`, `partOf`, `sourceIdea`, `outOfBand`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
 and refuses a sha already present on that Task. Whole-series replace uses
@@ -1160,11 +1160,53 @@ A one-time migration moves outline sessions from `planning` to `decomposition` w
 
 A planner session requires a source Idea. Its title is `Plan <outline title>` and its first prompt is the no-stakeholder prompt from `planning-launch.ts` for that Idea. A decomposer session requires a version in `1..bodyVersion` and an execution gate of `on` or `off`. Its title is `Decompose <outline title>`. Its first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`decompose`), `Outline`, `Version`, and `Execution gate`. A merge policy, when given, is appended to that prompt. A blank merge policy is refused.
 
-The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off", mergePolicy?: string }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `decomposition` channel at the latest `bodyVersion`, with that execution gate, an optional merge policy, and no outline gate. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a blank `mergePolicy`, a body with any field other than `executionGate` and `mergePolicy`, or a Project with no workspace is an error. A busy session on either outline channel is `409`, the same refusal as any other outline start. The decomposer queues the new root after polish when the gate is `off`, and leaves the root unqueued when the gate is `on`.
+The outline detail page starts a decomposer from **Decompose** on Linked work. The dialog's only control is an execution-gate toggle labelled `Execution gate · on` or `Execution gate · off`. It does not choose a root shape, and confirming does not edit the outline. Confirm sends `POST /api/issues/:id/outline/decompose` with `{ executionGate: "on" | "off", mergePolicy?: string }`. The handler calls `startOutlinePlanningSession` for role `decomposer` on that outline's `decomposition` channel at the latest `bodyVersion`, with that execution gate, an optional merge policy, and no outline gate. The response is `201` `{ id, title, model }`. A non-outline id, an `executionGate` other than `on` or `off`, a blank `mergePolicy`, a body with any field other than `executionGate` and `mergePolicy`, or a Project with no workspace is an error. A busy session on either outline channel is `409`, the same refusal as any other outline start. The decomposer does not queue the new root; plan-polish's [release](#plan-release) is what queues it.
 
 A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Tasks it appends to `Target story` record that Idea as `sourceIdea`, and the Idea is archived once every touched root is polished.
 
 `issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `decomposition` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. A source Idea, when given, is appended as `Source idea`. No execution gate and no merge policy are sent. A busy session on either outline channel is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Planning tab. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
+
+<a id="conclude"></a>
+
+### Conclude
+
+`issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>` is the non-append end of planning. `POST /api/issues/:ideaId/conclude` with `{ outlineId, codeGateVerdict }` is the same write and returns `201` `{ concludedAt, sessionId? }`. A body with any other field, a missing `outlineId`, or a verdict other than `gated` or `start` is an error. One serialized write records `codeApprovalRequired` (`true` exactly when the verdict is `gated`) on the Idea and on the outline, copies the Idea's `executionGate`, `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, sets the outline's `concludedAt`, and archives the Idea. `decompositionGate` stays on the Idea and is not copied. The write registers the [planner handoff](#planner-handoff): the Idea is archived and the outline carries `concludedAt` while that Idea's planning run is still the concluding run. The handoff itself runs when that run ends.
+
+The write refuses when the Idea is already archived, when the Idea has `appendTo` set, when the outline's `sourceIdea` is not this Idea, or when the outline has a live run on either channel. A live run is the existing `409` `conflict`, and the error names the busy channel.
+
+When `outOfBand` is true or `decompositionGate` is true, conclude starts nothing. Otherwise, after the write commits, it starts a decomposer on the outline's `decomposition` channel at the current `bodyVersion`. That start reads `executionGate` and `mergePolicy` from the outline just written. The prompt's execution gate is `on` when the stored gate is `true`, `off` when it is `false`, and, when it is `auto`, `on` when `codeApprovalRequired` is true and `off` otherwise. A failed start leaves the write committed; the error says the Idea concluded and the decomposer did not start. This archive does not enqueue work roots and does not lower merge policy.
+
+A zero exit prints `concludedAt`, and the decomposer session id on the next line when one started.
+
+**Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The outline page's Linked work empty state reads **Ready to decompose** when it is true, with the existing Decompose control as the next move.
+
+<a id="planner-handoff"></a>
+
+**Planner handoff.** The handoff runs when a run settles on a non-archived `planning` conversation of an archived Idea that is the `sourceIdea` of an outline with `concludedAt` set. When that run's end starts a queued pending message, the handoff waits for that turn to settle. The handoff creates the outline's planner session on its `planning` channel with `outlineRole` `planner` and the title `Plan <outline title>`. Its `forkedFrom` is the Idea's Planning conversation, and its `forkedAtSeq` is that conversation's last transcript seq, so it includes the planner's final reply. The handoff starts no run. It archives any earlier planner session on the outline, and the Idea's Planning conversation.
+
+| Planning mode | Outline planner session | Idea keeps |
+| --- | --- | --- |
+| Human-driven grill (no `stakeholder`) | a fork of the Idea's Planning root: its transcript, delegations, and agent context, with the root's model and a fresh agent id | the planner transcript |
+| Auto-plan (`stakeholder` set) | the planner the stakeholder delegated to, continued as a root: the last `issue-tracker-planner-*` role the Planning root delegated to directly. It keeps that planner's agent context under a fresh agent id, stores that role as `role`, and uses the role's model pin. Its transcript is each prompt the stakeholder delegated to that planner, followed by the planner's messages in that run. | the stakeholder transcript, including its kickoff |
+
+A failed handoff leaves the Idea's Planning conversation unarchived and appends the error to it.
+
+After conclude, the server refuses planning on the archived Idea. `createIssueChannelSession` refuses a `planning` session on an archived Idea, and `POST /api/conversations/:id/messages` refuses a prompt to an archived Idea's `planning` conversation, live or idle. Both are `409` `conflict`. The stakeholder's audit still lands on the archived Idea: the decision-summary attachment and the standout-decisions comment. The stakeholder does not resume as the planner.
+
+<a id="plan-release"></a>
+
+### Plan release
+
+`issue release <rootId>` marks a work root's plan final. Plan-polish runs it as its last step on an Epic or project-level Story that stores `sourceOutline`, so it runs when decompose finishes. The decomposer does not queue the root itself. One serialized write sets the root's `releasedAt` and reads `executionGate` and `codeApprovalRequired` from the outline its `sourceOutline` names:
+
+- When `codeApprovalRequired` is true, the root and any descendant whose effective merge policy ranks above `manual` are lowered to `manual` (see [Code-gate lowering](#code-gate-lowering)). This holds whatever the execution gate says.
+- When the execution gate says start (`false`, or `auto` with `codeApprovalRequired` not true), the root joins the back of its Project's [work queue](#work-queue). A root that manual enqueue would refuse (archived, finished, already queued or parked, holding a slot, or `blockedBy` a root that is neither queued nor finished) is released and left unqueued, with no `needsAttention`. `true`, or `auto` with `codeApprovalRequired` true, leaves the root unqueued for a human start.
+
+The launcher picks up a queued root on its next pass. A root that already carries `releasedAt` is left as it is: a second release changes neither the queue nor merge policy, and prints the stored `releasedAt`. Release refuses a Story inside an Epic, a root with no `sourceOutline`, and an outline with no `executionGate` (its Idea has not concluded). A zero exit prints `releasedAt`.
+
+Archiving an Idea leaves the work queue and stored merge policies untouched.
+
+A one-time migration sets `releasedAt` on every Epic and project-level Story whose source Idea is already archived. For each outline whose source Idea is archived and that stores no `executionGate`, it copies that Idea's `executionGate`, `codeApprovalRequired` (absent counts as `false`), `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, without setting `concludedAt`. Every other outline with no stored `outOfBand` gets `outOfBand: false`.
 
 ### Work queue
 
@@ -1176,7 +1218,7 @@ A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version
 
 **Release.** Each launcher pass first archives every idle non-archived `implementing` session on a finished work root, so the root holds no slot. Release skips a busy session and retries after the run settles: each settled run schedules a debounced launcher pass, as an issues watcher frame does. Work appended later puts the root back in Ready, and its next start opens a fresh coordinator session.
 
-**Enqueue.** In the same batch as the archive flip and any code-gate merge-policy lowering: when an Idea with a `stakeholder` and without `executionGate: true` flips `archived` from false to true, stamp `workQueuedAt` with the current time and append `workQueuePosition` (one past the highest position already in that Project) on the work root of each derived `planRoots` id. The work root is the Epic that contains the plan root, or the project-level Story itself. Roots that already carry `workQueuedAt` or `workParkedAt` are left unchanged. Roots from the same archive are ordered so each sits after the Epics in its `blockedBy`. A root is queued when every blocker is already queued (waiting, holding a slot, parked, or joining in this same enqueue) or finished (done, merged, or ready to land). A root whose blocker is neither is left unchanged — not queued, and not marked `needsAttention` — and so is every root that depends on it.
+**Enqueue.** [Release](#plan-release) stamps `workQueuedAt` with the current time and appends `workQueuePosition` (one past the highest position already in that Project) on the work root when the execution gate says start, in the same write that sets `releasedAt`.
 
 A successful launcher start clears that root's `workQueuedAt`, `workQueuePosition`, and `workParkedAt` after the implementing prompt has started. Creating an implementing session through the channel route clears them when the session is created.
 
@@ -1252,12 +1294,14 @@ becomes the ceiling for its descendants; first-layer Epic Stories inherit the
 Epic's base rather than carrying their own override, so they stay ceilinged by
 the Epic.
 
-**Code-gate lowering.** When an Idea with `codeApprovalRequired: true` is
-archived (`archived` false→true), each id in its derived `planRoots` whose
-effective merge policy ranks above `manual` is lowered to `manual` in the same
-serialized write batch as the archive. Roots already at effective `manual`
-are left without a redundant stored override. Unarchiving an Idea never raises
-merge policy back.
+<a id="code-gate-lowering"></a>
+
+**Code-gate lowering.** When [release](#plan-release) reads
+`codeApprovalRequired: true` on the root's outline, the root and each
+descendant whose effective merge policy ranks above `manual`, or above its
+new ceiling, are lowered to `manual` in the same serialized write as
+`releasedAt`. Nodes already at effective `manual` are left without a
+redundant stored override. Nothing raises merge policy back.
 
 The work loop **always** finishes a Story by spawning the git subagent in
 `finish-branch` mode; the coordinator never reads or branches on `mergePolicy`.
@@ -1391,6 +1435,7 @@ Epic — the Epic/Story/Task needs-attention common fields plus:
 | `workQueuedAt` | ISO string? | when this Epic joined its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 | `workQueuePosition` | positive integer? | this Epic's place in its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 | `workParkedAt` | ISO string? | set while this Epic is parked; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
+| `releasedAt` | ISO string? | when this Epic's plan was released; system writer; get only; `apply` preserves (see [Plan release](#plan-release)) |
 
 Idea — the common-to-every-kind fields plus:
 
@@ -1398,12 +1443,12 @@ Idea — the common-to-every-kind fields plus:
 | --- | --- | --- |
 | `partOf` | string | the Project id (required) |
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
-| `decompositionGate` | boolean | defaults `false`; when true, the human answers the auto-plan outline gate; when false, the gate rubric decides who answers it (see [Roles](#roles)); written by the human; no `stakeholder` required |
-| `executionGate` | `"auto"` \| boolean | defaults `"auto"`; `true` holds planned work roots for a human start; `false` starts them; `"auto"` starts them on an auto-plan Idea and holds them on a human-driven grill; written by the human; no `stakeholder` required |
+| `decompositionGate` | boolean | defaults `false`; stays on the Idea and is not copied to the outline; when false, [conclude](#conclude) auto-starts decomposition unless `outOfBand` is true; when true, conclude starts nothing; written by the human; no `stakeholder` required |
+| `executionGate` | `"auto"` \| boolean | defaults `"auto"`; `true` holds the root for a human start; `false` starts it when the work is ready; `"auto"` follows the code-gate verdict (`gated` waits, `start` starts); written by the human; no `stakeholder` required; [conclude](#conclude) copies it onto the outline |
 | `outOfBand` | boolean | defaults `false`; when true, the outline is implemented outside the tracker; written by the human |
 | `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset; `apply` preserves |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | the merge policy chosen in the grill, stored when the merge base is not trunk; `--clear` / JSON `null` clears it; `apply` preserves |
-| `codeApprovalRequired` | boolean? | absent until set; when true, the stakeholder's verdict is that resulting code needs human approval before merge; written by the stakeholder agent; `apply` preserves |
+| `codeApprovalRequired` | boolean? | absent until set; `true` exactly when the code-gate verdict is `gated`; [conclude](#conclude) records it and copies it onto the outline; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
 | `appendTo` | string? | optional; names one open Story in the same Project whose outline this Idea's plan amends and whose tail receives the reconciled Tasks instead of minting a new root (see [Relationships](#relationships)) |
@@ -1422,10 +1467,17 @@ Outline — the common-to-every-kind fields plus:
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
 | `bodyVersion` | positive integer | latest saved body; starts at 1; system-written; CLI [`get`](#kind-scoped-get--set) name is `version` |
 | `sourceIdea` | string? | optional; names one Idea in the same Project this outline was planned from (see [Relationships](#relationships)) |
+| `executionGate` | `"auto"` \| boolean? | absent until [conclude](#conclude) copies the Idea's value; conclude's decomposer start reads it here |
+| `codeApprovalRequired` | boolean? | absent until conclude records the verdict; `true` exactly when that verdict is `gated` |
+| `mergeBase` | string? | absent until conclude copies the Idea's branch; absent when the Idea has none |
+| `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | absent until conclude copies the Idea's policy; absent when the base is trunk |
+| `outOfBand` | boolean? | absent until conclude copies the Idea's value (`false` when the Idea's default applies); stays settable on the outline; `true` means implemented outside the tracker |
+| `concludedAt` | ISO string? | set by conclude; system-written; `issue outline get <id> concludedAt` prints it; unset until then |
 
 No assignee, needs-attention, stored status, worktree, comments, or
 attachments. Not a board child: `issue tree` does not render it; `issue list outline`
 does. Deleting an outline removes its `versions/` snapshots with the directory.
+Derived **`readyToDecompose`** on get / list (see [Derived state](#derived-state) and [Conclude](#conclude)).
 
 Story — the Epic/Story/Task needs-attention common fields plus:
 
@@ -1450,6 +1502,7 @@ Story — the Epic/Story/Task needs-attention common fields plus:
 | `workQueuedAt` | ISO string? | when this project-level Story joined its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 | `workQueuePosition` | positive integer? | this project-level Story's place in its Project's queue; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
 | `workParkedAt` | ISO string? | set while this project-level Story is parked; system writer; get only; `apply` preserves (see [Work queue](#work-queue)) |
+| `releasedAt` | ISO string? | when this project-level Story's plan was released; system writer; get only; `apply` preserves (see [Plan release](#plan-release)) |
 
 Task — the Epic/Story/Task needs-attention common fields plus:
 
@@ -2400,6 +2453,7 @@ preserves everything else from the existing same-kind issue.
 | `workQueuedAt` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `workQueuePosition` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `workParkedAt` (Epic / Story) | system writer; kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
+| `releasedAt` (Epic / Story) | system writer (`issue release`); kind [`get`](#kind-scoped-get--set) only; `apply` preserves |
 | `planQueuedAt` (Idea) | system writer; kind [`set`](#kind-scoped-get--set) accepts `--clear` only; `apply` preserves |
 | `mergePolicy` (Epic / Story) | imperative only via `setRootMergeSettings` (kind [`set`](#kind-scoped-get--set) field `mergePolicy`, or PATCH); `inherit` / `--clear` / JSON `null` clears the override; `apply` preserves; effective value derived on get |
 | `supportingDocs` (Project) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
@@ -2412,7 +2466,7 @@ preserves everything else from the existing same-kind issue.
 | `outOfBand` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `mergeBase` (Idea) | stored branch; kind [`set`](#kind-scoped-get--set), the planning tab (written when a session launches from that tab); `apply` preserves |
 | `mergePolicy` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `--clear` / JSON `null` clears it; `apply` preserves |
-| `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
+| `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); [conclude](#conclude) writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `appendTo` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |
@@ -2603,13 +2657,19 @@ so cannot drift:
   stored `sourceIdea` equals the Idea's id, sorted by ascending `order` then id;
   archived Outlines stay listed; `[]` when none. Computed by `derive()` for
   every Idea.
+- **Outline `readyToDecompose`** — `true` when the outline stores `concludedAt`,
+  stored `outOfBand` is not true, no root Epic or project-level Story in the
+  pass stores `sourceOutline` for this outline, and no decomposition session
+  on the outline has a live run; otherwise `false`. `derive()` computes the
+  stored half for every Outline. `list()` clears it while a decomposition
+  run is live. `issue outline get <id> readyToDecompose` prints `true` or
+  `false`. See [Conclude](#conclude).
 - **Epic / root Story `planNotFinal`** — `true` when the issue stores
-  `sourceIdea`, the referenced Idea is present in the pass's issue set, and that
-  Idea's `archived` is not true; otherwise `false` (including when `sourceIdea`
+  `sourceIdea`, the referenced Idea is present in the pass's issue set, and the
+  issue stores no `releasedAt`; otherwise `false` (including when `sourceIdea`
   is absent or names an Idea missing from the set). Computed by `derive()` for
   every Epic and root project-level Story. Readiness surfaces exclude roots
-  while `planNotFinal` is `true`; `issue idea set … archived true` on the
-  source Idea is what clears it.
+  while `planNotFinal` is `true`; `issue release <rootId>` is what clears it.
 - **Epic / Story / Task `behind`** — `true` when the issue stores
   `sourceOutline`, that outline is in the pass's issue set, the stamped
   `version` is lower than the outline's `bodyVersion`, and the item is
