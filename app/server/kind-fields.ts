@@ -349,6 +349,7 @@ export const OUTLINE_GET_FIELDS = {
   pendingAppends: STORED,
   readyToDecompose: DERIVED,
   reconciliationNeeded: DERIVED,
+  appendLock: DERIVED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

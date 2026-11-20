@@ -1,4 +1,4 @@
-import type { DerivedState, IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord, PendingAppend } from "@server/schemas";
 import {
   stampedBoardRoots,
   type StampedBoardRoot,
@@ -35,6 +35,52 @@ export function linkedWorkCountLabel(epics: number, stories: number): string {
     parts.push(stories === 1 ? "1 root story" : `${stories} root stories`);
   }
   return parts.length > 0 ? parts.join(" · ") : "0 roots";
+}
+
+/** One row of Reconciliation needed: a behind open root, a pending-append target, or both. */
+export type ReconciliationRow = {
+  id: string;
+  title: string;
+  behind: boolean;
+  pendingAppend: boolean;
+};
+
+/**
+ * Behind open linked roots, then each pending append's target Story that is
+ * not already in that set. One row per issue. Empty when nothing needs reconcile.
+ */
+export function reconciliationNeededRows(
+  outlineId: string,
+  pendingAppends: readonly PendingAppend[] | undefined,
+  issues: IssueRecord[],
+  derived: Record<string, DerivedState>,
+): ReconciliationRow[] {
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  const rows = new Map<string, ReconciliationRow>();
+  for (const root of linkedRootsForOutline(issues, derived, outlineId, false)) {
+    if (!root.open || !root.behind) continue;
+    rows.set(root.id, {
+      id: root.id,
+      title: root.title,
+      behind: true,
+      pendingAppend: false,
+    });
+  }
+  for (const entry of pendingAppends ?? []) {
+    const existing = rows.get(entry.targetStory);
+    if (existing) {
+      existing.pendingAppend = true;
+      continue;
+    }
+    const issue = byId.get(entry.targetStory);
+    rows.set(entry.targetStory, {
+      id: entry.targetStory,
+      title: issue?.title ?? entry.targetStory,
+      behind: false,
+      pendingAppend: true,
+    });
+  }
+  return [...rows.values()];
 }
 
 /** One pass: each outline id → its catalog linked-work label. */

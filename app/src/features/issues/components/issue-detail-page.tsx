@@ -57,6 +57,7 @@ import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
 import { OutlineBodyCard } from "./outline-body-card";
 import { OutlineLinkedWorkCard } from "./outline-linked-work-card";
+import { OutlinePendingAppendsCard } from "./outline-pending-appends-card";
 import {
   OutlinePendingDraftCard,
   type OutlineWithDraft,
@@ -147,6 +148,9 @@ function IssueOverviewPanel({
       <IssueAttachmentsSection issue={issue} upload={upload} />
       {issue.kind === "outline" ? (
         <OutlineLinkedWorkCard key={`${issue.id}-linked`} issue={issue} />
+      ) : null}
+      {issue.kind === "outline" ? (
+        <OutlinePendingAppendsCard key={`${issue.id}-appends`} issue={issue} />
       ) : null}
       {issue.kind === "outline" && issue.pendingDraft !== undefined ? (
         <OutlinePendingDraftCard

@@ -74,6 +74,7 @@ import {
 import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
   assertEmptyDecomposeBody,
+  assertEmptyReconcileBody,
   decomposerSessionFromOutline,
   parsePlanningSessionRequest,
   startOutlinePlanningSession,
@@ -202,6 +203,28 @@ export function createIssuesRouter(
       requireProjectWorkspace(outline.partOf);
       const meta = await startOutlinePlanningSession(
         decomposerSessionFromOutline(outline),
+        sessions,
+      );
+      res.status(201).json({
+        id: meta.id,
+        title: meta.title,
+        model: meta.model,
+      });
+    }),
+  );
+
+  router.post(
+    "/:id/outline/reconcile",
+    asyncRoute(async (req, res) => {
+      const outline = readOutlineOrThrow(req.params.id);
+      assertEmptyReconcileBody(req.body);
+      requireProjectWorkspace(outline.partOf);
+      const meta = await startOutlinePlanningSession(
+        {
+          outlineId: outline.id,
+          role: "reconcile",
+          version: outline.bodyVersion,
+        },
         sessions,
       );
       res.status(201).json({

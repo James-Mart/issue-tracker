@@ -24,16 +24,26 @@ export function listIndexedConversationMetas(): ConversationMeta[] {
   return [...index().values()];
 }
 
+/** Open session on `channel` for `issueId`. */
+export function isOpenChannelSession(
+  session: ConversationMeta,
+  channel: ConversationChannel,
+  issueId: string,
+): boolean {
+  return (
+    session.issueId === issueId &&
+    session.channel === channel &&
+    !session.archived
+  );
+}
+
 /** Non-archived sessions a new session on `issueId` + `channel` replaces. */
 export function channelPredecessors(
   issueId: string,
   channel: ConversationChannel,
 ): ConversationMeta[] {
-  return listIndexedConversationMetas().filter(
-    (existing) =>
-      existing.issueId === issueId &&
-      existing.channel === channel &&
-      !existing.archived,
+  return listIndexedConversationMetas().filter((existing) =>
+    isOpenChannelSession(existing, channel, issueId),
   );
 }
 

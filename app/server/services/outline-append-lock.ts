@@ -1,12 +1,14 @@
 import type {
   ConversationChannel,
   ConversationMeta,
+  DerivedState,
   Issue,
   OutlineSessionRole,
 } from "../schemas.js";
 import { appendTargetOutlineId, outlineIdOnStory } from "./append-target.js";
 import {
   channelPredecessors,
+  isOpenChannelSession,
   listIndexedConversationMetas,
 } from "./conversation-meta-index.js";
 import { IssueError } from "./errors.js";
@@ -22,42 +24,97 @@ function isPlannerOutlineRole(role: OutlineSessionRole | undefined): boolean {
   return role === undefined || role === "planner";
 }
 
-/** The outline's one live planning session, which is its planner. */
-export function activeOutlinePlanner(
-  outlineId: string,
+function outlinePlanner(
+  session: ConversationMeta | undefined,
 ): ConversationMeta | undefined {
-  const [session] = channelPredecessors(outlineId, "planning");
   if (!session || !isPlannerOutlineRole(session.outlineRole)) return undefined;
   return session;
 }
 
+/** The outline's one live planning session, which is its planner. */
+export function activeOutlinePlanner(
+  outlineId: string,
+): ConversationMeta | undefined {
+  return outlinePlanner(channelPredecessors(outlineId, "planning")[0]);
+}
+
 /**
- * An outline is locked while an unarchived append Idea has a non-archived
- * planning session forked from that outline's active planner.
+ * One walk of `metas`. `planners` is the first open planning session per
+ * issue (`channelPredecessors(issueId, "planning")[0]`). `forkedFrom` groups
+ * those sessions by the planner they forked from.
  */
-export function appendOutlineLock(outlineId: string): AppendOutlineLock | undefined {
-  const planner = activeOutlinePlanner(outlineId);
-  if (!planner) return undefined;
-  const { issues } = list();
-  const issuesById = new Map(issues.map((item) => [item.id, item]));
-  const candidates = listIndexedConversationMetas().filter(
-    (session) =>
-      !session.archived &&
-      session.channel === "planning" &&
-      session.forkedFrom === planner.id &&
-      session.issueId,
-  );
-  for (const session of candidates) {
-    const holder = appendLockHolderFromSession(
-      session,
-      outlineId,
-      issuesById,
-    );
+function planningLockIndex(metas: readonly ConversationMeta[]): {
+  planners: Map<string, ConversationMeta>;
+  forkedFrom: Map<string, ConversationMeta[]>;
+} {
+  const planners = new Map<string, ConversationMeta>();
+  const forkedFrom = new Map<string, ConversationMeta[]>();
+  for (const session of metas) {
+    if (!session.issueId) continue;
+    if (!isOpenChannelSession(session, "planning", session.issueId)) continue;
+    if (!planners.has(session.issueId)) planners.set(session.issueId, session);
+    if (!session.forkedFrom) continue;
+    const group = forkedFrom.get(session.forkedFrom);
+    if (group) group.push(session);
+    else forkedFrom.set(session.forkedFrom, [session]);
+  }
+  return { planners, forkedFrom };
+}
+
+function appendLockForPlanner(
+  outlineId: string,
+  plannerId: string,
+  issuesById: ReadonlyMap<string, Issue>,
+  forkedFrom: ReadonlyMap<string, readonly ConversationMeta[]>,
+): AppendOutlineLock | undefined {
+  for (const session of forkedFrom.get(plannerId) ?? []) {
+    const holder = appendLockHolderFromSession(session, outlineId, issuesById);
     if (holder) {
       return { outlineId, ideaId: holder.id, ideaTitle: holder.title };
     }
   }
   return undefined;
+}
+
+/** The append Idea holding this outline's planner lock, from the current derived list. */
+export function appendOutlineLock(outlineId: string): AppendOutlineLock | undefined {
+  return appendLockOnOutline(outlineId, list().derived);
+}
+
+/** Stamp `appendLock` on each locked outline. Absent when the outline is not locked. */
+export function applyAppendLocks(
+  issues: readonly Issue[],
+  derived: Record<string, DerivedState>,
+): void {
+  const { planners, forkedFrom } = planningLockIndex(
+    listIndexedConversationMetas(),
+  );
+  const issuesById = new Map(issues.map((item) => [item.id, item]));
+  for (const issue of issues) {
+    if (issue.kind !== "outline") continue;
+    const planner = outlinePlanner(planners.get(issue.id));
+    if (!planner) continue;
+    const lock = appendLockForPlanner(
+      issue.id,
+      planner.id,
+      issuesById,
+      forkedFrom,
+    );
+    if (!lock) continue;
+    derived[issue.id].appendLock = {
+      ideaId: lock.ideaId,
+      ideaTitle: lock.ideaTitle,
+    };
+  }
+}
+
+function appendLockOnOutline(
+  outlineId: string,
+  derived: Record<string, DerivedState>,
+): AppendOutlineLock | undefined {
+  const appendLock = derived[outlineId]?.appendLock;
+  if (!appendLock) return undefined;
+  return { outlineId, ideaId: appendLock.ideaId, ideaTitle: appendLock.ideaTitle };
 }
 
 function appendLockHolderFromSession(
@@ -106,7 +163,7 @@ function lockConflict(lock: AppendOutlineLock, action: string): IssueError {
 export function refuseOutlinePlannerLockPrompt(conversationId: string): void {
   const outlineId = outlineIdForActivePlanner(conversationId);
   if (!outlineId) return;
-  const lock = appendOutlineLock(outlineId);
+  const lock = appendLockOnOutline(outlineId, list().derived);
   if (lock) throw lockConflict(lock, "its planner is read-only");
 }
 
@@ -120,13 +177,13 @@ export function refuseOutlineAppendLockCreate(
   outlineRole: OutlineSessionRole | undefined,
 ): void {
   if (channel !== "planning") return;
-  const { issues } = list();
+  const { issues, derived } = list();
   const issue = issues.find((item) => item.id === issueId);
   if (!issue) return;
 
   if (issue.kind === "outline") {
     if (!isPlannerOutlineRole(outlineRole)) return;
-    const lock = appendOutlineLock(issueId);
+    const lock = appendLockOnOutline(issueId, derived);
     if (lock) throw lockConflict(lock, "new planning session is refused");
     return;
   }
@@ -134,7 +191,7 @@ export function refuseOutlineAppendLockCreate(
   if (issue.kind !== "idea" || !issue.appendTo) return;
   const outlineId = appendTargetOutlineId(issues, issue.appendTo);
   if (!outlineId) return;
-  const lock = appendOutlineLock(outlineId);
+  const lock = appendLockOnOutline(outlineId, derived);
   if (!lock) return;
   // The lock holder may continue its own planning session while the outline is locked.
   if (lock.ideaId === issueId) return;

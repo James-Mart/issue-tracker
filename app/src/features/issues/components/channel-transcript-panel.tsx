@@ -23,7 +23,7 @@ import {
 } from "../api/channel-sessions";
 import { issueDetailChannelLabel } from "../lib/issue-detail-tabs";
 import { otherOutlineChannel } from "../lib/outline-session-role";
-import { useChannelSessionsQuery } from "../api/queries";
+import { useChannelSessionsQuery, useIssuesQuery } from "../api/queries";
 import {
   cockpitLaunchOverlayForIssue,
   type CockpitLaunchFault,
@@ -55,6 +55,8 @@ import {
 import { OutlineChannelBusyNote } from "./outline-channel-busy-note";
 import { OutlineDecompositionEmptyState } from "./outline-decomposition-empty";
 import { OutlineNewPlanningSessionControl } from "./outline-new-planning-session";
+import { OutlinePlanningLockNote } from "./outline-planning-lock-note";
+import { OutlineReconciliationNeeded } from "./outline-reconciliation-needed";
 import {
   PlanningConcludedBanner,
   PlanningReadOnlyBadge,
@@ -213,6 +215,11 @@ export function ChannelTranscriptPanel({
     otherChannel ?? "decomposition",
     { enabled: otherChannel !== undefined },
   );
+  const issues = useIssuesQuery();
+  const appendLock = planningOutline
+    ? issues.data?.derived[planningOutline.id]?.appendLock
+    : undefined;
+  const plannerLocked = appendLock !== undefined;
   const listLoading = isLoading && !data;
   const listError = error;
   const parkedResume = useParkedRootResume(issueId, channel);
@@ -365,6 +372,24 @@ export function ChannelTranscriptPanel({
     setSelectedId(session.id);
     setPendingStart(session);
   };
+  const channelBusy =
+    Boolean(busyRun) || sessions.some((session) => session.activeRun);
+  const reconciliation =
+    outlineView?.channel === "decomposition" ? (
+      <OutlineReconciliationNeeded
+        outline={outlineView.issue}
+        blocked={channelBusy}
+        onStarted={onSessionStarted}
+      />
+    ) : null;
+  const lockNote =
+    planningOutline && appendLock ? (
+      <OutlinePlanningLockNote
+        projectId={planningOutline.partOf}
+        ideaId={appendLock.ideaId}
+        ideaTitle={appendLock.ideaTitle}
+      />
+    ) : null;
 
   if (pendingLaunch && !launchId) {
     const copy = detailLaunchPendingCopy(pendingLaunch.kind);
@@ -415,7 +440,7 @@ export function ChannelTranscriptPanel({
       <OutlinePlanningChannelEmptyState
         label={label}
         outline={planningOutline}
-        blocked={Boolean(busyRun)}
+        blocked={Boolean(busyRun) || plannerLocked}
         onStarted={onSessionStarted}
       />
     ) : outlineView?.channel === "decomposition" ? (
@@ -436,7 +461,9 @@ export function ChannelTranscriptPanel({
     );
     const emptyBody = (
       <>
+        {reconciliation}
         {launchFaultBanner}
+        {lockNote}
         {emptyAction}
         {busyNote}
       </>
@@ -465,7 +492,7 @@ export function ChannelTranscriptPanel({
   const newPlanningSession = planningOutline ? (
     <OutlineNewPlanningSessionControl
       outline={planningOutline}
-      disabled={Boolean(busyRun)}
+      disabled={Boolean(busyRun) || plannerLocked}
       className="w-auto shrink-0"
       onStarted={onSessionStarted}
     />
@@ -478,7 +505,8 @@ export function ChannelTranscriptPanel({
         onStarted={onSessionStarted}
       />
     ) : null;
-  const readOnlyBadge = planningIdea?.archived ? <PlanningReadOnlyBadge /> : null;
+  const readOnlyBadge =
+    planningIdea?.archived || plannerLocked ? <PlanningReadOnlyBadge /> : null;
   const implementingNewRun =
     implementingWorkRoot && projectId ? (
       <ImplementingNewRunControl issue={implementingWorkRoot} />
@@ -553,13 +581,16 @@ export function ChannelTranscriptPanel({
 
   return (
     <ChannelPanelFrame mobileFullViewport={mobileFullViewport}>
+      {reconciliation}
       {mobileFullViewport ? null : desktopHeader}
       <ConversationThread
         key={selectedSession.id}
         conversationId={selectedSession.id}
         meta={{ title: selectedSession.title, model: selectedSession.model }}
         hideComposer={
-          selectedSession.archived || Boolean(planningIdea?.archived)
+          selectedSession.archived ||
+          Boolean(planningIdea?.archived) ||
+          plannerLocked
         }
         composerDisabled={!selectedSession.archived && Boolean(busyRun)}
         composerDisabledPlaceholder={
@@ -581,10 +612,11 @@ export function ChannelTranscriptPanel({
           ) : undefined
         }
         banner={
-          launchFaultBanner || concludedBanner ? (
+          launchFaultBanner || concludedBanner || lockNote ? (
             <>
               {launchFaultBanner}
               {concludedBanner}
+              {lockNote}
             </>
           ) : undefined
         }

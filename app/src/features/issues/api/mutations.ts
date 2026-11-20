@@ -640,26 +640,39 @@ export function useStartOutlinePlanningSession(outlineId: string) {
   });
 }
 
-/** Start a decomposer on the outline's decomposition channel at its latest version. */
-export function useDecomposeOutline(outlineId: string) {
+function useStartOutlineRoleSession(
+  outlineId: string,
+  action: "decompose" | "reconcile",
+  outlineRole: Extract<OutlineSessionRole, "decomposer" | "reconcile">,
+) {
   const qc = useQueryClient();
   return useMutation<StartedChannelSession, Error, void>({
     mutationFn: () =>
       request<StartedChannelSession>(
-        `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
+        `/api/issues/${encodeURIComponent(outlineId)}/outline/${action}`,
         { method: "POST", body: {} },
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
       rememberStartedChannelSession(qc, outlineId, "decomposition", {
         ...data,
-        outlineRole: "decomposer",
+        outlineRole,
       });
     },
     onSettled: () => {
       invalidateStartedChannelSession(qc, outlineId, "decomposition");
     },
   });
+}
+
+/** Start a decomposer on the outline's decomposition channel at its latest version. */
+export function useDecomposeOutline(outlineId: string) {
+  return useStartOutlineRoleSession(outlineId, "decompose", "decomposer");
+}
+
+/** Start reconcile on the outline's decomposition channel at its latest version. */
+export function useReconcileOutline(outlineId: string) {
+  return useStartOutlineRoleSession(outlineId, "reconcile", "reconcile");
 }
 
 export type UpdateOutlineDraftResult = {

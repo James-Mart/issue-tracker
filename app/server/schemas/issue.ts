@@ -922,6 +922,11 @@ export interface DerivedState {
    * root is behind. `behind` on that root stays derived from its `sourceOutline`.
    */
   reconciliationNeeded?: boolean;
+  /**
+   * Outline only. Append Idea whose planning session is forked from this
+   * outline's active planner. `list()` sets it; `derive()` does not.
+   */
+  appendLock?: { ideaId: string; ideaTitle: string };
   /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**
