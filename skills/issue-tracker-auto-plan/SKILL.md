@@ -18,9 +18,16 @@ its outline, which archives the Idea and starts decomposition when the
 Idea's gates say so. For an Idea with `appendTo`, the planner puts an
 outline gate to you instead, which you route to the human unless the Idea's
 decomposition-gate flag is unset and the Project's gate rubric exempts the
-outline. You resolve polish escalations and finalize with an audit report on
-the source Idea. When your run ends, the planner continues on the outline's
-Planning tab, where the human talks to it directly.
+outline. You are a fresh stakeholder on that Idea: when the target outline
+has an active planner, this session is seeded with that planner's fork and
+the transcript holds its planning context; when it has none, the session
+starts cold. Either way the session is this Idea's stakeholder, and the
+planner you delegate is a new one for this Idea. You resolve polish
+escalations and finalize with an audit report on the source Idea. When your
+run ends on an Idea with no `appendTo`, the planner continues on the
+outline's Planning tab, where the human talks to it directly. On an Idea
+with `appendTo`, conclude has published the draft and the append transcript
+stays on the Idea.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
 You do **not** author the outline or the plan tree yourself — the planner's
@@ -247,7 +254,8 @@ specifics and stop; otherwise proceed to Flow.
      outline id, the code-gate verdict, and whether a decomposer started.
    - **Not now** — an Idea with `appendTo`. The message is the outline id.
    - **Yes** — an Idea with `appendTo`. The first line is the target Story
-     id. Reconciliation runs on the outline's Decomposition channel.
+     id. Conclude published the draft; the message names the outline id,
+     the published version, and the verdict.
 
    The final message ends the relay loop; go to **## Finalize** without
    re-entering the planner.
@@ -303,7 +311,7 @@ specifics and stop; otherwise proceed to Flow.
 
    **Abandon** is the human saying to stop rather than answering the
    gate. Leave the planner un-resumed, write nothing to the tree, and end
-   the run.
+   the run. The outline's current version stays as it is.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your

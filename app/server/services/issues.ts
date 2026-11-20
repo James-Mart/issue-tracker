@@ -36,6 +36,7 @@ import { runStoreMigrations } from "./store-migrations.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { recordOutlineBody } from "./outline-body.js";
+import { discardUnpublishedAppendDrafts } from "./append-draft-discard.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
   assertGuestAllowsOutwardEffect,
@@ -227,10 +228,24 @@ export function readReviewOrThrow(id: string): ReviewIssue {
   return issue;
 }
 
-export function readOutlineOrThrow(
+type OutlineIssue = Extract<Issue, { kind: "outline" }>;
+
+/** Outline `id` from an already-loaded issue list, or the same refusal as `readOutlineOrThrow`. */
+export function readOutlineFromIssues(
+  issues: readonly Issue[],
   id: string,
-): Extract<Issue, { kind: "outline" }> {
-  const issue = readIssueOrThrow(id);
+): OutlineIssue {
+  return requireOutline(id, issues.find((issue) => issue.id === id));
+}
+
+export function readOutlineOrThrow(id: string): OutlineIssue {
+  return requireOutline(id, readIssueOrThrow(id));
+}
+
+function requireOutline(id: string, issue: Issue | undefined): OutlineIssue {
+  if (!issue) {
+    throw new IssueError("not_found", `unknown issue "${id}"`);
+  }
   if (issue.kind !== "outline") {
     throw new IssueError("validation", `issue "${id}" is not an outline`);
   }
@@ -739,6 +754,14 @@ export function update(
       assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_WORKTREE_CREATE);
     }
     commitIssueBatch(writes, []);
+    if (
+      existing.kind === "idea" &&
+      !existing.archived &&
+      parsed.issue.kind === "idea" &&
+      parsed.issue.archived
+    ) {
+      discardUnpublishedAppendDrafts(issues, [parsed.issue.id]);
+    }
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
@@ -900,6 +923,7 @@ export async function remove(id: string): Promise<DeletionResult> {
     }
 
     for (const issue of toPersist) persist(issue, serializeIssue(issue));
+    discardUnpublishedAppendDrafts(issues, plan.deleteIds);
     for (const delId of plan.deleteIds) {
       rmSync(dirOf(delId), { recursive: true, force: true });
     }

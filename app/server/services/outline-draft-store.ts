@@ -29,3 +29,15 @@ export function removeOutlineDraft(id: string): void {
   }
   rmSync(path);
 }
+
+/** Drop the draft after publish when it is still the body that was saved. */
+export function removeOutlineDraftIfUnchanged(id: string, draft: string): void {
+  if (readOutlineDraft(id) === draft) removeOutlineDraft(id);
+}
+
+/** Drop the pending draft when one exists. Absent is a no-op. */
+export function discardOutlineDraftIfPresent(id: string): void {
+  const path = outlineDraftPath(id);
+  if (!existsSync(path)) return;
+  rmSync(path);
+}

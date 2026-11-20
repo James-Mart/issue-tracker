@@ -19,6 +19,7 @@ import {
   writeInheritedTranscript,
 } from "./conversation-fork.js";
 import {
+  lastTranscriptSeq,
   readAllTranscriptEvents,
   type SequencedTranscriptEvent,
 } from "./conversation-transcript-seq.js";
@@ -98,7 +99,7 @@ export async function handoffPlanner(
   const { meta, ideaId } = await serialize(() => {
     const source = readConversationMeta(handoff.sourceConversationId);
     const outline = readOutlineOrThrow(handoff.outlineId);
-    const forkedAtSeq = lastTranscriptSeq(source.id);
+    const forkedAtSeq = handoffTranscriptSeq(source.id);
     const continuation =
       handoff.mode === "fork"
         ? forkedPlanner(source, forkedAtSeq)
@@ -162,15 +163,15 @@ async function continueConcludedPlanner(
   }
 }
 
-function lastTranscriptSeq(conversationId: string): number {
-  const last = readAllTranscriptEvents(conversationId).at(-1);
-  if (!last) {
+function handoffTranscriptSeq(conversationId: string): number {
+  const seq = lastTranscriptSeq(conversationId);
+  if (seq === undefined) {
     throw new IssueError(
       "validation",
       `conversation "${conversationId}" has no transcript to hand off`,
     );
   }
-  return last.seq;
+  return seq;
 }
 
 function forkedPlanner(

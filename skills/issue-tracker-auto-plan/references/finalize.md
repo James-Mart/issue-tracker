@@ -6,8 +6,8 @@ chosen answer, rationale; the distilled audit trail, **not** the raw
 back-and-forth transcript). Run this once the relay loop ends.
 
 The planner's conclude archives the seed Idea — use the Bootstrap
-`<issueId>`. An Idea with `appendTo` is archived by its reconciliation
-after polish, and stays unarchived after Not now. Write a **single** combined
+`<issueId>`. An Idea with `appendTo` is archived when conclude publishes
+its draft, and stays unarchived after Not now. Write a **single** combined
 audit trail onto that Idea (one target). The decision-summary attachment and standout-decisions comment land
 on that Idea, not on the resulting root — its provenance is the decomposer's
 imperative `sourceIdea` write (not part of finalize).
@@ -37,4 +37,5 @@ immediately. Also report the planner's final message as the relay loop
 classifies it, and where the decision-summary report and
 standout-decisions comment landed on the archived source Idea. For a
 **Concluded** message, say that the planner continues on the outline's
-Planning tab once this run ends.
+Planning tab once this run ends. For a **Yes** message, say that conclude
+published the draft and the append transcript stays on the Idea.

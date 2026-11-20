@@ -154,10 +154,10 @@ Six relationships, each with a distinct, non-overlapping role:
 - **appendTo** — *append target*: an optional reference from an Idea to one
   open Story **in the same Project**. When set, `issue-tracker-plan` writes
   the Idea's plan as the pending draft of that Story's outline instead of
-  minting a new Epic or root Story; Update reconciles it with that Story as
-  the target and the Idea as the source, so the Tasks land on that Story
-  (`issue story append`) and record the Idea as `sourceIdea`. Refused when
-  the target Story is merged.
+  minting a new Epic or root Story. Conclude publishes that draft as the
+  next version. A stopped or abandoned append leaves the current version
+  unchanged. Archiving or deleting the Idea without conclude discards the
+  unpublished draft. Refused when the target Story is merged.
   Cleared when the target Story is deleted.
 
 #### Fan-in (why a multi-parent dependency becomes a stack)
@@ -1148,6 +1148,8 @@ it. Idle or archived sessions do not hold the lock.
 
 **Launcher.** At the start of each launcher pass (before the per-Project work-root drain from [Work queue](#work-queue)), the server drains Ideas carrying `planQueuedAt` across all Projects, oldest first, with no cap. It starts each through `createIssueChannelSession` with channel `planning`, model = the Idea's `stakeholder`, and the title and first prompt that `app/src/features/issues/lib/planning-launch.ts` builds for a stakeholder. It then clears `planQueuedAt`. On failure it clears the field and posts `issue idea comment <id> --role launcher --body "Auto-plan failed to start: <message>"` through the service layer. The Idea stays `captured`, so the human can start it from the button.
 
+**Append planning start.** `createIssueChannelSession` on the `planning` channel of an Idea with `appendTo` forks the target Story's outline's active planner when that outline has one. The active planner is the outline's non-archived `planning` session (a session whose `outlineRole` is unset or `planner`). The new session's `forkedFrom` is that planner and its `forkedAtSeq` is that planner's last transcript seq, so the session holds the planner's transcript. The outline's planner stays in place. When the Idea has a `stakeholder`, the new session is a fresh stakeholder: its model is that stakeholder, it stores no `role`, its root agent is new, and the inherited transcript is the seed. That session does not copy the source Idea's stakeholder conversation. When the Idea has no `stakeholder`, the session continues the planner: its model and `role` are the planner's, and the plan prompt is appended after the inherited transcript. An outline with no planner, or a target Story with no `sourceOutline`, starts a cold session the usual way. A planner with no transcript, or a planner whose latest run has not settled, refuses the fork.
+
 ### Outline channels
 
 An Outline offers two channels: `planning` for planner sessions, and `decomposition` for decomposer, reconcile, and check sessions. Each outline session stores its `outlineRole` (`planner`, `decomposer`, `reconcile`, or `check`) on its conversation meta. A `planner` session runs on `planning`, and every other role runs on `decomposition`. A `decomposition` session always has an `outlineRole`. Issue detail shows the outline's Planning tab, the same tab an Idea uses. That tab lists `planning` and `decomposition` sessions together. Each entry names its role: Planner, Decomposer, Reconcile, or Outline check. A planning session with no stored role is shown as Planner. The tab does not start sessions. `POST /api/channel-sessions` includes `outlineRole` on an outline session and omits it otherwise.
@@ -1170,13 +1172,15 @@ A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version
 
 ### Conclude
 
-`issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>` is the non-append end of planning. `POST /api/issues/:ideaId/conclude` with `{ outlineId, codeGateVerdict }` is the same write and returns `201` `{ concludedAt, sessionId? }`. A body with any other field, a missing `outlineId`, or a verdict other than `gated` or `start` is an error. One serialized write records `codeApprovalRequired` (`true` exactly when the verdict is `gated`) on the Idea and on the outline, copies the Idea's `executionGate`, `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, sets the outline's `concludedAt`, and archives the Idea. `decompositionGate` stays on the Idea and is not copied. The write registers the [planner handoff](#planner-handoff): the Idea is archived and the outline carries `concludedAt` while that Idea's planning run is still the concluding run. The handoff itself runs when that run ends.
+`issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>` ends planning. `POST /api/issues/:ideaId/conclude` with `{ outlineId, codeGateVerdict }` is the same write and returns `201` `{ concludedAt, sessionId?, version? }`. A body with any other field, a missing `outlineId`, or a verdict other than `gated` or `start` is an error. For an Idea with no `appendTo`, one serialized write records `codeApprovalRequired` (`true` exactly when the verdict is `gated`) on the Idea and on the outline, copies the Idea's `executionGate`, `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, sets the outline's `concludedAt`, and archives the Idea. `decompositionGate` stays on the Idea and is not copied. The write registers the [planner handoff](#planner-handoff): the Idea is archived and the outline carries `concludedAt` while that Idea's planning run is still the concluding run. The handoff itself runs when that run ends.
 
-The write refuses when the Idea is already archived, when the Idea has `appendTo` set, when the outline's `sourceIdea` is not this Idea, or when the outline has a live run on either channel. A live run is the existing `409` `conflict`, and the error names the busy channel.
+For an Idea with `appendTo`, the same command publishes that Idea's unpublished outline draft as the next version, sets `codeApprovalRequired` on the Idea from the verdict, and archives the Idea. It does not copy plan settings onto the outline, does not set `concludedAt`, and does not start a session. A zero exit prints `concludedAt`, then the published version. Archiving or deleting that Idea without conclude discards the unpublished draft and leaves the current version unchanged. A stopped or abandoned append that does not conclude also leaves the current version unchanged.
+
+The write refuses when the Idea is already archived, or when the outline has a live run on either channel. A live run is the existing `409` `conflict`, and the error names the busy channel. For an Idea with no `appendTo`, it also refuses when the outline's `sourceIdea` is not this Idea. For an Idea with `appendTo`, it refuses when the target Story's `sourceOutline` does not name this outline, when the outline has no pending draft, or when that draft matches the saved body.
 
 When `outOfBand` is true or `decompositionGate` is true, conclude starts nothing. Otherwise, after the write commits, it starts a decomposer on the outline's `decomposition` channel at the current `bodyVersion`. That start reads `executionGate` and `mergePolicy` from the outline just written. The prompt's execution gate is `on` when the stored gate is `true`, `off` when it is `false`, and, when it is `auto`, `on` when `codeApprovalRequired` is true and `off` otherwise. A failed start leaves the write committed; the error says the Idea concluded and the decomposer did not start. This archive does not enqueue work roots and does not lower merge policy.
 
-A zero exit prints `concludedAt`, and the decomposer session id on the next line when one started.
+A zero exit prints `concludedAt`, then the published version when an append draft was published, or the decomposer session id on the next line when one started.
 
 **Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The outline page's Linked work empty state reads **Ready to decompose** when it is true, with the existing Decompose control as the next move.
 
@@ -1448,10 +1452,10 @@ Idea — the common-to-every-kind fields plus:
 | `outOfBand` | boolean | defaults `false`; when true, the outline is implemented outside the tracker; written by the human |
 | `mergeBase` | string? | optional branch the plan builds on; a set value is honored by `issue-tracker-plan` (**Merge-base first**) when `appendTo` is unset, and ignored when it is set (**Append planning context**); absent until `issue idea set <id> mergeBase <branch>` or a launch from the planning tab writes the tab's control; that control defaults to the Project trunk; create leaves it unset; `apply` preserves |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | the merge policy chosen in the grill, stored when the merge base is not trunk; `--clear` / JSON `null` clears it; `apply` preserves |
-| `codeApprovalRequired` | boolean? | absent until set; `true` exactly when the code-gate verdict is `gated`; [conclude](#conclude) records it and copies it onto the outline; `apply` preserves |
+| `codeApprovalRequired` | boolean? | absent until set; `true` exactly when the code-gate verdict is `gated`; [conclude](#conclude) records it on the Idea and, when `appendTo` is unset, copies it onto the outline; `apply` preserves |
 | `stakeholder` | string? | optional agent model slug; set means an agent holds the stakeholder seat; unset means the product owner takes it personally and drives the grill (see [Roles](#roles)) |
 | `planQueuedAt` | ISO string? | set when an autonomous Project's Idea create queues auto-plan; system writer; clear dequeues (see [Auto-plan queue](#auto-plan-queue)) |
-| `appendTo` | string? | optional; names one open Story in the same Project whose outline this Idea's plan amends and whose tail receives the reconciled Tasks instead of minting a new root (see [Relationships](#relationships)) |
+| `appendTo` | string? | optional; names one open Story in the same Project whose outline this Idea's plan amends as a pending draft; conclude publishes that draft instead of minting a new root (see [Relationships](#relationships)) |
 | `labels` | string[]? | assignment ids from the Project catalog; unique, order preserved (see [Project labels](#project-labels)) |
 
 No assignee, needs-attention, stored status, worktree, or comments. Derived

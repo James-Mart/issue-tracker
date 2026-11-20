@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -18,6 +19,7 @@ import {
   type TranscriptEvent,
 } from "../schemas/conversation.js";
 import { conversationsDir } from "../config.js";
+import { nextConversationSeq } from "./conversation-stream.js";
 import {
   persistForkedConversation,
   readConversationMeta,
@@ -536,6 +538,20 @@ export function forkConversation(
 
     return meta.id;
   });
+}
+
+/** Append one prompt after an inherited transcript. Caller holds the conversation serialize turn. */
+export function appendForkPrompt(conversationId: string, text: string): void {
+  const stamped = {
+    type: "prompt" as const,
+    text,
+    at: new Date().toISOString(),
+    seq: nextConversationSeq(conversationId),
+  };
+  appendFileSync(
+    transcriptPathOf(conversationId),
+    `${JSON.stringify(stamped)}\n`,
+  );
 }
 
 /** Seed a fork with the source's agent store and history through the fork point. */
