@@ -14,10 +14,12 @@ import {
   readIssueOrThrow,
   readOutlineOrThrow,
   serialize,
+  type IssueWrite,
 } from "./issues.js";
 import {
   readOutlineDraft,
   removeOutlineDraft,
+  removeOutlineDraftIfUnchanged,
   writeOutlineDraft,
 } from "./outline-draft-store.js";
 import type { OutlineReconcileScope } from "../../src/features/issues/lib/outline-planning-launch.js";
@@ -150,17 +152,38 @@ function requireDraft(id: string): string {
   return draft;
 }
 
-function saveDraftAsVersion(outline: OutlineIssue, draft: string): number {
+/**
+ * The outline write that publishes the pending draft as the next version.
+ * Caller holds issues `serialize()` and commits the write.
+ */
+export function pendingDraftVersionWrite(id: string): {
+  write: IssueWrite & { issue: OutlineIssue };
+  draft: string;
+} {
+  const outline = readOutlineOrThrow(id);
+  const draft = requireDraft(id);
+  return { write: draftVersionWrite(outline, draft), draft };
+}
+
+function draftVersionWrite(
+  outline: OutlineIssue,
+  draft: string,
+): IssueWrite & { issue: OutlineIssue } {
   if (draft === readDescription(outline.id)) {
     throw new IssueError(
       "validation",
       `outline "${outline.id}" draft matches the saved body`,
     );
   }
-  const issue = { ...outline, updatedAt: new Date().toISOString() };
-  commitIssueBatch([{ issue, description: draft }], []);
-  if (readOutlineDraft(outline.id) === draft) removeOutlineDraft(outline.id);
-  return issue.bodyVersion;
+  const issue: OutlineIssue = { ...outline, updatedAt: new Date().toISOString() };
+  return { issue, description: draft };
+}
+
+function saveDraftAsVersion(outline: OutlineIssue, draft: string): number {
+  const write = draftVersionWrite(outline, draft);
+  commitIssueBatch([write], []);
+  removeOutlineDraftIfUnchanged(outline.id, draft);
+  return write.issue.bodyVersion;
 }
 
 function resolveTargetStory(raw: string | undefined): string | undefined {

@@ -14,7 +14,7 @@ export function registerIdeaCommands(kindCmd: Command, run: Run): void {
       "gated or start",
     )
     .description(
-      "archive the idea, copy its plan settings onto the outline, and start a decomposer when the gates say so",
+      "archive the idea and finish its plan: copy plan settings and maybe start a decomposer, or publish an append draft, record its pending append, and maybe start reconcile",
     )
     .action(
       (
@@ -33,6 +33,9 @@ export function registerIdeaCommands(kindCmd: Command, run: Run): void {
             agentSessions,
           );
           process.stdout.write(`${result.concludedAt}\n`);
+          if (result.version !== undefined) {
+            process.stdout.write(`${result.version}\n`);
+          }
           if (result.sessionId) {
             process.stdout.write(`${result.sessionId}\n`);
           }

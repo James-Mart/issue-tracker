@@ -4,9 +4,10 @@ disable-model-invocation: true
 description: >-
   Grill an Idea into a saved outline and conclude it, judging the code-gate
   verdict and running issue idea conclude, or, when appendTo is set, amend
-  the target Story's outline and hand Yes to reconciliation; checks which
-  affected screens to mock or skip before any mockup round. Use when the user
-  asks to plan an Idea, flesh out a tracker plan, or run issue-tracker-plan.
+  the target Story's outline as a draft and conclude, which publishes that
+  draft; checks which affected screens to mock or skip before any mockup
+  round. Use when the user asks to plan an Idea, flesh out a tracker plan,
+  or run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → outline)
@@ -15,9 +16,10 @@ Turn a rough capture into an outline in the Project catalog. You grill the
 user, check which affected screens get a mockup round, run those rounds, save
 the outline, and conclude the Idea. Conclude records the code-gate verdict,
 archives the Idea, and starts a decomposer when the Idea's gates say so. An
-Idea with `appendTo` amends the target Story's outline instead, and Yes hands
-the new version to reconciliation, which appends the Tasks to that Story. Do
-not implement product code; this skill only authors the plan artifact.
+Idea with `appendTo` amends the target Story's outline as a pending draft,
+and conclude publishes that draft. A stop before conclude leaves the
+outline's current version unchanged. Do not implement product code; this
+skill only authors the plan artifact.
 
 A retro on the planning session is available on demand through
 [issue-tracker-retro](../issue-tracker-retro/SKILL.md); run one only when
@@ -160,8 +162,8 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize work)
-  until **## Conclude** runs `issue idea conclude`, or **## Append** hands
-  Yes to reconciliation.
+  until **## Conclude** runs `issue idea conclude`, or **## Append** concludes
+  and publishes the draft.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
   when the grill is ready, go straight to **## Conclude**.
 
@@ -252,7 +254,9 @@ When the grill is ready (no extra pre-outline confirm):
 ## Append
 
 When Bootstrap printed a Story id for `appendTo` (`<storyId>`), the
-amendment goes to that Story's outline as its pending draft:
+amendment goes to that Story's outline as its pending draft. This session
+may already be a fork of that outline's planner; write the draft either
+way. The draft is not a version until conclude publishes it:
 
 1. **Read the outline.** `issue story get <storyId> sourceOutline` prints
    `{"outline":"<outlineId>","version":<n>}`. `issue outline view
@@ -267,18 +271,21 @@ amendment goes to that Story's outline as its pending draft:
    `issue outline draft set <outlineId> <path>`; the draft is not a version.
 3. **Ask.** Post the draft body in chat and name the target Story. Then ask
    **one** question whose answer list carries each consequence:
-   - **Yes** — the draft becomes the outline's next version; reconciliation
-     appends this Idea's Tasks to the target Story, brings every other open
-     root linked to the outline up to that version, and polishes each root
-     it touches.
-   - **Not now** — the draft is discarded and no Tasks are appended.
+   - **Yes** — conclude publishes the draft as the outline's next version,
+     records a pending append that reconcile applies to the target Story,
+     and archives this Idea.
+   - **Not now** — the draft is discarded and the current version stays.
    - **Amend** — the reply is feedback on the draft. Revise it, save it
      again (step 2), and ask this gate again.
-4. On **Yes** → run
-   `issue outline draft update <outlineId> --target-story <storyId> --source-idea <ideaId>`,
-   which prints the new version and starts reconciliation on the outline's
-   Planning channel. Report `<storyId>` on the first line, then the outline
-   id and version. On **Not now** → run
+4. On **Yes** → judge the code-gate verdict the way **## Conclude** step 3
+   does, then run
+   `issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>`.
+   A zero exit prints `concludedAt`, then the published version. When
+   reconcile started, the next line is that session id. A non-zero exit
+   means the conclude write landed and reconcile did not start; the final
+   message is stderr. Report `<storyId>` on the first line, then the
+   outline id, the published version, the verdict, and whether reconcile
+   started. On **Not now** → run
    `issue outline draft discard <outlineId>` and report `<outlineId>`.
 
 ## Spawn stubs
@@ -297,7 +304,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen when conclude starts a decomposer, or when **## Append** hands Yes to reconciliation.
+- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.

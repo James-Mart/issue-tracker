@@ -72,6 +72,11 @@ export function parseTranscriptLine(
   return { event: { ...parsed.event, seq: lineSeq }, stamped: false };
 }
 
+/** Seq of the last transcript event, or undefined when the transcript is empty. */
+export function lastTranscriptSeq(conversationId: string): number | undefined {
+  return readAllTranscriptEvents(conversationId).at(-1)?.seq;
+}
+
 /** Every valid transcript event in file order. Missing file is an empty transcript. */
 export function readAllTranscriptEvents(
   conversationId: string,

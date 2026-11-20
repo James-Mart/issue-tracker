@@ -627,6 +627,18 @@ export const taskSchema = z.object({
   ...timestamps,
 });
 
+// An append Idea's concluded plan, waiting for reconcile to add its Tasks to
+// `targetStory` and apply its gates there.
+export const pendingAppendSchema = z
+  .object({
+    targetStory: nonEmpty,
+    sourceIdea: nonEmpty,
+    executionGate: executionGateSchema,
+    codeApprovalRequired: z.boolean(),
+  })
+  .strict();
+export type PendingAppend = z.infer<typeof pendingAppendSchema>;
+
 // A versioned feature description under a Project. `bodyVersion` is the latest
 // saved body. CLI `get version` reads it. Distinct from the content-hash
 // `version` on `read()`. `sourceIdea` names the Idea planning produced this from.
@@ -644,6 +656,9 @@ export const outlineSchema = z.object({
   outOfBand: z.boolean().optional(),
   // System-written when conclude archives the Idea. Patches are refused.
   concludedAt: nonEmpty.optional(),
+  // System-written: append conclude adds an entry, reconcile's apply removes
+  // it. Absent when none are pending. Patches are refused.
+  pendingAppends: z.array(pendingAppendSchema).min(1).optional(),
   ...archivableFields,
   ...orderField,
   ...timestamps,

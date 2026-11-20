@@ -1,20 +1,13 @@
-import { resolveExecutionGate } from "../../src/features/issues/lib/outline-planning-launch.js";
 import type { Issue } from "../schemas.js";
-import { planCodeGateMergePolicyLowering } from "./code-gate-merge-policy.js";
 import { IssueError } from "./errors.js";
-import { checkIntegrity } from "./integrity.js";
 import {
-  commitIssueBatch,
   ensureMigrations,
   readAll,
   readIssueOrThrow,
   serialize,
 } from "./issues.js";
-import { assertMergePolicyLattice } from "./merge-policy.js";
-import { queueRefusal, withQueueStamp } from "./work-queue.js";
+import { commitWithPlanGates, type PlanGates } from "./plan-gates.js";
 import { implementingWorkRootFromIssue, type WorkRoot } from "./work-slots.js";
-
-type OutlineIssue = Extract<Issue, { kind: "outline" }>;
 
 /**
  * Mark a work root's plan final from its source outline's settings: set
@@ -39,31 +32,19 @@ export function releaseWorkRoot(id: string): Promise<string> {
     }
     if (root.releasedAt) return root.releasedAt;
 
-    const outline = settingsOutlineOf(root, byId);
     const now = new Date().toISOString();
-    const { written, prospective } = releaseWrites(root, outline, byId, now);
-    const problems = checkIntegrity(prospective);
-    if (problems.length > 0) {
-      throw new IssueError(
-        "validation",
-        problems.map((problem) => problem.message).join("; "),
-      );
-    }
-    if (outline.codeApprovalRequired === true) {
-      assertMergePolicyLattice(prospective);
-    }
-    commitIssueBatch(
-      written.map((issue) => ({ issue })),
-      [],
+    commitWithPlanGates(
+      byId,
+      [{ ...root, releasedAt: now, updatedAt: now }],
+      { lowerId: root.id, rootId: root.id },
+      outlineGatesOf(root, byId),
+      now,
     );
     return now;
   });
 }
 
-function settingsOutlineOf(
-  root: WorkRoot,
-  byId: Map<string, Issue>,
-): OutlineIssue {
+function outlineGatesOf(root: WorkRoot, byId: Map<string, Issue>): PlanGates {
   if (!root.sourceOutline) {
     throw new IssueError(
       "validation",
@@ -83,46 +64,8 @@ function settingsOutlineOf(
       `outline "${outline.id}" carries no plan settings; conclude its Idea first`,
     );
   }
-  return outline;
-}
-
-function releaseWrites(
-  root: WorkRoot,
-  outline: OutlineIssue,
-  byId: Map<string, Issue>,
-  now: string,
-): { written: Issue[]; prospective: Issue[] } {
-  const next = new Map(byId);
-  const writtenIds = new Set<string>();
-  const write = (issue: Issue) => {
-    next.set(issue.id, issue);
-    writtenIds.add(issue.id);
-  };
-
-  write({ ...root, releasedAt: now, updatedAt: now });
-  if (outline.codeApprovalRequired === true) {
-    for (const lowered of planCodeGateMergePolicyLowering(root.id, [
-      ...next.values(),
-    ])) {
-      write({ ...lowered, updatedAt: now });
-    }
-  }
-
-  const gate = resolveExecutionGate(
-    outline.executionGate,
-    outline.codeApprovalRequired,
-  );
-  if (gate === "off") {
-    const issues = [...next.values()];
-    const released = implementingWorkRootFromIssue(next.get(root.id)!, next)!;
-    if (!queueRefusal(released, issues, next)) {
-      write(withQueueStamp(released, issues, next, now));
-    }
-  }
-
-  const prospective = [...next.values()];
   return {
-    written: prospective.filter((issue) => writtenIds.has(issue.id)),
-    prospective,
+    executionGate: outline.executionGate,
+    codeApprovalRequired: outline.codeApprovalRequired,
   };
 }
