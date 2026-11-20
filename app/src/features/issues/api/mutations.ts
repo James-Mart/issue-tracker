@@ -27,6 +27,7 @@ import {
   type IssueRecord,
   type IssuesResponse,
   type MergeStoryBody,
+  type OutlineSessionRole,
   type ThreadEventRequest,
   type ThreadView,
   isInclusionThreadEvent,
@@ -593,7 +594,12 @@ function rememberStartedChannelSession(
   qc: QueryClient,
   issueId: string,
   channel: ConversationChannel,
-  created: { id: string; title: string; model: string },
+  created: {
+    id: string;
+    title: string;
+    model: string;
+    outlineRole?: OutlineSessionRole;
+  },
 ): void {
   const now = new Date().toISOString();
   const item: ChannelSessionListItem = {
@@ -605,6 +611,7 @@ function rememberStartedChannelSession(
     archived: false,
     activeRun: true,
     awaitingHuman: false,
+    ...(created.outlineRole ? { outlineRole: created.outlineRole } : {}),
   };
   qc.setQueryData<ChannelSessionListItem[]>(
     issuesKeys.channelSessions(issueId, channel),
@@ -634,7 +641,10 @@ export function useDecomposeOutline(outlineId: string) {
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
-      rememberStartedChannelSession(qc, outlineId, "decomposition", data);
+      rememberStartedChannelSession(qc, outlineId, "decomposition", {
+        ...data,
+        outlineRole: "decomposer",
+      });
     },
     onSettled: () => {
       invalidateStartedChannelSession(qc, outlineId, "decomposition");
@@ -684,7 +694,10 @@ export function useUpdateOutlineDraft(outlineId: string) {
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
-      rememberStartedChannelSession(qc, outlineId, "decomposition", data);
+      rememberStartedChannelSession(qc, outlineId, "decomposition", {
+        ...data,
+        outlineRole: "reconcile",
+      });
     },
     onSettled: () => {
       invalidateStartedChannelSession(qc, outlineId, "decomposition");

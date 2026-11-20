@@ -3,6 +3,7 @@ import type {
   ChannelSessionListItem,
   ChannelSessionPair,
   ConversationChannel,
+  OutlineSessionRole,
 } from "@server/schemas";
 
 export type CreateChannelSessionBody = {
@@ -102,7 +103,36 @@ export function orderChannelSessionsForSwitcher(
   return [...active.sort(byUpdatedAtDesc), ...archived.sort(byUpdatedAtDesc)];
 }
 
-function formatSessionStartTime(createdAt: string): string {
+const OUTLINE_SESSION_ROLE_LABELS: Record<OutlineSessionRole, string> = {
+  planner: "Planner",
+  decomposer: "Decomposer",
+  reconcile: "Reconcile",
+  check: "Outline check",
+};
+
+/** Picker name for an outline session's role. */
+export function outlineSessionRoleLabel(role: OutlineSessionRole): string {
+  return OUTLINE_SESSION_ROLE_LABELS[role];
+}
+
+/**
+ * Roster for the outline Planning tab, which is the only channel tab an
+ * outline has. Both channels appear together. A planning session with no
+ * stored role is a planner.
+ */
+export function outlinePlanningSessionList(
+  planning: readonly ChannelSessionListItem[],
+  decomposition: readonly ChannelSessionListItem[],
+): ChannelSessionListItem[] {
+  const planners = planning.map((session) =>
+    session.outlineRole === undefined
+      ? { ...session, outlineRole: "planner" as const }
+      : session,
+  );
+  return orderChannelSessionsForSwitcher([...planners, ...decomposition]);
+}
+
+export function formatSessionStartTime(createdAt: string): string {
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return createdAt;
   return date.toLocaleString([], {
@@ -113,10 +143,21 @@ function formatSessionStartTime(createdAt: string): string {
   });
 }
 
-/** Switcher row label: session start time plus archived marker. */
+/** Role name and start-time line for one session switcher row. */
+export function channelSessionSwitcherParts(session: ChannelSessionListItem): {
+  role?: string;
+  when: string;
+} {
+  const time = formatSessionStartTime(session.createdAt);
+  const when = session.archived ? `${time} · archived` : time;
+  if (session.outlineRole === undefined) return { when };
+  return { role: outlineSessionRoleLabel(session.outlineRole), when };
+}
+
+/** Switcher row label: outline role, when the session has one, then start time. */
 export function formatChannelSessionSwitcherLabel(
   session: ChannelSessionListItem,
 ): string {
-  const time = formatSessionStartTime(session.createdAt);
-  return session.archived ? `${time} · archived` : time;
+  const { role, when } = channelSessionSwitcherParts(session);
+  return role === undefined ? when : `${role} · ${when}`;
 }

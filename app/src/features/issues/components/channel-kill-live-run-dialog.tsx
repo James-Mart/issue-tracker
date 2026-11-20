@@ -8,7 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatChannelSessionSwitcherLabel } from "../api/channel-sessions";
+import {
+  formatSessionStartTime,
+  outlineSessionRoleLabel,
+} from "../api/channel-sessions";
 
 /** Confirm before a channel action kills and archives a mid-run session. */
 export function ChannelKillLiveRunDialog({
@@ -32,13 +35,16 @@ export function ChannelKillLiveRunDialog({
         <DialogHeader>
           <DialogTitle>Kill live run?</DialogTitle>
           <DialogDescription>
-            This will stop the agent and archive the session
+            This will stop the agent and archive the{" "}
+            {session?.outlineRole
+              ? `${outlineSessionRoleLabel(session.outlineRole)} session`
+              : "session"}
             {session ? (
               <>
                 {" "}
                 started{" "}
-                <span className="text-foreground">
-                  {formatChannelSessionSwitcherLabel(session)}
+                <span className="font-mono text-foreground">
+                  {formatSessionStartTime(session.createdAt)}
                 </span>
               </>
             ) : null}

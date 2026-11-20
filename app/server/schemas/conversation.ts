@@ -1,5 +1,13 @@
 import { z } from "zod";
+import {
+  OUTLINE_SESSION_ROLES,
+  outlineChannelForRole,
+  type OutlineSessionRole,
+} from "../../src/features/issues/lib/outline-session-role.js";
 import { formatZodError } from "./issue.js";
+
+export { OUTLINE_SESSION_ROLES, outlineChannelForRole };
+export type { OutlineSessionRole };
 
 const nonEmpty = z.string().min(1);
 
@@ -21,27 +29,6 @@ export const CONVERSATION_CHANNELS = [
   "review",
 ] as const;
 export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
-
-export const OUTLINE_SESSION_ROLES = [
-  "planner",
-  "decomposer",
-  "reconcile",
-  "check",
-] as const;
-export type OutlineSessionRole = (typeof OUTLINE_SESSION_ROLES)[number];
-
-const OUTLINE_ROLE_CHANNELS = {
-  planner: "planning",
-  decomposer: "decomposition",
-  reconcile: "decomposition",
-  check: "decomposition",
-} as const satisfies Record<OutlineSessionRole, ConversationChannel>;
-
-export function outlineChannelForRole(
-  role: OutlineSessionRole,
-): ConversationChannel {
-  return OUTLINE_ROLE_CHANNELS[role];
-}
 
 /** Why `outlineRole` does not fit `channel`, or undefined when it does. */
 export function outlineRoleChannelError(
@@ -151,6 +138,8 @@ export const channelSessionListItemSchema = z.object({
   archived: z.boolean(),
   activeRun: z.boolean(),
   awaitingHuman: z.boolean(),
+  /** Set on an outline session. Absent for every other channel. */
+  outlineRole: z.enum(OUTLINE_SESSION_ROLES).optional(),
 });
 
 export type ChannelSessionListItem = z.infer<

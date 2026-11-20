@@ -71,6 +71,7 @@ export async function listChannelSessionsForPairs(
         archived: meta.archived,
         activeRun: sessions.getActiveRun(meta.id) !== undefined,
         awaitingHuman,
+        ...(meta.outlineRole ? { outlineRole: meta.outlineRole } : {}),
       });
     });
   }
