@@ -146,7 +146,7 @@ describe("ChannelTranscriptPanel", () => {
   });
 
   it("opens the concluded banner on the outline's planner sessions", () => {
-    issuesState.data = { issues: [project, concludedOutline] };
+    issuesState.data = { issues: [project, concludedOutline], derived: {} };
     queryState.data = [
       channelSessionListItem({
         id: "planner",

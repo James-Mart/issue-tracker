@@ -53,6 +53,7 @@ import {
   PlanningNewRunControl,
 } from "./planning-launch-control";
 import { OutlineChannelBusyNote } from "./outline-channel-busy-note";
+import { OutlineDecompositionEmptyState } from "./outline-decomposition-empty";
 import { OutlineNewPlanningSessionControl } from "./outline-new-planning-session";
 import {
   PlanningConcludedBanner,
@@ -416,6 +417,12 @@ export function ChannelTranscriptPanel({
         outline={planningOutline}
         blocked={Boolean(busyRun)}
         onStarted={onSessionStarted}
+      />
+    ) : outlineView?.channel === "decomposition" ? (
+      <OutlineDecompositionEmptyState
+        label={label}
+        outline={outlineView.issue}
+        blocked={Boolean(busyRun)}
       />
     ) : implementingWorkRoot && projectId ? (
       <ImplementingChannelEmptyState issue={implementingWorkRoot} />

@@ -1,10 +1,12 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
 import type {
   ChannelSessionListItem,
   ConversationChannel,
+  DerivedState,
   IssueDetail,
   IssueRecord,
 } from "@server/schemas";
@@ -22,7 +24,9 @@ const fixtures = vi.hoisted(() => ({
     awaitingLaunchSession: undefined as boolean | undefined,
   },
   issuesState: {
-    data: undefined as { issues: IssueRecord[] } | undefined,
+    data: undefined as
+      | { issues: IssueRecord[]; derived: Record<string, DerivedState> }
+      | undefined,
   },
 }));
 
@@ -177,18 +181,23 @@ export function mountPanel(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   const rerender = () => {
     act(() => {
       root.render(
-        <MemoryRouter>
-          <ChannelTranscriptPanel
-            issueId={issue?.id ?? "capture"}
-            issue={issue}
-            channel={options?.channel ?? "planning"}
-            label={options?.label ?? "Planning"}
-            projectId={options?.projectId}
-          />
-        </MemoryRouter>,
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <ChannelTranscriptPanel
+              issueId={issue?.id ?? "capture"}
+              issue={issue}
+              channel={options?.channel ?? "planning"}
+              label={options?.label ?? "Planning"}
+              projectId={options?.projectId}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
       );
     });
   };

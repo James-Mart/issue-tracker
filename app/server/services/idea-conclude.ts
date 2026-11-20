@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { resolveExecutionGate } from "../../src/features/issues/lib/outline-planning-launch.js";
 import { outlineChannelForRole } from "../../src/features/issues/lib/outline-session-role.js";
 import type { Issue } from "../schemas.js";
 import { formatZodError, parseIssue } from "../schemas.js";
@@ -21,6 +20,7 @@ import { pendingDraftVersionWrite } from "./outline-draft.js";
 import { removeOutlineDraftIfUnchanged } from "./outline-draft-store.js";
 import { withIdeaPlanSettings } from "./outline-plan-settings.js";
 import {
+  decomposerSessionFromOutline,
   startOutlinePlanningSession,
   type StartOutlineDecomposerSession,
   type StartOutlineReconcileSession,
@@ -248,16 +248,7 @@ function concludeWrite(
   const start: SessionStart | undefined = gatesStartSession(idea)
     ? {
         partOf: outlineNext.partOf,
-        session: {
-          outlineId: outlineNext.id,
-          role: "decomposer",
-          version: outlineNext.bodyVersion,
-          executionGate: resolveExecutionGate(
-            outlineNext.executionGate,
-            codeApprovalRequired,
-          ),
-          mergePolicy: outlineNext.mergePolicy,
-        },
+        session: decomposerSessionFromOutline(outlineNext),
       }
     : undefined;
   return { idea: ideaNext, outline: outlineNext, start };

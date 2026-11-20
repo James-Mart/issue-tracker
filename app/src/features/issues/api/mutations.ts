@@ -38,7 +38,6 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
-import type { OutlineExecutionGate } from "../lib/outline-planning-launch";
 import type { OutboxComment } from "../lib/comment-outbox";
 import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
@@ -644,15 +643,11 @@ export function useStartOutlinePlanningSession(outlineId: string) {
 /** Start a decomposer on the outline's decomposition channel at its latest version. */
 export function useDecomposeOutline(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<
-    StartedChannelSession,
-    Error,
-    { executionGate: OutlineExecutionGate }
-  >({
-    mutationFn: (body) =>
+  return useMutation<StartedChannelSession, Error, void>({
+    mutationFn: () =>
       request<StartedChannelSession>(
         `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
-        { method: "POST", body },
+        { method: "POST", body: {} },
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {

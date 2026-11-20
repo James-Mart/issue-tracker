@@ -6,6 +6,7 @@ import {
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
   outlineReconcileSessionMessage,
+  resolveExecutionGate,
   type OutlineExecutionGate,
   type OutlineReconcileScope,
 } from "../../src/features/issues/lib/outline-planning-launch.js";
@@ -62,20 +63,13 @@ export type StartOutlinePlanningSessionInput =
   | StartOutlineReconcileSession
   | StartOutlineCheckSession;
 
-export type DecomposeRequest = Pick<
-  StartOutlineDecomposerSession,
-  "executionGate" | "mergePolicy"
->;
+const decomposeRequestSchema = z.object({}).strict();
 
-const decomposeRequestSchema = z
-  .object({
-    executionGate: z.enum(["on", "off"]),
-    mergePolicy: z.string().optional(),
-  })
-  .strict();
-
-/** Body of `POST /outline/decompose`. Unknown fields are refused. */
-export function parseDecomposeRequest(body: unknown): DecomposeRequest {
+/**
+ * Body of `POST /outline/decompose`. The outline stores `executionGate` and
+ * `mergePolicy`; a body that carries either, or any other field, is refused.
+ */
+export function assertEmptyDecomposeBody(body: unknown): void {
   const parsed = decomposeRequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new IssueError(
@@ -83,9 +77,21 @@ export function parseDecomposeRequest(body: unknown): DecomposeRequest {
       formatZodError(parsed.error, "invalid decompose body"),
     );
   }
+}
+
+/** Decomposer start for one outline, from its stored gate and merge policy. */
+export function decomposerSessionFromOutline(
+  outline: OutlineIssue,
+): StartOutlineDecomposerSession {
   return {
-    executionGate: parsed.data.executionGate,
-    mergePolicy: parsed.data.mergePolicy,
+    outlineId: outline.id,
+    role: "decomposer",
+    version: outline.bodyVersion,
+    executionGate: resolveExecutionGate(
+      outline.executionGate,
+      outline.codeApprovalRequired,
+    ),
+    mergePolicy: outline.mergePolicy,
   };
 }
 
