@@ -271,7 +271,8 @@ way. The draft is not a version until conclude publishes it:
    `issue outline draft set <outlineId> <path>`; the draft is not a version.
 3. **Ask.** Post the draft body in chat and name the target Story. Then ask
    **one** question whose answer list carries each consequence:
-   - **Yes** — conclude publishes the draft as the outline's next version
+   - **Yes** — conclude publishes the draft as the outline's next version,
+     records a pending append that reconcile applies to the target Story,
      and archives this Idea.
    - **Not now** — the draft is discarded and the current version stays.
    - **Amend** — the reply is feedback on the draft. Revise it, save it
@@ -279,9 +280,12 @@ way. The draft is not a version until conclude publishes it:
 4. On **Yes** → judge the code-gate verdict the way **## Conclude** step 3
    does, then run
    `issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>`.
-   A zero exit prints `concludedAt`, then the published version. Report
-   `<storyId>` on the first line, then the outline id, the published
-   version, and the verdict. On **Not now** → run
+   A zero exit prints `concludedAt`, then the published version. When
+   reconcile started, the next line is that session id. A non-zero exit
+   means the conclude write landed and reconcile did not start; the final
+   message is stderr. Report `<storyId>` on the first line, then the
+   outline id, the published version, the verdict, and whether reconcile
+   started. On **Not now** → run
    `issue outline draft discard <outlineId>` and report `<outlineId>`.
 
 ## Spawn stubs
@@ -300,7 +304,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen when conclude starts a decomposer. An append Idea's conclude publishes the draft and archives the Idea.
+- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.

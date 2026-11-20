@@ -38,4 +38,5 @@ classifies it, and where the decision-summary report and
 standout-decisions comment landed on the archived source Idea. For a
 **Concluded** message, say that the planner continues on the outline's
 Planning tab once this run ends. For a **Yes** message, say that conclude
-published the draft and the append transcript stays on the Idea.
+published the draft, that the planner continues on the outline's Planning
+tab once this run ends, and that the append transcript stays on the Idea.

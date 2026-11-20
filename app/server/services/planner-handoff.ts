@@ -3,6 +3,7 @@ import { outlinePlanningSessionTitle } from "../../src/features/issues/lib/outli
 import type {
   ConversationMeta,
   DelegationRecordWithEnd,
+  Issue,
   TranscriptEvent,
 } from "../schemas.js";
 import {
@@ -33,6 +34,7 @@ import {
   serialize,
   type BusyLookup,
 } from "./conversations.js";
+import { appendTargetOutlineId } from "./append-target.js";
 import { IssueError } from "./errors.js";
 import { guestRefusesAgentLaunch } from "./guest-agent-launch.js";
 import { readAll, readOutlineOrThrow } from "./issues.js";
@@ -50,6 +52,12 @@ export type PlannerHandoff = {
   mode: "fork" | "promote";
   /** The Idea's Planning root conversation. */
   sourceConversationId: string;
+  /**
+   * Set for an append whose session forked the outline's planner: that
+   * planner and the seq it was forked at, recorded as the new planner's
+   * `forkedFrom` in place of the Idea's conversation.
+   */
+  forkOrigin?: { conversationId: string; seq: number };
 };
 
 /** How the outline's planner session gets the source planner's context. */
@@ -73,24 +81,45 @@ export function concludedPlannerHandoff(
   const { issues } = readAll();
   const idea = issues.find((issue) => issue.id === meta.issueId);
   if (idea?.kind !== "idea" || !idea.archived) return undefined;
-  const outline = issues.find(
+  const outlineId = concludedOutlineId(issues, idea);
+  if (!outlineId) return undefined;
+  const { forkedFrom, forkedAtSeq } = meta;
+  return {
+    outlineId,
+    mode: idea.stakeholder ? "promote" : "fork",
+    sourceConversationId: meta.id,
+    ...(idea.appendTo && forkedFrom !== undefined && forkedAtSeq !== undefined
+      ? { forkOrigin: { conversationId: forkedFrom, seq: forkedAtSeq } }
+      : {}),
+  };
+}
+
+/**
+ * The outline an archived Idea concluded onto. An Idea's own outline carries
+ * `concludedAt`; an append Idea concluded when conclude recorded its verdict,
+ * and its outline is the target Story's.
+ */
+function concludedOutlineId(
+  issues: readonly Issue[],
+  idea: Extract<Issue, { kind: "idea" }>,
+): string | undefined {
+  if (idea.appendTo) {
+    if (idea.codeApprovalRequired === undefined) return undefined;
+    return appendTargetOutlineId(issues, idea.appendTo);
+  }
+  return issues.find(
     (issue) =>
       issue.kind === "outline" &&
       issue.sourceIdea === idea.id &&
       issue.concludedAt !== undefined,
-  );
-  if (!outline) return undefined;
-  return {
-    outlineId: outline.id,
-    mode: idea.stakeholder ? "promote" : "fork",
-    sourceConversationId: meta.id,
-  };
+  )?.id;
 }
 
 /**
  * Continue the planner as the outline's Planning root, from the source
  * conversation through its last transcript event, and archive the source.
- * Earlier planner sessions on the outline are archived.
+ * Earlier planner sessions on the outline are archived. `forkedFrom` is the
+ * source, or the handoff's `forkOrigin` when it has one.
  */
 export async function handoffPlanner(
   handoff: PlannerHandoff,
@@ -115,8 +144,8 @@ export async function handoffPlanner(
       model: continuation.model,
       ...(continuation.role ? { role: continuation.role } : {}),
       agentId,
-      forkedFrom: source.id,
-      forkedAtSeq,
+      forkedFrom: handoff.forkOrigin?.conversationId ?? source.id,
+      forkedAtSeq: handoff.forkOrigin?.seq ?? forkedAtSeq,
       anchor: { issueId: outline.id, channel: "planning", outlineRole: "planner" },
     });
     continuation.copyInto(meta.id, agentId);

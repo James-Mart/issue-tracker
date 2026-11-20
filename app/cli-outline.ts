@@ -14,6 +14,7 @@ import {
 } from "./server/services/outline-draft.js";
 import { agentSessions } from "./server/services/agent-sessions.js";
 import { list } from "./server/services/issues.js";
+import { applyPendingAppend } from "./server/services/pending-appends.js";
 
 type Run = (action: () => unknown) => Promise<void>;
 
@@ -62,6 +63,17 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
           if (root.open) process.stdout.write(`${root.id} ${root.version}\n`);
         }
       }),
+    );
+
+  kindCmd
+    .command("apply-append")
+    .argument("<id>", "outline id")
+    .argument("<sourceIdea>", "idea whose pending append to apply")
+    .description(
+      "apply a pending append's gates to its target story and drop it from pendingAppends",
+    )
+    .action((id: string, sourceIdea: string) =>
+      run(() => applyPendingAppend(id, sourceIdea)),
     );
 
   const draft = kindCmd

@@ -24,10 +24,10 @@ the transcript holds its planning context; when it has none, the session
 starts cold. Either way the session is this Idea's stakeholder, and the
 planner you delegate is a new one for this Idea. You resolve polish
 escalations and finalize with an audit report on the source Idea. When your
-run ends on an Idea with no `appendTo`, the planner continues on the
-outline's Planning tab, where the human talks to it directly. On an Idea
-with `appendTo`, conclude has published the draft and the append transcript
-stays on the Idea.
+run ends on a concluded Idea, the planner continues on the outline's
+Planning tab, where the human talks to it directly. On an Idea with
+`appendTo`, conclude has published the draft and recorded its pending
+append, and the append transcript stays on the Idea.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
 You do **not** author the outline or the plan tree yourself — the planner's
@@ -255,7 +255,7 @@ specifics and stop; otherwise proceed to Flow.
    - **Not now** — an Idea with `appendTo`. The message is the outline id.
    - **Yes** — an Idea with `appendTo`. The first line is the target Story
      id. Conclude published the draft; the message names the outline id,
-     the published version, and the verdict.
+     the published version, the verdict, and whether reconcile started.
 
    The final message ends the relay loop; go to **## Finalize** without
    re-entering the planner.
