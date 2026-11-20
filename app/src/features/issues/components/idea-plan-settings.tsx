@@ -4,26 +4,22 @@ import type { ExecutionGate, IssuePatch, IssueRecord } from "@server/schemas";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateIssue } from "../api/mutations";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
+import { IDEA_EXECUTION_GATE_OPTIONS } from "../lib/idea-execution-gate-options";
+import { planSettingVisibility } from "../lib/idea-plan-setting-visibility";
 import { GateToggleButton } from "./gate-toggle-button";
 
 type IdeaRecord = Extract<IssueRecord, { kind: "idea" }>;
 
-const EXECUTION_GATE_OPTIONS: readonly {
-  value: ExecutionGate;
-  label: string;
-  slug: string;
-}[] = [
-  { value: "auto", label: "Auto", slug: "auto" },
-  { value: true, label: "On", slug: "on" },
-  { value: false, label: "Off", slug: "off" },
-];
+export type IdeaPlanSettingsState = ReturnType<typeof useIdeaPlanSettings>;
 
 function nextExecutionGate(
   current: ExecutionGate,
   key: string,
 ): { value: ExecutionGate; index: number } | undefined {
-  const index = EXECUTION_GATE_OPTIONS.findIndex((option) => option.value === current);
-  const last = EXECUTION_GATE_OPTIONS.length - 1;
+  const index = IDEA_EXECUTION_GATE_OPTIONS.findIndex(
+    (option) => option.value === current,
+  );
+  const last = IDEA_EXECUTION_GATE_OPTIONS.length - 1;
   const nextIndex =
     key === "ArrowRight" || key === "ArrowDown"
       ? index === last
@@ -35,27 +31,13 @@ function nextExecutionGate(
           : index - 1
         : undefined;
   if (nextIndex === undefined) return undefined;
-  return { value: EXECUTION_GATE_OPTIONS[nextIndex].value, index: nextIndex };
-}
-
-/**
- * Out of band hides the other two controls. Execution stays hidden while the
- * decomposition gate is on, including for an append Idea.
- */
-function planSettingVisibility(input: {
-  outOfBand: boolean;
-  decompositionGate: boolean;
-}): { decomposition: boolean; execution: boolean } {
-  if (input.outOfBand) {
-    return { decomposition: false, execution: false };
-  }
   return {
-    decomposition: true,
-    execution: !input.decompositionGate,
+    value: IDEA_EXECUTION_GATE_OPTIONS[nextIndex].value,
+    index: nextIndex,
   };
 }
 
-function useIdeaPlanSettings(issue: IdeaRecord) {
+export function useIdeaPlanSettings(issue: IdeaRecord) {
   const update = useUpdateIssue();
   const { saving, run } = useIssuePatchAction();
   const [outOfBand, setOutOfBand] = useState(issue.outOfBand === true);
@@ -79,11 +61,17 @@ function useIdeaPlanSettings(issue: IdeaRecord) {
     });
   };
 
+  const shown = planSettingVisibility({
+    outOfBand,
+    decompositionGate: decomposition,
+  });
+
   return {
     saving,
     outOfBand,
     decomposition,
     execution,
+    shown,
     toggleOutOfBand: () => {
       if (saving) return;
       const next = !outOfBand;
@@ -127,7 +115,8 @@ function ExecutionGateControl({
       aria-label={FIELD_LABELS.executionGate}
       data-testid={testId}
       data-value={
-        EXECUTION_GATE_OPTIONS.find((option) => option.value === value)?.slug
+        IDEA_EXECUTION_GATE_OPTIONS.find((option) => option.value === value)
+          ?.slug
       }
       className="inline-flex h-7 w-fit items-center rounded-md border border-border bg-card px-2 font-mono text-[10px] tracking-[0.08em] touch:h-11"
       onKeyDown={(event) => {
@@ -145,7 +134,7 @@ function ExecutionGateControl({
       <span aria-hidden className="text-muted-foreground">
         {FIELD_LABELS.executionGate} ·
       </span>
-      {EXECUTION_GATE_OPTIONS.map((option) => {
+      {IDEA_EXECUTION_GATE_OPTIONS.map((option) => {
         const selected = value === option.value;
         return (
           <button
@@ -173,25 +162,20 @@ function ExecutionGateControl({
   );
 }
 
-/** Decomposition, execution, and out-of-band controls for an unarchived Idea. */
-export function IdeaPlanSettings({
+export function IdeaPlanSettingsControls({
   issue,
   testIdPrefix,
+  settings,
 }: {
   issue: IdeaRecord;
   testIdPrefix: "flow-row" | "detail";
+  settings: IdeaPlanSettingsState;
 }) {
-  const settings = useIdeaPlanSettings(issue);
   if (issue.archived) return null;
-
-  const shown = planSettingVisibility({
-    outOfBand: settings.outOfBand,
-    decompositionGate: settings.decomposition,
-  });
 
   return (
     <>
-      {shown.decomposition ? (
+      {settings.shown.decomposition ? (
         <GateToggleButton
           id={`decomposition-gate-${issue.id}`}
           label={FIELD_LABELS.decompositionGate}
@@ -201,7 +185,7 @@ export function IdeaPlanSettings({
           disabled={settings.saving}
         />
       ) : null}
-      {shown.execution ? (
+      {settings.shown.execution ? (
         <ExecutionGateControl
           id={`execution-gate-${issue.id}`}
           testId={`${testIdPrefix}-execution-gate`}
@@ -219,6 +203,24 @@ export function IdeaPlanSettings({
         disabled={settings.saving}
       />
     </>
+  );
+}
+
+/** Decomposition, execution, and out-of-band controls for an unarchived Idea. */
+export function IdeaPlanSettings({
+  issue,
+  testIdPrefix,
+}: {
+  issue: IdeaRecord;
+  testIdPrefix: "flow-row" | "detail";
+}) {
+  const settings = useIdeaPlanSettings(issue);
+  return (
+    <IdeaPlanSettingsControls
+      issue={issue}
+      testIdPrefix={testIdPrefix}
+      settings={settings}
+    />
   );
 }
 

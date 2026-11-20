@@ -161,6 +161,10 @@ describe("PlanningChannelEmptyState", () => {
     );
     expect(container.textContent).toContain("Start planning grill");
     expect(container.textContent).toContain("you answer");
+    expect(container.textContent).toContain(
+      "Execution gate · Auto — decides from the code-gate verdict",
+    );
+    expect(container.textContent).not.toContain("gate rubric");
 
     const modelSelect = container.querySelector(
       '[data-testid="planning-session-model"]',
@@ -214,7 +218,8 @@ describe("PlanningChannelEmptyState", () => {
       />,
     );
     expect(container.textContent).toContain("Start auto-plan on Opus 5");
-    expect(container.textContent).toContain("gate rubric");
+    expect(container.textContent).toContain("It answers the grill.");
+    expect(container.textContent).not.toContain("gate rubric");
     expect(
       container.querySelector('[data-testid="planning-session-model"]'),
     ).toBeNull();
