@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useDecomposeOutline, useUpdateIssue } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
+import { READY_TO_DECOMPOSE_LABEL } from "../lib/derived";
 import { linkedRootsForOutline } from "../lib/outline-links";
 import { ExecutionGateControl } from "./execution-gate-control";
 import { ExecutionGateEffectLine } from "./execution-gate-effect-line";
@@ -142,7 +143,7 @@ export function OutlineDecompositionEmptyState({
       <ShellState
         className={EMPTY_CLASS}
         eyebrow={label}
-        title="Ready to decompose"
+        title={READY_TO_DECOMPOSE_LABEL}
         detail={READY_DETAIL}
         action={
           <div className="flex w-full flex-col items-center gap-3">

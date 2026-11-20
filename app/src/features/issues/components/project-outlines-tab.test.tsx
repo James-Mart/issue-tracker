@@ -3,26 +3,32 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { ProjectOutlinesTab } from "./project-outlines-tab";
 
 const { list } = vi.hoisted(() => ({
-  list: { issues: [] as IssueRecord[] },
+  list: {
+    issues: [] as IssueRecord[],
+    derived: {} as Record<string, DerivedState>,
+  },
 }));
 
 vi.mock("../api/queries", () => ({
   useIssuesQuery: () => ({
-    data: { issues: list.issues, derived: {} },
+    data: { issues: list.issues, derived: list.derived },
     error: null,
   }),
 }));
+
+const t0 = "2026-01-01T00:00:00.000Z";
 
 function outline(
   id: string,
   title: string,
   updatedAt: string,
   bodyVersion: number,
+  outOfBand?: boolean,
 ): IssueRecord {
   return {
     id,
@@ -32,8 +38,26 @@ function outline(
     bodyVersion,
     archived: false,
     order: 0,
-    createdAt: "2026-01-01T00:00:00.000Z",
+    createdAt: t0,
     updatedAt,
+    ...(outOfBand !== undefined && { outOfBand }),
+  };
+}
+
+function epic(id: string, outlineId: string, archived = false): IssueRecord {
+  return {
+    id,
+    kind: "epic",
+    title: id,
+    partOf: "proj",
+    blockedBy: [],
+    order: 0,
+    archived,
+    needsAttention: false,
+    attentionReason: null,
+    createdAt: t0,
+    updatedAt: t0,
+    sourceOutline: { outline: outlineId, version: 1 },
   };
 }
 
@@ -77,8 +101,15 @@ function mount(): { container: HTMLDivElement; root: Root } {
 afterEach(() => {
   document.body.innerHTML = "";
   list.issues = [];
+  list.derived = {};
   useIssueUiStore.setState({ showArchived: false });
 });
+
+function rowIds(root: ParentNode): string[] {
+  return [...root.querySelectorAll("[data-testid^='project-outline-row-']")].map(
+    (row) => row.getAttribute("data-testid") ?? "",
+  );
+}
 
 describe("ProjectOutlinesTab", () => {
   it("lists outlines newest first and opens the outline", () => {
@@ -105,5 +136,68 @@ describe("ProjectOutlinesTab", () => {
     const probe = container.querySelector("[data-testid='probe']")?.textContent;
     expect(probe).toContain("/projects/proj/issues/new");
     expect(probe).toContain('"search":"?tab=outlines"');
+    expect(rows[0]?.textContent).not.toContain("Ready to decompose");
+  });
+
+  it("lists implementation and out-of-band outlines apart", () => {
+    list.issues = [
+      outline("banded", "Legacy portal", "2026-05-01T00:00:00.000Z", 2, true),
+      outline("linked", "Already built", "2026-06-01T00:00:00.000Z", 4, true),
+      outline("kept", "Archived root", "2026-04-01T00:00:00.000Z", 3, true),
+      outline("tracker", "Catalog split", "2026-07-01T00:00:00.000Z", 1, false),
+      epic("root", "linked"),
+      epic("old-root", "kept", true),
+    ];
+    list.derived = {
+      tracker: { blocked: false, readyToDecompose: true },
+      linked: { blocked: false, readyToDecompose: false },
+      kept: { blocked: false, readyToDecompose: false },
+      banded: { blocked: false, readyToDecompose: false },
+    };
+    const { container } = mount();
+    const implementation = container.querySelector(
+      "[data-testid='project-outlines-implementation']",
+    );
+    const outOfBand = container.querySelector(
+      "[data-testid='project-outlines-out-of-band']",
+    );
+    expect(implementation).not.toBeNull();
+    expect(outOfBand).not.toBeNull();
+    expect(rowIds(implementation!)).toEqual([
+      "project-outline-row-tracker",
+      "project-outline-row-linked",
+      "project-outline-row-kept",
+    ]);
+    expect(rowIds(outOfBand!)).toEqual(["project-outline-row-banded"]);
+
+    const header = [
+      ...(implementation?.querySelector("[aria-hidden='true']")?.children ?? []),
+    ].map((cell) => cell.textContent?.trim());
+    expect(header).toEqual(["Title", "Status", "Version", "Linked work", ""]);
+
+    const trackerRow = container.querySelector(
+      "[data-testid='project-outline-row-tracker']",
+    );
+    expect(trackerRow?.textContent).toContain("Ready to decompose");
+    expect(trackerRow?.textContent).toContain("v1");
+    expect(trackerRow?.textContent).toContain("0 roots");
+
+    const linkedRow = container.querySelector(
+      "[data-testid='project-outline-row-linked']",
+    );
+    expect(linkedRow?.textContent).toContain("1 epic");
+    expect(linkedRow?.querySelector("[data-testid='project-outline-ready']")).toBeNull();
+
+    const keptRow = container.querySelector(
+      "[data-testid='project-outline-row-kept']",
+    );
+    expect(keptRow?.textContent).toContain("0 roots");
+
+    const bandedRow = container.querySelector(
+      "[data-testid='project-outline-row-banded']",
+    );
+    expect(bandedRow?.textContent).toContain("0 roots");
+    expect(bandedRow?.textContent).not.toContain("GitHub");
+    expect(bandedRow?.querySelector("[data-testid='project-outline-ready']")).toBeNull();
   });
 });

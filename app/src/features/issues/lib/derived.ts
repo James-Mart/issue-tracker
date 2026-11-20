@@ -16,6 +16,13 @@ import {
   type TreeRowIndexes,
 } from "./tree-row-indexes";
 
+/** Outline is concluded, in band, and waiting on a human to decompose. */
+export const READY_TO_DECOMPOSE_LABEL = "Ready to decompose";
+
+export const READY_TO_DECOMPOSE_BADGE_VARIANT: NonNullable<
+  BadgeProps["variant"]
+> = "todo";
+
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   todo: "todo",
   "in-progress": "in progress",
