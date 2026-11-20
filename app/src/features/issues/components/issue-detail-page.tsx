@@ -98,11 +98,16 @@ function IssueOverviewLaunch({
     channel ? issue.id : "",
     channel ?? "implementing",
   );
-  if (!channel || isLoading || (sessions?.length ?? 0) > 0) return null;
+  if (!channel || isLoading) return null;
   if (channel === "planning" && issue.kind === "idea") {
+    const hasPlanningSession = (sessions?.length ?? 0) > 0;
+    if (issue.archived && hasPlanningSession) return null;
     return (
       <div data-testid="issue-overview-launch">
-        <PlanningOverviewLaunch issue={issue} />
+        <PlanningOverviewLaunch
+          issue={issue}
+          showLaunch={!hasPlanningSession}
+        />
       </div>
     );
   }

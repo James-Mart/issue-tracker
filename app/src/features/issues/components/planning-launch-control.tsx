@@ -34,7 +34,7 @@ import { useAppendPlanningContext } from "../lib/use-append-planning-context";
 import { issuesById } from "../lib/build-tree";
 import { useIssuesQuery } from "../api/queries";
 import { AppendPlanningCallout } from "./append-planning-callout";
-import { GateToggleButton } from "./gate-toggle-button";
+import { IdeaPlanSettings } from "./idea-plan-settings";
 import {
   defaultConversationModel,
   planningLaunchCopy,
@@ -141,111 +141,6 @@ function usePlanningStakeholder(issue: IdeaRecord) {
   };
 
   return { stakeholder, onChange, saving, error };
-}
-
-function useIdeaGateToggle(
-  issue: IdeaRecord,
-  field: "decompositionGate" | "executionGate",
-) {
-  const stored = issue[field] === true;
-  const [enabled, setEnabled] = useState(stored);
-  const update = useUpdateIssue();
-  const { saving, run } = useIssuePatchAction();
-
-  useEffect(() => {
-    setEnabled(issue[field] === true);
-  }, [issue, field]);
-
-  const onToggle = () => {
-    const next = !enabled;
-    const previous = enabled;
-    setEnabled(next);
-    void run(async () => {
-      try {
-        await update.mutateAsync({
-          id: issue.id,
-          patch: { [field]: next },
-        });
-      } catch (err) {
-        setEnabled(previous);
-        throw err;
-      }
-    });
-  };
-
-  return { enabled, onToggle, saving };
-}
-
-function gateControlId(
-  issueId: string,
-  field: "decompositionGate" | "executionGate",
-): string {
-  return field === "decompositionGate"
-    ? `decomposition-gate-${issueId}`
-    : `execution-gate-${issueId}`;
-}
-
-function DecompositionGateChip({
-  issue,
-  testId = "flow-row-decomposition-gate",
-}: {
-  issue: IdeaRecord;
-  testId?: string;
-}) {
-  const control = useIdeaGateToggle(issue, "decompositionGate");
-  return (
-    <GateToggleButton
-      id={gateControlId(issue.id, "decompositionGate")}
-      label="Decomposition gate"
-      testId={testId}
-      enabled={control.enabled}
-      onToggle={control.onToggle}
-      disabled={control.saving}
-    />
-  );
-}
-
-function ExecutionGateChip({
-  issue,
-  testId = "flow-row-execution-gate",
-}: {
-  issue: IdeaRecord;
-  testId?: string;
-}) {
-  const control = useIdeaGateToggle(issue, "executionGate");
-  return (
-    <GateToggleButton
-      id={gateControlId(issue.id, "executionGate")}
-      label="Execution gate"
-      testId={testId}
-      enabled={control.enabled}
-      onToggle={control.onToggle}
-      disabled={control.saving}
-    />
-  );
-}
-
-function IdeaGateChips({
-  issue,
-  testIdPrefix,
-}: {
-  issue: IdeaRecord;
-  testIdPrefix: "flow-row" | "detail";
-}) {
-  return (
-    <>
-      <DecompositionGateChip
-        issue={issue}
-        testId={`${testIdPrefix}-decomposition-gate`}
-      />
-      {issue.appendTo ? null : (
-        <ExecutionGateChip
-          issue={issue}
-          testId={`${testIdPrefix}-execution-gate`}
-        />
-      )}
-    </>
-  );
 }
 
 export type PlanningSessionStarted = {
@@ -450,28 +345,14 @@ function PlanningLaunchButton({
   );
 }
 
-/** Gate toggles for a captured Idea row. Empty without a stakeholder. */
-export function PlanningFlowRowGates({ issue }: { issue: IdeaRecord }) {
-  if (!issue.stakeholder) return null;
-  return <IdeaGateChips issue={issue} testIdPrefix="flow-row" />;
-}
-
 /** Icon-only planning launch for Flow row steering. */
-export function PlanningFlowRowLaunch({
-  issue,
-  gates = true,
-}: {
-  issue: IdeaRecord;
-  /** Row layout places gates outside the icon slot. */
-  gates?: boolean;
-}) {
+export function PlanningFlowRowLaunch({ issue }: { issue: IdeaRecord }) {
   const stakeholder = issue.stakeholder;
   const planning = useAppendPlanningContext(issue);
 
   return (
     <div className="flex flex-col items-start gap-1">
       <div className="flex items-center gap-1">
-        {gates ? <PlanningFlowRowGates issue={issue} /> : null}
         <PlanningLaunchButton
           issue={issue}
           channel="planning"
@@ -494,8 +375,14 @@ export function PlanningFlowRowLaunch({
   );
 }
 
-/** Overview-tab launch: same optimistic start as the empty state. */
-export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
+/** Overview plan settings, plus the start control when planning has not begun. */
+export function PlanningOverviewLaunch({
+  issue,
+  showLaunch = true,
+}: {
+  issue: IdeaRecord;
+  showLaunch?: boolean;
+}) {
   const stakeholder = issue.stakeholder;
   const rejectedUnsaved = useAppendTargetDraftStore(
     (s) => s.rejectedById[issue.id] === true,
@@ -508,26 +395,26 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
     appendPlanningCalloutVisible(issue.appendTo, planning.ideaDerived);
 
   return (
-    <div className="flex flex-col gap-2">
-      {showAppendCallout && append ? (
+    <div className={showLaunch ? "flex flex-col gap-2" : undefined}>
+      {showLaunch && showAppendCallout && append ? (
         <AppendPlanningCallout storyTitle={append.storyTitle} />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        {stakeholder ? (
-          <IdeaGateChips issue={issue} testIdPrefix="detail" />
+        <IdeaPlanSettings issue={issue} testIdPrefix="detail" />
+        {showLaunch ? (
+          <PlanningLaunchButton
+            issue={issue}
+            channel="planning"
+            stakeholder={stakeholder}
+            variant="primary"
+            optimistic
+            disabled={planning.launchBlocked}
+            testId="planning-overview-start-session"
+            onStarted={() => {}}
+          />
         ) : null}
-        <PlanningLaunchButton
-          issue={issue}
-          channel="planning"
-          stakeholder={stakeholder}
-          variant="primary"
-          optimistic
-          disabled={planning.launchBlocked}
-          testId="planning-overview-start-session"
-          onStarted={() => {}}
-        />
       </div>
-      {rejectedUnsaved ? (
+      {showLaunch && rejectedUnsaved ? (
         <p
           data-testid="planning-append-target-unsaved"
           className="text-sm text-muted-foreground"
@@ -535,7 +422,7 @@ export function PlanningOverviewLaunch({ issue }: { issue: IdeaRecord }) {
           {APPEND_TARGET_UNSAVED_PLANNING}
         </p>
       ) : null}
-      {planning.refusal ? (
+      {showLaunch && planning.refusal ? (
         <p
           data-testid={
             append?.phase === "ready" && append.context.status === "merged"
@@ -581,14 +468,13 @@ export function PlanningChannelEmptyState({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
-  const decompositionGateControl = useIdeaGateToggle(issue, "decompositionGate");
   const mergeBaseControl = usePlanningMergeBase(issue);
   const planning = useAppendPlanningContext(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const copy = planningLaunchCopy(
     stakeholder,
     models,
-    decompositionGateControl.enabled,
+    issue.decompositionGate === true,
   );
   const append = planning.phase === "absent" ? undefined : planning;
   const ready = append?.phase === "ready" ? append : undefined;
@@ -713,19 +599,7 @@ export function PlanningChannelEmptyState({
                 onChange={mergeBaseControl.onChange}
               />
             )}
-            {stakeholder ? (
-              <GateToggleButton
-                id={gateControlId(issue.id, "decompositionGate")}
-                label="Decomposition gate"
-                testId="detail-decomposition-gate"
-                enabled={decompositionGateControl.enabled}
-                onToggle={decompositionGateControl.onToggle}
-                disabled={decompositionGateControl.saving}
-              />
-            ) : null}
-            {stakeholder && !append ? (
-              <ExecutionGateChip issue={issue} testId="detail-execution-gate" />
-            ) : null}
+            <IdeaPlanSettings issue={issue} testIdPrefix="detail" />
             {append
               ? null
               : launchButton(

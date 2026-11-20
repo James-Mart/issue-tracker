@@ -171,6 +171,15 @@ describe("PlanningChannelEmptyState", () => {
       '[data-testid="planning-merge-base"]',
     ) as HTMLInputElement;
     expect(mergeBase.value).toBe("main");
+    expect(
+      container.querySelector('[data-testid="detail-decomposition-gate"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="detail-execution-gate"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="detail-out-of-band"]'),
+    ).toBeTruthy();
 
     await act(async () => {
       (
