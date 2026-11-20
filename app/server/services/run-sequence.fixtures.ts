@@ -26,6 +26,10 @@ export function writeIssue(id: string, body: Record<string, unknown>): void {
   );
 }
 
+export function conversationPath(id: string, ...rest: string[]): string {
+  return join(conversationsDir, id, ...rest);
+}
+
 export function writeConversation(
   id: string,
   opts: {

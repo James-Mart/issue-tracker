@@ -189,7 +189,8 @@ function conversationStoreDir(conversationId: string): string {
   return join(conversationDir(conversationId), "agent-state");
 }
 
-function publishPlanningRunIssueFrame(issueId: string): void {
+/** Tell issue readers that sessions or runs on `issueId` changed. */
+export function publishPlanningRunIssueFrame(issueId: string): void {
   publishFrame(ISSUES_TOPIC, {
     event: { type: "change", id: issueId, scope: "planning-run" },
     persist: false,

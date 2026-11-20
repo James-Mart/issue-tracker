@@ -1170,7 +1170,7 @@ A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version
 
 ### Conclude
 
-`issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>` is the non-append end of planning. `POST /api/issues/:ideaId/conclude` with `{ outlineId, codeGateVerdict }` is the same write and returns `201` `{ concludedAt, sessionId? }`. A body with any other field, a missing `outlineId`, or a verdict other than `gated` or `start` is an error. One serialized write records `codeApprovalRequired` (`true` exactly when the verdict is `gated`) on the Idea and on the outline, copies the Idea's `executionGate`, `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, sets the outline's `concludedAt`, and archives the Idea. `decompositionGate` stays on the Idea and is not copied. The write registers the handoff: the Idea is archived and the outline carries `concludedAt` while that Idea's planning run is still the concluding run. The handoff itself runs when that run ends.
+`issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>` is the non-append end of planning. `POST /api/issues/:ideaId/conclude` with `{ outlineId, codeGateVerdict }` is the same write and returns `201` `{ concludedAt, sessionId? }`. A body with any other field, a missing `outlineId`, or a verdict other than `gated` or `start` is an error. One serialized write records `codeApprovalRequired` (`true` exactly when the verdict is `gated`) on the Idea and on the outline, copies the Idea's `executionGate`, `mergeBase`, `mergePolicy`, and `outOfBand` onto the outline, sets the outline's `concludedAt`, and archives the Idea. `decompositionGate` stays on the Idea and is not copied. The write registers the [planner handoff](#planner-handoff): the Idea is archived and the outline carries `concludedAt` while that Idea's planning run is still the concluding run. The handoff itself runs when that run ends.
 
 The write refuses when the Idea is already archived, when the Idea has `appendTo` set, when the outline's `sourceIdea` is not this Idea, or when the outline has a live run on either channel. A live run is the existing `409` `conflict`, and the error names the busy channel.
 
@@ -1179,6 +1179,19 @@ When `outOfBand` is true or `decompositionGate` is true, conclude starts nothing
 A zero exit prints `concludedAt`, and the decomposer session id on the next line when one started.
 
 **Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The outline page's Linked work empty state reads **Ready to decompose** when it is true, with the existing Decompose control as the next move.
+
+<a id="planner-handoff"></a>
+
+**Planner handoff.** The handoff runs when a run settles on a non-archived `planning` conversation of an archived Idea that is the `sourceIdea` of an outline with `concludedAt` set. When that run's end starts a queued pending message, the handoff waits for that turn to settle. The handoff creates the outline's planner session on its `planning` channel with `outlineRole` `planner` and the title `Plan <outline title>`. Its `forkedFrom` is the Idea's Planning conversation, and its `forkedAtSeq` is that conversation's last transcript seq, so it includes the planner's final reply. The handoff starts no run. It archives any earlier planner session on the outline, and the Idea's Planning conversation.
+
+| Planning mode | Outline planner session | Idea keeps |
+| --- | --- | --- |
+| Human-driven grill (no `stakeholder`) | a fork of the Idea's Planning root: its transcript, delegations, and agent context, with the root's model and a fresh agent id | the planner transcript |
+| Auto-plan (`stakeholder` set) | the planner the stakeholder delegated to, continued as a root: the last `issue-tracker-planner-*` role the Planning root delegated to directly. It keeps that planner's agent context under a fresh agent id, stores that role as `role`, and uses the role's model pin. Its transcript is each prompt the stakeholder delegated to that planner, followed by the planner's messages in that run. | the stakeholder transcript, including its kickoff |
+
+A failed handoff leaves the Idea's Planning conversation unarchived and appends the error to it.
+
+After conclude, the server refuses planning on the archived Idea. `createIssueChannelSession` refuses a `planning` session on an archived Idea, and `POST /api/conversations/:id/messages` refuses a prompt to an archived Idea's `planning` conversation, live or idle. Both are `409` `conflict`. The stakeholder's audit still lands on the archived Idea: the decision-summary attachment and the standout-decisions comment. The stakeholder does not resume as the planner.
 
 ### Work queue
 
@@ -2433,7 +2446,7 @@ preserves everything else from the existing same-kind issue.
 | `outOfBand` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; `apply` preserves |
 | `mergeBase` (Idea) | stored branch; kind [`set`](#kind-scoped-get--set), the planning tab (written when a session launches from that tab); `apply` preserves |
 | `mergePolicy` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `--clear` / JSON `null` clears it; `apply` preserves |
-| `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); stakeholder-agent writer; `apply` preserves |
+| `codeApprovalRequired` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); [conclude](#conclude) writer; `apply` preserves |
 | `stakeholder` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `appendTo` (Idea) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves |
 | `kind` | explicit on every `children:` entry (allow-lists above); omitted on root nodes (form key implies kind) |

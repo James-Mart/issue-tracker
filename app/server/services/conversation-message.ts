@@ -1,4 +1,5 @@
 import type { AgentSessions, StartClaim } from "./agent-sessions.js";
+import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
 import {
   deliverLivePrompt,
   readConversationMeta,
@@ -44,10 +45,16 @@ function refuseTurnOnParkedRoot(conversationId: string): void {
   );
 }
 
+function refuseMessageOnArchivedIdea(conversationId: string): void {
+  const { issueId, channel } = readConversationMeta(conversationId);
+  if (issueId && channel) refuseArchivedIdeaPlanning(issueId, channel);
+}
+
 /**
  * Deliver a user message the way `POST /api/conversations/:id/messages` does:
  * steer a live run, queue it when steer does not accept it, or start a turn
- * when the conversation is idle and its work root is not parked.
+ * when the conversation is idle and its work root is not parked. An archived
+ * Idea's planning conversation refuses every message.
  */
 export async function postConversationMessage(
   conversationId: string,
@@ -59,6 +66,7 @@ export async function postConversationMessage(
   const activeRun = sessions.getActiveRun(conversationId);
   if (activeRun) {
     assertGuestAllowsAgentLaunch(GUEST_REFUSED_CONVERSATION_MESSAGE);
+    refuseMessageOnArchivedIdea(conversationId);
     if (attachments.length > 0) {
       await setPendingMessage(conversationId, prompt, attachments);
       return { status: "pending" };
@@ -71,6 +79,7 @@ export async function postConversationMessage(
     };
   }
 
+  refuseMessageOnArchivedIdea(conversationId);
   refuseTurnOnParkedRoot(conversationId);
   const result = await startIdleConversationTurn(conversationId, prompt, sessions, {
     attachments,

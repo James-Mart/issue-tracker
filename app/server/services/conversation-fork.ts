@@ -61,7 +61,8 @@ const TERMINAL_RUN_STATUSES = new Set<LocalAgentRunStatus>([
   "expired",
 ]);
 
-function agentStateDir(conversationId: string): string {
+/** Store of the conversation's root agent. */
+export function agentStateDir(conversationId: string): string {
   return join(conversationsDir, conversationId, "agent-state");
 }
 
@@ -81,7 +82,8 @@ function attachmentsDirOf(conversationId: string): string {
   return join(conversationDir(conversationId), "attachments");
 }
 
-function nestedAgentStateDir(
+/** Store of an agent the conversation delegated to. */
+export function nestedAgentStateDir(
   conversationId: string,
   agentId: string,
 ): string {
@@ -334,6 +336,22 @@ export function copyAgentState(input: CopyAgentStateInput): void {
   );
 }
 
+/** The store's latest run by turn, which must have settled. */
+export function latestSettledRunId(storeDir: string): string {
+  const path = join(storeDir, JSONL_LOCAL_AGENT_STORE_FILES.runs);
+  let latest: LocalAgentRunDocument | undefined;
+  for (const run of readNdjsonRecords<LocalAgentRunDocument>(path)) {
+    if (!latest || compareRunsForTrim(run, latest) > 0) latest = run;
+  }
+  if (!latest) throw new Error(`no run in ${path}`);
+  if (!isTerminalRun(latest)) {
+    throw new Error(
+      `run "${latest.runId}" in ${path} is still in flight (${latest.status})`,
+    );
+  }
+  return latest.runId;
+}
+
 function writeJsonlLines(filePath: string, lines: readonly string[]): void {
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(
@@ -341,6 +359,14 @@ function writeJsonlLines(filePath: string, lines: readonly string[]): void {
     lines.length === 0 ? "" : `${lines.join("\n")}\n`,
     "utf8",
   );
+}
+
+/** Seed a new conversation's transcript with history it did not record itself. */
+export function writeInheritedTranscript(
+  conversationId: string,
+  events: readonly TranscriptEvent[],
+): void {
+  writeNdjsonRecords(transcriptPathOf(conversationId), events);
 }
 
 function copyTranscriptThroughFork(
@@ -500,20 +526,29 @@ export function forkConversation(
       forkedAtSeq: input.seq,
     });
 
-    copyAgentState({
-      sourceDir: agentStateDir(sourceId),
-      targetDir: agentStateDir(meta.id),
-      newAgentId: agentId,
-      keepRunId: forkPoint.runId,
-    });
-    copyInheritedHistory({
+    copyForkedState({
       sourceId,
       targetId: meta.id,
       forkedAtSeq: input.seq,
+      newAgentId: agentId,
+      keepRunId: forkPoint.runId,
     });
 
     return meta.id;
   });
+}
+
+/** Seed a fork with the source's agent store and history through the fork point. */
+export function copyForkedState(
+  input: CopyInheritedHistoryInput & Pick<CopyAgentStateInput, "newAgentId" | "keepRunId">,
+): void {
+  copyAgentState({
+    sourceDir: agentStateDir(input.sourceId),
+    targetDir: agentStateDir(input.targetId),
+    newAgentId: input.newAgentId,
+    keepRunId: input.keepRunId,
+  });
+  copyInheritedHistory(input);
 }
 
 /** Copy transcript, delegations, nested stores, and prompt attachments through a fork point. */

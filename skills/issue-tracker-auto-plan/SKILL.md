@@ -10,18 +10,21 @@ description: >-
 
 # Issue Tracker — Auto-plan (stakeholder)
 
-Turn a seed issue into an outline and the polished plan tree decomposed from
-it, leaving an audit trail the human reviews afterward. You are the **stakeholder**: you answer the
-vanilla planner's grill from product intent (never from what code already
-does), hold the grill open until every implied seam is opened, then route the
-outline gate to the human unless the Idea's outline-gate flag is unset
-and the Project's gate rubric exempts the outline, record whether the code
-needs human approval (**## Flow** step 3), resolve polish escalations, and
-finalize with an audit report on the source Idea.
+Turn a seed issue into an outline, leaving an audit trail the human reviews
+afterward. You are the **stakeholder**: you answer the vanilla planner's grill
+from product intent (never from what code already does) and hold the grill
+open until every implied seam is opened. The planner concludes the Idea onto
+its outline, which archives the Idea and starts decomposition when the
+Idea's gates say so. For an Idea with `appendTo`, the planner puts an
+outline gate to you instead, which you route to the human unless the Idea's
+decomposition-gate flag is unset and the Project's gate rubric exempts the
+outline. You resolve polish escalations and finalize with an audit report on
+the source Idea. When your run ends, the planner continues on the outline's
+Planning tab, where the human talks to it directly.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
-You do **not** author the outline or the plan tree yourself — the vanilla
-planner starts the outline decomposer session, which authors and polishes
+You do **not** author the outline or the plan tree yourself — the planner's
+conclude starts the outline decomposer session, which authors and polishes
 the plan (`issue-tracker-plan`;
 Story *"Reuse over reinvention"* invariant).
 
@@ -33,10 +36,8 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** `issue idea set <issueId> codeApprovalRequired`
-(**## Flow** step 3),
-`issue comment <rootId> --role human` on the resulting root
-after a human Yes (**## Flow** step 3), plus finalize `attach` +
+**Allowed writes:** `issue comment <storyId> --role human` on the target
+Story after a human Yes (**## Flow** step 3), plus finalize `attach` +
 `comment` — `issue idea attach` and `issue idea comment` on the archived
 source Idea. Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
@@ -81,13 +82,14 @@ there is nothing to resume.
    **preflight-gate refusal**.
 5. `issue view <issueId>` — the full source `description.md`.
 6. **Decomposition-gate flag** — `issue idea get <issueId> decompositionGate`.
-   `true` → the human answers the outline gate; `false` → the gate rubric
-   decides who answers it. Carry the value through the run; do not re-read it.
+   `true` → the human answers the append outline gate; `false` → the gate
+   rubric decides who answers it. Carry the value through the run; do not
+   re-read it.
 7. **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`.
    Consult per that file using the step-1 summary output:
-   - `gateRubric` — the exemptions for the outline gate (**## Flow**
-     step 3). An absent or unreadable doc exempts nothing: both gates apply.
+   - `gateRubric` — the exemptions for the append outline gate
+     (**## Flow** step 3). An absent or unreadable doc exempts nothing.
    - `vision`
 8. The Project's **`inspirationApps`** field (consult-if-present): use the
    `inspirationApps:` line already on the step-1 summary's Project section — a
@@ -241,23 +243,22 @@ specifics and stop; otherwise proceed to Flow.
    re-enter it with that same `resumeId` to continue. Repeat until the planner
    returns its final message, then classify it:
 
-   - **Not now** — the message is the outline id.
-   - **Yes** with `appendTo` — the first line is the target Story id.
-     Reconciliation runs on the outline's Planning channel.
-   - **Yes** otherwise — the message is the decomposer session's reply.
-     The first line is a root id when `issue get <line> kind` prints
-     `epic`, or prints `story` and `issue get <line> partOf` prints the
-     Project id from Bootstrap. That id is the resulting root, already
-     applied and polished. Any other first line means the start produced
-     no root, and the message stays the planner's report.
+   - **Concluded** — an Idea with no `appendTo`. The message reports the
+     outline id, the code-gate verdict, and whether a decomposer started.
+   - **Not now** — an Idea with `appendTo`. The message is the outline id.
+   - **Yes** — an Idea with `appendTo`. The first line is the target Story
+     id. Reconciliation runs on the outline's Decomposition channel.
+
+   The final message ends the relay loop; go to **## Finalize** without
+   re-entering the planner.
 
    When the coordinator has lost the `resumeId`, look it up with `delegations`
    (the returned `delegations` array) rather than starting a second planner.
 
    **Coverage check.** The mock-or-skip check, a mockup-round question
    (conformant or escalated presentation), any "shared understanding
-   reached" / ready-for-outline judgment, and the outline gate are the
-   coverage-check triggers.
+   reached" / ready-for-outline judgment, and the append outline gate are
+   the coverage-check triggers.
    Consult the implied-seam inventory (**## Bootstrap** step 10) before
    answering each of them, and again at every later one. Any seam still
    unopened → **push**: withhold that beat's answer, name the still-unopened
@@ -267,10 +268,10 @@ specifics and stop; otherwise proceed to Flow.
    answer the gate Not now to mean keep grilling. With no seam left unopened,
    answer the beat as you otherwise would.
 
-   **Outline gate.** The planner puts this gate to you after each saved
-   outline version, or for an Idea with `appendTo` after each saved pending
-   draft of the target Story's outline, with three answers: **Yes**,
-   **Not now**, and **Amend** with feedback. Run the **Coverage check** first; a push goes back to the
+   **Append outline gate.** For an Idea with `appendTo`, the planner puts
+   this gate to you after each saved pending draft of the target Story's
+   outline, with three answers: **Yes**, **Not now**, and **Amend** with
+   feedback. Run the **Coverage check** first; a push goes back to the
    planner and leaves the routing below unrun. Then route the gate by the
    first row that matches:
 
@@ -278,12 +279,6 @@ specifics and stop; otherwise proceed to Flow.
    - The outline clearly meets a clause under the gate rubric's
      `## Outline does not need approval when` → yours.
    - Otherwise → the human's.
-
-   **Code verdict.** Whoever answers the gate, in the turn that relays a
-   Yes to the planner and before re-entering it, judge the outline being
-   approved against the gate rubric's `## Code does not need approval
-   when`. When no clause there clearly exempts the resulting code, run
-   `issue idea set <issueId> codeApprovalRequired true`.
 
    When the gate is yours, answer it from the stakeholder decision
    heuristics.
@@ -295,11 +290,10 @@ specifics and stop; otherwise proceed to Flow.
 
    When the human replies, re-enter the same planner with its `resumeId`
    from step 2, relaying the human's answer: Yes, Not now, or Amend with
-   the human's feedback. Amend comes back as the next outline version or
-   the revised draft; post it the same way as the first. After the planner
-   returns on the Yes path, comment when the relay-loop classification names an id: the target
-   Story id, or the resulting root id. The comment is
-   `issue comment <id> --role human --body <text>`. The body records that a
+   the human's feedback. Amend comes back as the revised draft; post it the
+   same way as the first. After the planner returns on the Yes path,
+   comment on the target Story id the relay-loop classification names:
+   `issue comment <storyId> --role human --body <text>`. The body records that a
    human approved the plan and names the Idea (`<issueId>`). This is your
    write, not the planner's: the planner
    cannot tell whether a human or an agent answered its gate, so you
@@ -325,17 +319,12 @@ specifics and stop; otherwise proceed to Flow.
    entry per decision: the decision, the answer you chose, and the rationale
    (distilled, not the raw transcript). Do not defer this to the end; across
    many planner re-entries, reconstructing it later is lossy. This draft is the
-   decision-summary attached at **## Finalize**. Each outline gate answer
-   adds the outline verdict (Yes, Not now, or Amend; yours or the human's),
-   and a Yes also adds the code verdict (exempt or approval required). Each
-   names the rubric clause it relied on, "no exempting clause", or for an
-   outline routed by the flag, the outline-gate flag.
-4. **Retro.** After the planner returns its final message, re-enter
-   it once with the same `resumeId` from step 2, asking it to run a retro on
-   the planning session per
-   [issue-tracker-retro](../issue-tracker-retro/SKILL.md). Wait for that
-   re-entry to finish.
-5. **Finalize** per **## Finalize**.
+   decision-summary attached at **## Finalize**. Each append outline gate
+   answer adds its verdict (Yes, Not now, or Amend; yours or the human's)
+   and names the rubric clause it relied on, "no exempting clause", or, for
+   a gate routed by the flag, the decomposition-gate flag. A **Concluded**
+   final message adds the planner's code-gate verdict.
+4. **Finalize** per **## Finalize**.
 
 ## Spawn stubs
 
@@ -365,7 +354,7 @@ workflow instructions here.
 
 ## Finalize
 
-At the end of Flow steps 3–4, **Read**
+When the relay loop ends, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-auto-plan/references/finalize.md`
 and follow it.
 
@@ -383,6 +372,6 @@ When finalize is done, report per **## Finalize**. Then stop.
 
 - You are the stakeholder on opus 5.5 (`claude-opus-5-5-thinking-high`):
   bootstrap, grill answers,
-  discriminator + planner spawns, retro request, finalize. Do not author the
+  discriminator + planner spawns, finalize. Do not author the
   outline or the plan tree yourself.
 - Honor the intro **Allowed writes** contract.
