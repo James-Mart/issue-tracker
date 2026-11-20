@@ -52,7 +52,7 @@ import {
   groupSectionRows,
   type SectionGroup,
 } from "../lib/group-section-rows";
-import { issuePath, projectPath } from "../lib/links";
+import { issueChannelPath, issuePath, projectPath } from "../lib/links";
 import {
   cockpitLaunchFaultMessage,
   overlayCockpitLaunchAck,
@@ -456,7 +456,11 @@ export function CockpitPage() {
             ? cockpitLaunchFaultMessage(item.issue.title, fault.kind)
             : undefined
         }
-        to={issuePath(projectId, item.issue.id)}
+        to={
+          item.issue.kind === "outline"
+            ? issueChannelPath(projectId, item.issue.id, "decomposition")
+            : issuePath(projectId, item.issue.id)
+        }
         drillInState={{
           issueBackStack: [{ kind: "cockpit" }],
         }}

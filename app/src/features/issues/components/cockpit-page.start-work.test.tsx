@@ -126,6 +126,26 @@ function project(id: string): IssueRecord {
   };
 }
 
+function outline(
+  id: string,
+  partOf: string,
+  title: string,
+  outOfBand = false,
+): IssueRecord {
+  return {
+    id,
+    kind: "outline",
+    title,
+    partOf,
+    bodyVersion: 1,
+    outOfBand,
+    archived: false,
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+  };
+}
+
 function epic(id: string, partOf: string, title = id): IssueRecord {
   return {
     id,
@@ -268,5 +288,49 @@ describe("CockpitPage start work", () => {
     expect(container.querySelector('[data-live="false"]')?.textContent).toContain(
       "all quiet",
     );
+  });
+});
+
+describe("CockpitPage needs decomposition", () => {
+  it("lists in-band ready outlines by project and opens the Decomposition tab", () => {
+    mockState.issues = [
+      project("p-a"),
+      project("p-b"),
+      outline("gate", "p-a", "Gated plan"),
+      outline("band", "p-a", "Out of band plan", true),
+      outline("open", "p-a", "Still planning"),
+      outline("other", "p-b", "Other project plan"),
+      epic("ready-epic", "p-a", "Auth hardening"),
+    ];
+    mockState.derived = {
+      gate: { blocked: false, readyToDecompose: true },
+      band: { blocked: false, readyToDecompose: true },
+      open: { blocked: false, readyToDecompose: false },
+      other: { blocked: false, readyToDecompose: true },
+      "ready-epic": { blocked: false, epicStatus: "todo" },
+    };
+
+    const { container } = mountCockpit();
+    const group = section(container, "needsDecomposition");
+    const ready = section(container, "ready");
+
+    expect(group?.textContent).toContain("Ready to decompose");
+    expect(group?.textContent).toContain("Gated plan");
+    expect(group?.textContent).toContain("Other project plan");
+    expect(group?.textContent).toContain("Project p-a");
+    expect(group?.textContent).toContain("Project p-b");
+    expect(group?.textContent).not.toContain("Out of band plan");
+    expect(group?.textContent).not.toContain("Still planning");
+    expect(
+      group?.querySelector('a[href="/projects/p-a/issues/gate?tab=decomposition"]'),
+    ).not.toBeNull();
+    expect(
+      group?.querySelector(
+        'a[href="/projects/p-b/issues/other?tab=decomposition"]',
+      ),
+    ).not.toBeNull();
+    expect(ready?.textContent).toContain("Ready for implementation");
+    expect(ready?.textContent).toContain("Auth hardening");
+    expect(ready?.textContent).not.toContain("Gated plan");
   });
 });

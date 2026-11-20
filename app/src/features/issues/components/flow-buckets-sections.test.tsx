@@ -65,6 +65,7 @@ function emptyBuckets(
   return {
     planning: [],
     readyToLand: [],
+    needsDecomposition: [],
     ready: [],
     queue: [],
     blocked: [],

@@ -186,6 +186,7 @@ export type DepGraphModel = {
 export type FlowBuckets = {
   planning: FlowItem[];
   readyToLand: FlowItem[];
+  needsDecomposition: FlowItem[];
   ready: FlowItem[];
   queue: FlowItem[];
   blocked: FlowItem[];
@@ -345,15 +346,30 @@ function recentlyMergedInstant(
   return found ? latestMs : undefined;
 }
 
+function isReadyToDecomposeOutline(
+  issue: IssueRecord,
+  derived: Record<string, DerivedState>,
+): issue is Extract<IssueRecord, { kind: "outline" }> {
+  return (
+    issue.kind === "outline" &&
+    issue.outOfBand !== true &&
+    derived[issue.id]?.readyToDecompose === true
+  );
+}
+
 /**
  * Bucket Stories, Epics, and Ideas into planning / readyToLand / ready /
- * queue / blocked / recentlyMerged. Pure view-model — no I/O.
+ * queue / blocked / recentlyMerged, and ready in-band outlines into
+ * `needsDecomposition`. Pure view-model — no I/O.
  * `queue` is the Project work queue: parked, running, paused, and waiting roots,
  * including queued roots that are blocked. Planning Ideas come first in
  * `planning`, then captured Ideas. Ready-to-land Stories (including
  * epic-children) go to `readyToLand`. `recentlyMerged` keeps project-level
  * merged Stories and done Epics that have a merge instant, newest first;
  * equal instants tie-break on issue id, smaller id first.
+ * `needsDecomposition` lists in-scope outlines whose `readyToDecompose` is
+ * set and whose `outOfBand` is not true, in input order. Those outlines
+ * are not placed in any other bucket.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -379,10 +395,16 @@ export function flowBuckets(
 
   const planning: FlowItem[] = [];
   const readyToLand: FlowItem[] = [];
+  const needsDecomposition: FlowItem[] = [];
   const ready: FlowItem[] = [];
   const queue: FlowItem[] = [];
   const blocked: FlowItem[] = [];
   const recentlyMergedRanked: { item: FlowItem; at: number }[] = [];
+
+  for (const issue of issues) {
+    if (!inScope(issue) || !isReadyToDecomposeOutline(issue, derived)) continue;
+    needsDecomposition.push({ issue, state: derived[issue.id] });
+  }
 
   for (const issue of candidates) {
     const state = derived[issue.id];
@@ -437,6 +459,7 @@ export function flowBuckets(
   return {
     planning,
     readyToLand,
+    needsDecomposition,
     ready,
     queue,
     blocked,

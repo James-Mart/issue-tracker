@@ -17,6 +17,7 @@ import {
   buildTreeRowIndexes,
   type TreeRowIndexes,
 } from "../lib/tree-row-indexes";
+import { READY_TO_DECOMPOSE_LABEL } from "../lib/derived";
 import {
   flowItemNeedsAttention,
   type FlowBuckets,
@@ -30,6 +31,9 @@ export const FLOW_BUCKET_PREVIEW_LIMIT = 5;
 
 export const READY_EMPTY_COPY =
   "Nothing ready. Unblock a dependency, or add work in Structure.";
+
+/** Cockpit heading for epics and stories that can start implementation. */
+export const READY_FOR_IMPLEMENTATION_LABEL = "Ready for implementation";
 
 function blockedProjectIds(blocked: FlowItem[]): string[] {
   const ids = new Set<string>();
@@ -104,8 +108,14 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
+    key: "needsDecomposition",
+    label: READY_TO_DECOMPOSE_LABEL,
+    hideWhenEmpty: true,
+    compact: true,
+  },
+  {
     key: "ready",
-    label: "Ready",
+    label: READY_FOR_IMPLEMENTATION_LABEL,
     empty: READY_EMPTY_COPY,
     hideWhenEmpty: true,
     compact: true,
@@ -144,6 +154,8 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
     buckets: {
       planning: take(buckets.planning),
       readyToLand: take(buckets.readyToLand),
+      // Outlines stay in this group; they are not attention rows.
+      needsDecomposition: buckets.needsDecomposition,
       ready: take(buckets.ready),
       // A flagged root stays in the queue at its position.
       queue: buckets.queue,
