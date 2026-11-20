@@ -7,6 +7,7 @@ const FLOW_BUCKET_KEYS = new Set<FlowBucketKey>([
   "needsAttention",
   "readyToLand",
   "queue",
+  "needsDecomposition",
   "ready",
   "planning",
   "recentlyMerged",
