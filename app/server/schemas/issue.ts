@@ -633,6 +633,13 @@ export const outlineSchema = z.object({
   title: nonEmpty,
   bodyVersion: z.number().int().positive(),
   sourceIdea: z.string().optional(),
+  executionGate: executionGateSchema.optional(),
+  codeApprovalRequired: z.boolean().optional(),
+  mergeBase: nonEmpty.optional(),
+  mergePolicy: z.enum(MERGE_POLICIES).optional(),
+  outOfBand: z.boolean().optional(),
+  // System-written when conclude archives the Idea. Patches are refused.
+  concludedAt: nonEmpty.optional(),
   ...archivableFields,
   ...orderField,
   ...timestamps,
@@ -885,6 +892,12 @@ export interface DerivedState {
   planRoots?: string[];
   /** Outlines in the same Project whose stored `sourceIdea` is this Idea. */
   generatedOutlines?: string[];
+  /**
+   * Outline only. `concludedAt` is set, `outOfBand` is not true, no root
+   * links the outline, and no decomposition session has a live run. The
+   * live-run clause is applied by `list()`, not the pure `derive()` pass.
+   */
+  readyToDecompose?: boolean;
   /** True when sourceIdea names an Idea present in the set and not archived. */
   planNotFinal?: boolean;
   /**

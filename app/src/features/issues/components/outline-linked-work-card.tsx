@@ -67,11 +67,20 @@ export function OutlineLinkedWorkCard({
       </p>
     );
   } else if (roots.length === 0) {
+    const readyToDecompose =
+      query.data.derived[issue.id]?.readyToDecompose === true;
     body = (
       <div data-testid="outline-linked-work-empty">
         <ShellState
           className="border-0 bg-transparent px-2 py-6 shadow-none"
-          title="No roots decomposed yet"
+          title={
+            readyToDecompose ? "Ready to decompose" : "No roots decomposed yet"
+          }
+          detail={
+            readyToDecompose
+              ? "Decompose builds the work root from this outline."
+              : undefined
+          }
         />
       </div>
     );

@@ -23,6 +23,7 @@ import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
+import { clearReadyDuringLiveDecomposition } from "./ready-to-decompose.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
 import { mergeIssue } from "./merge.js";
@@ -182,6 +183,7 @@ export function list(): IssuesResponse {
     else derived.byId[id] = { blocked: false, ideaStatus };
   }
   mergeImplementingOverlay(issues, derived.byId);
+  clearReadyDuringLiveDecomposition(derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.
@@ -236,6 +238,18 @@ export function readOutlineOrThrow(
   const issue = readIssueOrThrow(id);
   if (issue.kind !== "outline") {
     throw new IssueError("validation", `issue "${id}" is not an outline`);
+  }
+  return issue;
+}
+
+/** Read an Idea. `as` is the noun in the refusal (`issue`, `source idea`). */
+export function readIdeaOrThrow(
+  id: string,
+  as = "issue",
+): Extract<Issue, { kind: "idea" }> {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "idea") {
+    throw new IssueError("validation", `${as} "${id}" is not an idea`);
   }
   return issue;
 }

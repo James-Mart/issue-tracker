@@ -2,22 +2,22 @@
 name: issue-tracker-plan
 disable-model-invocation: true
 description: >-
-  Grill an Idea into a saved outline and ask the outline gate, handing Yes to
-  a decomposer, or, when appendTo is set, amend the target Story's outline
-  and hand Yes to reconciliation; checks which affected screens to mock or
-  skip before any mockup round. Use when the user asks to plan an Idea, flesh
-  out a tracker plan, or run issue-tracker-plan.
+  Grill an Idea into a saved outline and conclude it, judging the code-gate
+  verdict and running issue idea conclude, or, when appendTo is set, amend
+  the target Story's outline and hand Yes to reconciliation; checks which
+  affected screens to mock or skip before any mockup round. Use when the user
+  asks to plan an Idea, flesh out a tracker plan, or run issue-tracker-plan.
 ---
 
 # Issue Tracker — Plan (grill → outline)
 
 Turn a rough capture into an outline in the Project catalog. You grill the
 user, check which affected screens get a mockup round, run those rounds, save
-the outline, and ask the outline gate. Yes hands the outline version to a
-decomposer, which builds, applies, and polishes one work root. An Idea with
-`appendTo` amends the target Story's outline instead, and Yes hands the new
-version to reconciliation, which appends the Tasks to that Story. Do not
-implement product code; this skill only authors the plan artifact.
+the outline, and conclude the Idea. Conclude records the code-gate verdict,
+archives the Idea, and starts a decomposer when the Idea's gates say so. An
+Idea with `appendTo` amends the target Story's outline instead, and Yes hands
+the new version to reconciliation, which appends the Tasks to that Story. Do
+not implement product code; this skill only authors the plan artifact.
 
 A retro on the planning session is available on demand through
 [issue-tracker-retro](../issue-tracker-retro/SKILL.md); run one only when
@@ -105,8 +105,8 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
   An answer equal to that trunk is **trunk**; any other answer is a
   **non-trunk branch**. **Trunk** — proceed with the rest of the grill;
   Focused codebase research uses the workspace working tree only (omit
-  `Ref` in spawn stubs). Carry the answer and the merge-policy (when
-  non-trunk) through to the outline gate and **## Decompose**.
+  `Ref` in spawn stubs). Carry the answer and the merge policy (when
+  non-trunk) through to **## Conclude**.
   - **Non-trunk branch** — ask **one** merge-policy question for the
     resulting root (Epic or project-level Story) next. Recommend
     **`pull-request`** via `(recommended)` in the answer list. Valid values:
@@ -160,9 +160,10 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize work)
-  until the user answers Yes at the outline gate.
+  until **## Conclude** runs `issue idea conclude`, or **## Append** hands
+  Yes to reconciliation.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm —
-  when the grill is ready, go straight to the outline + gate.
+  when the grill is ready, go straight to **## Conclude**.
 
 This protocol is **inlined here**. Do **not** add or invoke a separate
 plugin-local grill-me skill.
@@ -207,7 +208,7 @@ doc.
 - **Before the outline** — every mock screen's round ends in an accepted
   direction or a drop before you show the outline.
 
-## Outline gate
+## Conclude
 
 When Bootstrap printed a Story id for `appendTo`, continue at **## Append**.
 
@@ -227,65 +228,26 @@ When the grill is ready (no extra pre-outline confirm):
    `issue outline set <outlineId> sourceIdea <ideaId>`. Each later save is
    `issue outline set <outlineId> description --file <path>`. Every save is
    the outline's next version.
-3. **Ask.** Post the body `issue outline view <outlineId>` prints in chat.
-   Name the merge base the work builds on, and the merge policy when
-   non-trunk. Then ask **one** question whose answer list carries each
-   consequence:
-   - **Yes** — a decomposer turns the latest outline version into one work
-     root, applies it, and polishes it; the Idea's execution gate decides
-     whether that root then starts.
-   - **Not now** — the outline stays in the Project catalog, the Idea is
-     archived, and no work is created.
-   - **Amend** — the reply is feedback on the outline. Revise it, save the
-     next version (step 2), and ask this gate again.
-4. On **Yes** → **## Decompose**. On **Not now** → run
-   `issue idea set <ideaId> archived true` and report `<outlineId>`.
-
-## Decompose
-
-1. When the grill settled a non-trunk merge base that Bootstrap step 7 did
-   not print, run `issue idea set <ideaId> mergeBase <branch>`; the
-   decomposer reads the merge base from the Idea.
-2. Read `issue idea get <ideaId> executionGate`. `true` → the execution
-   gate is `on`; `false` → `off`; `auto` → `on` when
-   `issue idea get <ideaId> stakeholder` prints nothing, otherwise `off`.
-3. Start the outline decomposer session with the Decompose request. The
-   API listens on port `PORT`, or `8061` when `PORT` is unset. The body is
-   `{"executionGate":"<on|off>"}`. When the merge base is not trunk, the
-   body also includes `"mergePolicy":"<policy>"` from the grill.
-
-   ```bash
-   curl -sS -w '\n%{http_code}' -X POST \
-     "http://127.0.0.1:${PORT:-8061}/api/issues/<outlineId>/outline/decompose" \
-     -H 'content-type: application/json' \
-     -d '<body>'
-   ```
-
-   The last line is the HTTP status. The preceding lines are the response
-   body.
-4. Status `409` with JSON `code` `conflict` means the outline's planning
-   channel already has an active session. The final message is that JSON
-   `error` string. Stop.
-5. A status other than `201` or that `409` is a failed start. The final
-   message is the response body. Stop.
-6. Status `201`: JSON `id` is the session id. Post this in the planning
-   chat, with `<projectId>` from Bootstrap step 1:
-
-   `This outline's [Planning tab](/projects/<projectId>/issues/<outlineId>?tab=planning) has the decomposer session.`
-
-7. Repeat
-   `GET http://127.0.0.1:${PORT:-8061}/api/conversations/<sessionId>/run`
-   until JSON `active` is `false`, pausing 2 seconds between checks. A
-   non-200 response is a failed wait: the final message is that response.
-   Stop. When `active` is `false`,
-   `GET http://127.0.0.1:${PORT:-8061}/api/conversations/<sessionId>`.
-   A non-200 response is a failed read: the final message is that response.
-   Stop. The reply is the `text` of the last `transcript` item whose
-   `type` is `assistant`.
-8. When the transcript has no `assistant` item, the final message is
-   `The decomposer session ended with no reply.` Stop.
-9. The final message is that reply: the root id on the first line, then
-   any queue failure.
+3. **Judge the code-gate verdict** against the gate rubric's
+   `## Code does not need approval when`. **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
+   and consult `gateRubric` per that file using the Bootstrap summary.
+   No rubric, or no clause that clearly exempts this outline, is `gated`.
+   A clause that clearly exempts it is `start`. The judgment uses that
+   section only.
+4. **Record the grill's merge settings on the Idea.** When the merge base
+   is trunk, run `issue idea set <ideaId> mergePolicy --clear`. When it is
+   not trunk and Bootstrap step 7 did not print a branch, run
+   `issue idea set <ideaId> mergeBase <branch>`. When it is not trunk, run
+   `issue idea set <ideaId> mergePolicy <policy>` with the policy the grill
+   settled (`pull-request`, `merge`, `manual`, or `fast-forward`).
+5. **Conclude.**
+   `issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>`.
+   A zero exit prints `concludedAt`. When a decomposer started, the next
+   line is that session id. A non-zero exit means the conclude write
+   landed and the decomposer did not start; the final message is stderr.
+   Stop. The final message reports `<outlineId>`, the verdict, and
+   whether a decomposer started.
 
 ## Append
 
@@ -299,7 +261,7 @@ amendment goes to that Story's outline as its pending draft:
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
    and follow it. Revise the latest body so it describes the feature with
    this Idea's change folded into the `##` sections it belongs to, keeping
-   the outline shape from **## Outline gate** step 1. The section covering
+   the outline shape from **## Conclude** step 1. The section covering
    each screen whose round accepted a direction names that direction id
    and states its held tweak wording. Save it with
    `issue outline draft set <outlineId> <path>`; the draft is not a version.
@@ -335,7 +297,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen only after Yes at the outline gate.
+- Tracker writes that create work happen when conclude starts a decomposer, or when **## Append** hands Yes to reconciliation.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.
