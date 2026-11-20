@@ -115,7 +115,8 @@ describe("POST /api/issues/:id/outline/decompose", () => {
     expect(meta).toMatchObject({
       id: body.id,
       issueId: "spec",
-      channel: "planning",
+      channel: "decomposition",
+      outlineRole: "decomposer",
       model: "cursor-grok-4.7",
       title: "Decompose Feature outline",
     });

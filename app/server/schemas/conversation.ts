@@ -16,10 +16,48 @@ export type PipelineRunsEvent = z.infer<typeof pipelineRunsEventSchema>;
 
 export const CONVERSATION_CHANNELS = [
   "planning",
+  "decomposition",
   "implementing",
   "review",
 ] as const;
 export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
+
+export const OUTLINE_SESSION_ROLES = [
+  "planner",
+  "decomposer",
+  "reconcile",
+  "check",
+] as const;
+export type OutlineSessionRole = (typeof OUTLINE_SESSION_ROLES)[number];
+
+const OUTLINE_ROLE_CHANNELS = {
+  planner: "planning",
+  decomposer: "decomposition",
+  reconcile: "decomposition",
+  check: "decomposition",
+} as const satisfies Record<OutlineSessionRole, ConversationChannel>;
+
+export function outlineChannelForRole(
+  role: OutlineSessionRole,
+): ConversationChannel {
+  return OUTLINE_ROLE_CHANNELS[role];
+}
+
+/** Why `outlineRole` does not fit `channel`, or undefined when it does. */
+export function outlineRoleChannelError(
+  channel: ConversationChannel | undefined,
+  outlineRole: OutlineSessionRole | undefined,
+): string | undefined {
+  if (outlineRole !== undefined) {
+    const expected = outlineChannelForRole(outlineRole);
+    if (channel === expected) return undefined;
+    return `outline role "${outlineRole}" runs on the ${expected} channel`;
+  }
+  if (channel === "decomposition") {
+    return "a decomposition session requires an outline role";
+  }
+  return undefined;
+}
 
 export const conversationMetaSchema = z
   .object({
@@ -28,7 +66,10 @@ export const conversationMetaSchema = z
     projectId: nonEmpty,
     issueId: nonEmpty.optional(),
     channel: z.enum(CONVERSATION_CHANNELS).optional(),
+    /** Spawnable agent role id (`agents/<role>.md`) the session runs as. */
     role: nonEmpty.optional(),
+    /** What an outline-anchored session does for its outline. */
+    outlineRole: z.enum(OUTLINE_SESSION_ROLES).optional(),
     agentId: nonEmpty.optional(),
     model: nonEmpty,
     pendingMessage: z
@@ -68,6 +109,11 @@ export const conversationMetaSchema = z
           : "issueId is required when channel is set",
         path: hasIssueId ? ["channel"] : ["issueId"],
       });
+    }
+
+    const roleError = outlineRoleChannelError(meta.channel, meta.outlineRole);
+    if (roleError) {
+      ctx.addIssue({ code: "custom", message: roleError, path: ["outlineRole"] });
     }
 
     const hasForkedFrom = meta.forkedFrom !== undefined;

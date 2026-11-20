@@ -24,6 +24,7 @@ const ISSUE_DETAIL_TAB_LABELS = {
   agents: AGENTS_DETAIL_TAB_LABEL,
   diff: "Diff",
   planning: "Planning",
+  decomposition: "Decomposition",
   implementing: "Implementing",
   review: "Review",
 } as const;

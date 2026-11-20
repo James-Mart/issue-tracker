@@ -646,11 +646,11 @@ export function runSequence(conversationId: string): RunSequence {
   const usageTotal = attributeUsage(ordered, transcript);
   stampCumulativeMs(ordered, Date.parse(meta.createdAt));
   const collapsed = collapseConsecutiveBeats(ordered);
-  const sessionIssueId =
-    meta.channel === "planning" && meta.issueId !== undefined
-      ? meta.issueId
-      : undefined;
-  const sections = buildSections(collapsed, issuesById(), sessionIssueId);
+  const sections = buildSections(
+    collapsed,
+    issuesById(),
+    ideaOrOutlineAnchorId(meta),
+  );
 
   const familyIds: string[] = [];
   for (const record of delegations) {
@@ -715,14 +715,19 @@ function projectIdOfIssue(
   return undefined;
 }
 
+/** The Idea or outline a planning or decomposition session is anchored to. */
+function ideaOrOutlineAnchorId(meta: ConversationMeta): string | undefined {
+  if (meta.channel === "planning" || meta.channel === "decomposition") {
+    return meta.issueId;
+  }
+  return undefined;
+}
+
 function runIssueId(
   meta: ConversationMeta,
   delegations: DelegationRecord[],
 ): string | undefined {
-  if (meta.channel === "planning" && meta.issueId !== undefined) {
-    return meta.issueId;
-  }
-  return earliestIssueId(delegations);
+  return ideaOrOutlineAnchorId(meta) ?? earliestIssueId(delegations);
 }
 
 function resolveRootIssue(

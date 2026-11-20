@@ -1,4 +1,5 @@
 import { agentBodyPath } from "@/lib/plugin-paths";
+import type { OutlineSessionRole } from "@server/schemas";
 import {
   planningSessionMessage,
   planningSessionTitle,
@@ -11,14 +12,12 @@ import {
 export const OUTLINE_PLANNING_GROK_MODEL = "cursor-grok-4.7";
 export const OUTLINE_PLANNING_OPUS_MODEL = "claude-opus-5-5-thinking-high";
 
-export type OutlinePlanningRole = "planner" | "decomposer" | "reconcile" | "check";
-
 /** Execution gate for one decomposer run. `off` queues the new root after polish. */
 export type OutlineExecutionGate = "on" | "off";
 
-/** Session title for a planning-channel run on an outline. */
+/** Session title for a run on an outline. */
 export function outlinePlanningSessionTitle(
-  role: OutlinePlanningRole,
+  role: OutlineSessionRole,
   outlineTitle: string,
 ): string {
   if (role === "planner") return planningSessionTitle(outlineTitle);

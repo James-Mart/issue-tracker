@@ -4,11 +4,13 @@ import type {
   ReviewRecordView,
   ReviewSubmission,
 } from "../schemas/review.js";
-import type { ConversationMessageSessions } from "./conversation-message.js";
+import {
+  startIdleConversationTurn,
+  type ConversationMessageSessions,
+} from "./conversation-message.js";
 import {
   deleteConversation,
   readConversationMeta,
-  startConversationPrompt,
   startFirstPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
@@ -75,8 +77,8 @@ function checkInProgress(submission: ReviewSubmission): OutlineCheck {
 
 /**
  * Re-enter the recorded check conversation on retry, or open a new check
- * session on the outline's planning channel. A new session refuses an outline
- * that already holds a pending draft, since the check writes that draft.
+ * session on the outline's decomposition channel. A new session refuses an
+ * outline that already holds a pending draft, since the check writes that draft.
  */
 export async function launchOutlineCheck(
   projectId: string,
@@ -88,7 +90,7 @@ export async function launchOutlineCheck(
 ): Promise<void> {
   const check = submission.outlineCheck;
   if (check.conversationId && !readConversationMeta(check.conversationId).archived) {
-    const resumed = await startConversationPrompt(
+    const resumed = await startIdleConversationTurn(
       check.conversationId,
       OUTLINE_CHECK_RESUME_PROMPT,
       sessions,
@@ -132,7 +134,7 @@ export function findOutlineCheckRun(conversationId: string):
   | { projectId: string; review: ReviewRecordView; submission: CheckedSubmission }
   | undefined {
   const meta = readConversationMeta(conversationId);
-  if (meta.channel !== "planning" || meta.issueId === undefined) return undefined;
+  if (meta.outlineRole !== "check" || meta.issueId === undefined) return undefined;
   const issues = readAll().issues;
   for (const issue of issues) {
     if (issue.kind !== "review" || issue.partOf !== meta.projectId) continue;

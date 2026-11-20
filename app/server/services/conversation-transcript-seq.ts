@@ -89,6 +89,17 @@ export function readAllTranscriptEvents(
   return events;
 }
 
+/** Text of the first prompt event, reading no further. Missing file is undefined. */
+export function firstPromptText(conversationId: string): string | undefined {
+  const path = transcriptPathOf(conversationId);
+  if (!existsSync(path)) return undefined;
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const event = parseStampedTranscriptLine(line)?.event;
+    if (event?.type === "prompt") return event.text;
+  }
+  return undefined;
+}
+
 const TAIL_CHUNK_BYTES = 4096;
 
 /**

@@ -619,7 +619,7 @@ function rememberStartedChannelSession(
   );
 }
 
-/** Start a decomposer on the outline's planning channel at its latest version. */
+/** Start a decomposer on the outline's decomposition channel at its latest version. */
 export function useDecomposeOutline(outlineId: string) {
   const qc = useQueryClient();
   return useMutation<
@@ -634,10 +634,10 @@ export function useDecomposeOutline(outlineId: string) {
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
-      rememberStartedChannelSession(qc, outlineId, "planning", data);
+      rememberStartedChannelSession(qc, outlineId, "decomposition", data);
     },
     onSettled: () => {
-      invalidateStartedChannelSession(qc, outlineId, "planning");
+      invalidateStartedChannelSession(qc, outlineId, "decomposition");
     },
   });
 }
@@ -684,10 +684,10 @@ export function useUpdateOutlineDraft(outlineId: string) {
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
-      rememberStartedChannelSession(qc, outlineId, "planning", data);
+      rememberStartedChannelSession(qc, outlineId, "decomposition", data);
     },
     onSettled: () => {
-      invalidateStartedChannelSession(qc, outlineId, "planning");
+      invalidateStartedChannelSession(qc, outlineId, "decomposition");
       qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
       qc.invalidateQueries({ queryKey: issuesKeys.list() });
     },

@@ -133,6 +133,11 @@ export function channelForIssue(
   }
 }
 
+/** Outlines run decomposer, reconcile, and check sessions beside their planning channel. */
+export function offersDecompositionChannel(issue: Issue): boolean {
+  return issue.kind === "outline";
+}
+
 /** Review conversations (review taskers, question researchers) anchor to the review issue. */
 export function offersReviewChannel(issue: Issue): boolean {
   return issue.kind === "review";
