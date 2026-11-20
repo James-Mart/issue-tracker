@@ -107,7 +107,7 @@ describe("outline planning and decomposition channels", () => {
       }),
     );
     const decomposerId = await startedId(
-      await post("/api/issues/spec/outline/decompose", { executionGate: "off" }),
+      await post("/api/issues/spec/outline/decompose", {}),
     );
 
     const refused = await post(`/api/conversations/${plannerId}/messages`, {

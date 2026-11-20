@@ -851,6 +851,7 @@ export function ConversationThread({
   pauseCancel = false,
   parkedResume,
   banner,
+  composerNote,
 }: {
   conversationId: string;
   onBack?: () => void;
@@ -878,6 +879,8 @@ export function ConversationThread({
   parkedResume?: ParkedRootResume;
   /** Sits under the thread chrome, above the transcript. */
   banner?: ReactNode;
+  /** One line pinned above the composer. */
+  composerNote?: ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const {
@@ -973,6 +976,7 @@ export function ConversationThread({
           forkedAtSeq={forkedAtSeq}
         />
       </div>
+      {composerNote}
       {meta && !hideComposer ? (
         <Composer
           conversationId={conversationId}

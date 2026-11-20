@@ -20,3 +20,10 @@ export function outlineChannelForRole(
 ): "planning" | "decomposition" {
   return OUTLINE_ROLE_CHANNELS[role];
 }
+
+/** The outline channel that shares this one's live-run lock. */
+export function otherOutlineChannel(
+  channel: "planning" | "decomposition",
+): "planning" | "decomposition" {
+  return channel === "planning" ? "decomposition" : "planning";
+}

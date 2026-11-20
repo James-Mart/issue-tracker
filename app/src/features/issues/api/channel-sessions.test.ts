@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  channelSessionSwitcherParts,
   currentChannelSession,
-  outlinePlanningSessionList,
+  labelPlanningSessions,
 } from "./channel-sessions";
 import { channelSessionListItem as session } from "../test/channel-session-list-item";
 
@@ -16,26 +17,12 @@ describe("currentChannelSession", () => {
   });
 });
 
-describe("outline session list", () => {
-  it("lists both channels and treats an unlabeled planning session as a planner", () => {
-    const planner = session({
-      id: "planner",
-      updatedAt: "2026-08-01T00:00:00.000Z",
-    });
-    const listed = outlinePlanningSessionList(
-      [planner],
-      [
-        session({
-          id: "check",
-          outlineRole: "check",
-          updatedAt: "2026-08-02T00:00:00.000Z",
-        }),
-      ],
-    );
-    expect(listed.map((item) => [item.id, item.outlineRole])).toEqual([
-      ["check", "check"],
-      ["planner", "planner"],
-    ]);
+describe("planning session labels", () => {
+  it("names an unlabeled planning session as a planner and leaves the row unchanged", () => {
+    const planner = session({ id: "planner" });
+    const labeled = labelPlanningSessions([planner]);
+    expect(labeled.map((item) => item.outlineRole)).toEqual(["planner"]);
     expect(planner.outlineRole).toBeUndefined();
+    expect(channelSessionSwitcherParts(labeled[0]!).role).toBe("Planner");
   });
 });

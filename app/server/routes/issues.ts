@@ -73,7 +73,9 @@ import {
 } from "../services/outline-body.js";
 import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
-  parseDecomposeRequest,
+  assertEmptyDecomposeBody,
+  assertEmptyReconcileBody,
+  decomposerSessionFromOutline,
   parsePlanningSessionRequest,
   startOutlinePlanningSession,
 } from "../services/outline-planning-session.js";
@@ -197,14 +199,31 @@ export function createIssuesRouter(
     "/:id/outline/decompose",
     asyncRoute(async (req, res) => {
       const outline = readOutlineOrThrow(req.params.id);
-      const request = parseDecomposeRequest(req.body);
+      assertEmptyDecomposeBody(req.body);
+      requireProjectWorkspace(outline.partOf);
+      const meta = await startOutlinePlanningSession(
+        decomposerSessionFromOutline(outline),
+        sessions,
+      );
+      res.status(201).json({
+        id: meta.id,
+        title: meta.title,
+        model: meta.model,
+      });
+    }),
+  );
+
+  router.post(
+    "/:id/outline/reconcile",
+    asyncRoute(async (req, res) => {
+      const outline = readOutlineOrThrow(req.params.id);
+      assertEmptyReconcileBody(req.body);
       requireProjectWorkspace(outline.partOf);
       const meta = await startOutlinePlanningSession(
         {
           outlineId: outline.id,
-          role: "decomposer",
+          role: "reconcile",
           version: outline.bodyVersion,
-          ...request,
         },
         sessions,
       );

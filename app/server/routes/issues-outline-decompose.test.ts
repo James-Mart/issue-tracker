@@ -97,8 +97,29 @@ afterEach(async () => {
 });
 
 describe("POST /api/issues/:id/outline/decompose", () => {
-  it("starts a decomposer at the latest version with the chosen gate and no outline gate", async () => {
-    const res = await postDecompose("spec", { executionGate: "off" });
+  it("reads the stored execution gate and merge policy and refuses them in the body", async () => {
+    writeIssue("spec", {
+      kind: "outline",
+      title: "Feature outline",
+      partOf: "p",
+      bodyVersion: 3,
+      executionGate: true,
+      codeApprovalRequired: false,
+      mergePolicy: "pull-request",
+      order: 1,
+      archived: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const refused = await postDecompose("spec", { executionGate: "off" });
+    expect(refused.status).toBe(400);
+    const refusedPolicy = await postDecompose("spec", {
+      mergePolicy: "pull-request",
+    });
+    expect(refusedPolicy.status).toBe(400);
+
+    const res = await postDecompose("spec", {});
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
       id: string;
@@ -123,7 +144,35 @@ describe("POST /api/issues/:id/outline/decompose", () => {
     await expectDecomposeTranscript(meta!.id, {
       outlineId: "spec",
       version: 3,
-      executionGate: "off",
+      executionGate: "on",
+      mergePolicy: "pull-request",
+    });
+  });
+
+  it("resolves auto from codeApprovalRequired", async () => {
+    writeIssue("spec", {
+      kind: "outline",
+      title: "Feature outline",
+      partOf: "p",
+      bodyVersion: 3,
+      executionGate: "auto",
+      codeApprovalRequired: true,
+      order: 1,
+      archived: false,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+
+    const res = await postDecompose("spec", {});
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string };
+    const { listConversations } = await import("../services/conversations.js");
+    const [meta] = listConversations();
+    expect(meta?.id).toBe(body.id);
+    await expectDecomposeTranscript(meta!.id, {
+      outlineId: "spec",
+      version: 3,
+      executionGate: "on",
     });
   });
 });

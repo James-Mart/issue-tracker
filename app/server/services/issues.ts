@@ -23,6 +23,7 @@ import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
+import { applyAppendLocks } from "./outline-append-lock.js";
 import { clearReadyDuringLiveDecomposition } from "./ready-to-decompose.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
@@ -180,6 +181,7 @@ export function list(): IssuesResponse {
   }
   mergeImplementingOverlay(issues, derived.byId);
   clearReadyDuringLiveDecomposition(derived.byId);
+  applyAppendLocks(issues, derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.

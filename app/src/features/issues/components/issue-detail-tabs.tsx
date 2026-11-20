@@ -49,9 +49,10 @@ function isChannelTab(
 }
 
 /**
- * Page-level tab bar below the persistent header. Overview always; optional
- * channel from `channelForIssue`, plus Agents and Diff. With Overview alone,
- * no bar renders. The project issue uses the home bar instead.
+ * Page-level tab bar below the persistent header. Overview always; channel
+ * tabs (an outline has Planning and Decomposition), plus Agents and Diff.
+ * With Overview alone, no bar renders. The project issue uses the home bar
+ * instead.
  */
 export function IssueDetailTabs({
   issue,

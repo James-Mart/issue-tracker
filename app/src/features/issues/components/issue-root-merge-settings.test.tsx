@@ -74,6 +74,7 @@ vi.mock("../api/queries", () => ({
     },
   }),
   useIssueDetailQuery: () => ({ data: undefined, error: null }),
+  useProjectWorktreesQuery: () => ({ data: undefined, isError: false }),
 }));
 
 function mount(ui: React.ReactElement): { container: HTMLDivElement; root: Root } {

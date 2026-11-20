@@ -1,20 +1,32 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
-import type { ChannelSessionListItem, IssueDetail, IssueRecord } from "@server/schemas";
+import type {
+  ChannelSessionListItem,
+  ConversationChannel,
+  DerivedState,
+  IssueDetail,
+  IssueRecord,
+} from "@server/schemas";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
 
 const fixtures = vi.hoisted(() => ({
   queryState: {
     data: undefined as ChannelSessionListItem[] | undefined,
+    byChannel: {} as Partial<
+      Record<ConversationChannel, ChannelSessionListItem[] | undefined>
+    >,
   },
   queryArgs: {
     awaitingLaunchSession: undefined as boolean | undefined,
   },
   issuesState: {
-    data: undefined as { issues: IssueRecord[] } | undefined,
+    data: undefined as
+      | { issues: IssueRecord[]; derived: Record<string, DerivedState> }
+      | undefined,
   },
 }));
 
@@ -25,7 +37,7 @@ export const issuesState = fixtures.issuesState;
 vi.mock("../api/queries", () => ({
   useChannelSessionsQuery: (
     _issueId: string,
-    _channel: string,
+    channel: ConversationChannel,
     options?: { awaitingLaunchSession?: boolean; enabled?: boolean },
   ) => {
     if (options && "awaitingLaunchSession" in options) {
@@ -34,8 +46,9 @@ vi.mock("../api/queries", () => ({
     if (options?.enabled === false) {
       return { data: undefined, isLoading: false, error: null };
     }
+    const byChannel = fixtures.queryState.byChannel[channel];
     return {
-      data: fixtures.queryState.data,
+      data: byChannel ?? fixtures.queryState.data,
       isLoading: false,
       error: null,
     };
@@ -62,6 +75,22 @@ vi.mock("./planning-launch-control", () => ({
     <div data-testid="planning-channel-empty-state" />
   ),
   PlanningNewRunControl: () => <div data-testid="planning-new-run" />,
+}));
+
+vi.mock("./outline-new-planning-session", () => ({
+  OutlineNewPlanningSessionControl: ({
+    disabled,
+  }: {
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      data-testid="outline-new-planning-session"
+      disabled={disabled}
+    >
+      New planning session
+    </button>
+  ),
 }));
 
 vi.mock("./channel-retro-control", () => ({
@@ -114,24 +143,37 @@ vi.mock("@/features/agents/components/conversation-thread", () => ({
     hideComposer,
     headerActions,
     banner,
+    composerNote,
+    composerDisabled,
   }: {
     conversationId: string;
     hideComposer?: boolean;
     headerActions?: ReactNode;
     banner?: ReactNode;
+    composerNote?: ReactNode;
+    composerDisabled?: boolean;
   }) => (
     <div
       data-testid="conversation-thread"
       data-conversation-id={conversationId}
       data-hide-composer={hideComposer ? "true" : "false"}
+      data-composer-disabled={composerDisabled ? "true" : "false"}
     >
       {headerActions}
       {banner}
+      {composerNote}
     </div>
   ),
 }));
 
-export function mountPanel(issue?: IssueDetail): {
+export function mountPanel(
+  issue?: IssueDetail,
+  options?: {
+    channel?: ConversationChannel;
+    label?: string;
+    projectId?: string;
+  },
+): {
   container: HTMLDivElement;
   root: Root;
   rerender: () => void;
@@ -139,17 +181,23 @@ export function mountPanel(issue?: IssueDetail): {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   const rerender = () => {
     act(() => {
       root.render(
-        <MemoryRouter>
-          <ChannelTranscriptPanel
-            issueId={issue?.id ?? "capture"}
-            issue={issue}
-            channel="planning"
-            label="Planning"
-          />
-        </MemoryRouter>,
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <ChannelTranscriptPanel
+              issueId={issue?.id ?? "capture"}
+              issue={issue}
+              channel={options?.channel ?? "planning"}
+              label={options?.label ?? "Planning"}
+              projectId={options?.projectId}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
       );
     });
   };
@@ -176,6 +224,7 @@ export const idea: Extract<IssueDetail, { kind: "idea" }> = {
 afterEach(() => {
   document.body.innerHTML = "";
   queryState.data = undefined;
+  queryState.byChannel = {};
   queryArgs.awaitingLaunchSession = undefined;
   issuesState.data = undefined;
   resetCockpitLaunchStore();

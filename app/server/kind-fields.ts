@@ -159,6 +159,7 @@ export const OUTLINE_SET_FIELDS = {
   archived: { type: "boolean" },
   partOf: { type: "string" },
   sourceIdea: { type: "string" },
+  executionGate: { type: "executionGate" },
   outOfBand: { type: "boolean" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;
@@ -348,6 +349,7 @@ export const OUTLINE_GET_FIELDS = {
   pendingAppends: STORED,
   readyToDecompose: DERIVED,
   reconciliationNeeded: DERIVED,
+  appendLock: DERIVED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

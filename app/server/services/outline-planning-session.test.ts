@@ -31,20 +31,23 @@ afterEach(() => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
-describe("parseDecomposeRequest", () => {
-  it("accepts execution gate with optional merge policy and refuses unknown fields", async () => {
-    const { parseDecomposeRequest } = await import("./outline-planning-session.js");
+describe("assertEmptyDecomposeBody", () => {
+  it("accepts an empty body and refuses executionGate or mergePolicy", async () => {
+    const { assertEmptyDecomposeBody } = await import(
+      "./outline-planning-session.js"
+    );
     const { IssueError } = await import("./errors.js");
-    expect(parseDecomposeRequest({ executionGate: "off" })).toEqual({
-      executionGate: "off",
-      mergePolicy: undefined,
-    });
-    expect(
-      parseDecomposeRequest({ executionGate: "on", mergePolicy: "squash" }),
-    ).toEqual({ executionGate: "on", mergePolicy: "squash" });
+    expect(() => assertEmptyDecomposeBody({})).not.toThrow();
+    expect(() => assertEmptyDecomposeBody(undefined)).not.toThrow();
+    expect(() => assertEmptyDecomposeBody({ executionGate: "off" })).toThrow(
+      IssueError,
+    );
     expect(() =>
-      parseDecomposeRequest({ executionGate: "off", outlineGate: "on" }),
+      assertEmptyDecomposeBody({ mergePolicy: "pull-request" }),
     ).toThrow(IssueError);
+    expect(() => assertEmptyDecomposeBody({ outlineGate: "on" })).toThrow(
+      IssueError,
+    );
   });
 });
 

@@ -51,6 +51,11 @@ describe("outline append lock", () => {
       ideaId: "append-a",
       ideaTitle: "Append A",
     });
+    const { list } = await import("./issues.js");
+    expect(list().derived.spec?.appendLock).toEqual({
+      ideaId: "append-a",
+      ideaTitle: "Append A",
+    });
     expect(() => refuseOutlinePlannerLockPrompt("outline-planner")).toThrow(
       /is locked/,
     );

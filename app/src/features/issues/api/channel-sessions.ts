@@ -116,20 +116,35 @@ export function outlineSessionRoleLabel(role: OutlineSessionRole): string {
 }
 
 /**
- * Roster for the outline Planning tab, which is the only channel tab an
- * outline has. Both channels appear together. A planning session with no
- * stored role is a planner.
+ * Planning-tab rows. A session with no stored role is a planner. Does not
+ * pull in the decomposition channel.
  */
-export function outlinePlanningSessionList(
-  planning: readonly ChannelSessionListItem[],
-  decomposition: readonly ChannelSessionListItem[],
+export function labelPlanningSessions(
+  sessions: readonly ChannelSessionListItem[],
 ): ChannelSessionListItem[] {
-  const planners = planning.map((session) =>
+  return sessions.map((session) =>
     session.outlineRole === undefined
       ? { ...session, outlineRole: "planner" as const }
       : session,
   );
-  return orderChannelSessionsForSwitcher([...planners, ...decomposition]);
+}
+
+/** A channel session the server just started. */
+export type StartedChannelSession = {
+  id: string;
+  title: string;
+  model: string;
+};
+
+/** Start a planner on an outline. `brief` is the only field the route accepts. */
+export function startOutlinePlanningSession(
+  outlineId: string,
+  brief: string,
+): Promise<StartedChannelSession> {
+  return request<StartedChannelSession>(
+    `/api/issues/${encodeURIComponent(outlineId)}/planning/sessions`,
+    { method: "POST", body: { brief } },
+  );
 }
 
 export function formatSessionStartTime(createdAt: string): string {

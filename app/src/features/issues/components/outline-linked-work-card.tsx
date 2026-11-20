@@ -20,8 +20,6 @@ import { outlineVersionLabel } from "../lib/project-outlines";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { AxisChips, BEHIND_AXIS_CHIP } from "./axis-chips";
 import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
-import { OutlineDecomposeControl } from "./outline-decompose-control";
-
 const ROW_GRID =
   "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 shell:grid-cols-[5.5rem_minmax(0,1fr)_4.5rem_6.5rem] shell:gap-x-4";
 
@@ -67,20 +65,11 @@ export function OutlineLinkedWorkCard({
       </p>
     );
   } else if (roots.length === 0) {
-    const readyToDecompose =
-      query.data.derived[issue.id]?.readyToDecompose === true;
     body = (
       <div data-testid="outline-linked-work-empty">
         <ShellState
           className="border-0 bg-transparent px-2 py-6 shadow-none"
-          title={
-            readyToDecompose ? "Ready to decompose" : "No roots decomposed yet"
-          }
-          detail={
-            readyToDecompose
-              ? "Decompose builds the work root from this outline."
-              : undefined
-          }
+          title="No roots decomposed yet"
         />
       </div>
     );
@@ -123,12 +112,8 @@ export function OutlineLinkedWorkCard({
       className="rounded-lg border border-border bg-card p-5"
       data-testid="outline-linked-work"
     >
-      <div className="mb-3 flex min-h-8 items-center justify-between gap-2">
+      <div className="mb-3 flex min-h-8 items-center gap-2">
         <DetailEyebrow>Linked work</DetailEyebrow>
-        <OutlineDecomposeControl
-          outlineId={issue.id}
-          version={issue.bodyVersion}
-        />
       </div>
       {body}
     </section>
