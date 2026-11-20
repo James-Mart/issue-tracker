@@ -83,13 +83,27 @@ export function reconciliationNeededRows(
   return [...rows.values()];
 }
 
-/** One pass: each outline id → its catalog linked-work label. */
-export function linkedWorkLabels(
-  issues: IssueRecord[],
+export type OutlineCatalogLinks = {
+  /** Archived roots included, matching Ready to decompose. */
+  linkedRootIds: Set<string>;
+  /** Archived roots omitted unless `showArchived` is set. */
+  labels: Map<string, string>;
+};
+
+/**
+ * Linked-root ids and catalog labels from one root walk. The id set keeps
+ * an out-of-band outline in the implementation list when a root exists,
+ * even if the archived toggle hides that root's count.
+ */
+export function outlineCatalogLinks(
+  issues: readonly IssueRecord[],
   showArchived: boolean,
-): Map<string, string> {
+): OutlineCatalogLinks {
+  const linkedRootIds = new Set<string>();
   const counts = new Map<string, { epics: number; stories: number }>();
-  for (const root of stampedBoardRoots(issues, {}, showArchived)) {
+  for (const root of stampedBoardRoots(issues, {}, true)) {
+    linkedRootIds.add(root.outlineId);
+    if (!showArchived && root.archived) continue;
     const bucket = counts.get(root.outlineId) ?? { epics: 0, stories: 0 };
     if (root.kind === "epic") bucket.epics += 1;
     else bucket.stories += 1;
@@ -99,5 +113,5 @@ export function linkedWorkLabels(
   for (const [outlineId, count] of counts) {
     labels.set(outlineId, linkedWorkCountLabel(count.epics, count.stories));
   }
-  return labels;
+  return { linkedRootIds, labels };
 }

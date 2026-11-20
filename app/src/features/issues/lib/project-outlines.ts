@@ -1,5 +1,6 @@
-import type { IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueRecord } from "@server/schemas";
 import { visibleIssues } from "@server/services/archived-visibility";
+import { outlineCatalogLinks } from "./outline-links";
 
 export type OutlineRecord = Extract<IssueRecord, { kind: "outline" }>;
 
@@ -7,6 +8,13 @@ export const PROJECT_OUTLINES_EMPTY_TITLE = "No outlines yet";
 
 export const PROJECT_OUTLINES_EMPTY_DETAIL =
   "This project has no outlines yet. Planning an Idea creates one.";
+
+export const OUTLINE_CATALOG_IMPLEMENTATION_LABEL = "Implementation";
+
+export type OutlineCatalogBands = {
+  implementation: OutlineRecord[];
+  outOfBand: OutlineRecord[];
+};
 
 /**
  * Outlines whose parent is this Project, newest `updatedAt` first.
@@ -24,6 +32,61 @@ export function outlinesForProject(
         issue.kind === "outline" && issue.partOf === projectId,
     )
     .sort(byRecentVersion);
+}
+
+/**
+ * Split the catalog. An outline with a linked root stays in implementation
+ * whatever `outOfBand` says. Order inside each list is unchanged.
+ */
+export function partitionOutlineCatalog(
+  outlines: readonly OutlineRecord[],
+  linkedRootIds: ReadonlySet<string>,
+): OutlineCatalogBands {
+  const implementation: OutlineRecord[] = [];
+  const outOfBand: OutlineRecord[] = [];
+  for (const outline of outlines) {
+    const band =
+      outline.outOfBand === true && !linkedRootIds.has(outline.id)
+        ? outOfBand
+        : implementation;
+    band.push(outline);
+  }
+  return { implementation, outOfBand };
+}
+
+export type OutlineCatalog = {
+  outlines: OutlineRecord[];
+  bands: OutlineCatalogBands;
+  labels: Map<string, string>;
+  readyIds: Set<string>;
+};
+
+/** Split catalog for one Project, with linked-work labels and ready rows. */
+export function outlineCatalogForProject(
+  issues: IssueRecord[],
+  projectId: string,
+  showArchived: boolean,
+  derived: Record<string, DerivedState>,
+): OutlineCatalog {
+  const outlines = outlinesForProject(issues, projectId, showArchived);
+  const links = outlineCatalogLinks(issues, showArchived);
+  return {
+    outlines,
+    bands: partitionOutlineCatalog(outlines, links.linkedRootIds),
+    labels: links.labels,
+    readyIds: readyToDecomposeIds(outlines, derived),
+  };
+}
+
+function readyToDecomposeIds(
+  outlines: readonly { id: string }[],
+  derived: Record<string, DerivedState>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const outline of outlines) {
+    if (derived[outline.id]?.readyToDecompose === true) ids.add(outline.id);
+  }
+  return ids;
 }
 
 /** Latest saved body, shown as `v3`. */

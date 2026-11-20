@@ -11,7 +11,7 @@ export function IssueTitleField({ issue }: { issue: IssueDetail }) {
       issue={issue}
       displayClassName={
         issue.kind === "project"
-          ? "break-normal text-xl font-semibold tracking-tight text-foreground"
+          ? "break-normal text-xl font-semibold tracking-tight text-foreground shell:whitespace-nowrap"
           : "break-words text-xl font-semibold tracking-tight text-foreground"
       }
       inputClassName="h-auto py-1 text-xl font-semibold tracking-tight"
