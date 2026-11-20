@@ -1,7 +1,7 @@
 ---
 name: issue-tracker-plan
 disable-model-invocation: true
-description: Grill an Idea to an outline and conclude, publish an append draft on conclude, or amend an outline in place.
+description: Grill an Idea or an outline session and save the outline.
 ---
 
 # Issue Tracker — Plan (grill → outline)
@@ -13,8 +13,10 @@ archives the Idea, and starts a decomposer when the Idea's gates say so. An
 Idea with `appendTo` amends the target Story's outline as a pending draft,
 and conclude publishes that draft. A planner session on an outline answers
 a context question from the current version, or saves a revision as the next
-version without starting reconciliation. A stop before conclude leaves the
-outline's current version unchanged. Do not implement product code; this
+version without starting reconciliation. A new planning session on an outline
+grills from the brief in its opening message, saves each later version the
+same way, and does not conclude. A stop before the outline is saved leaves
+its current version unchanged. Do not implement product code; this
 skill only authors the plan artifact.
 
 A retro on the planning session is available on demand through
@@ -82,6 +84,35 @@ the session follows the target Story's context. `<storyId>` is the
 
 When Bootstrap's kind gate landed here, this section is the whole session.
 An Idea follows **## Grill-me protocol**.
+
+The session's opening message chooses the path. An opening message that
+carries a `Brief:` line is a **New planning session**. Every other outline
+session is the **Continued planner**.
+
+### New planning session
+
+Grill from that brief, then save the outline. This session does not run
+`issue idea conclude`.
+
+1. `issue outline view <outlineId>` prints the latest body. The opening
+   message's `Version` is the version the brief was written against. Its
+   `Execution gate`, `Code approval required`, `Merge base`, `Merge policy`,
+   and `Out of band` are the outline's plan settings. `unset` means that
+   setting is not stored. Leave the settings as they are.
+2. Grill the brief against that body. Follow **## Grill-me protocol** for
+   the questions. The merge base is the opening message's value, so
+   **Merge-base first** is already settled: when it names a branch other
+   than the Project trunk, pass that branch as `Ref` on focused research;
+   when it is the trunk or `unset`, omit `Ref`. Read the trunk with
+   `issue project get <projectId> trunk` (`<projectId>` from Bootstrap
+   step 1). When the grill is ready, save the next version in step 3.
+3. Save the next version the way **Continued planner** saves a revision.
+   That save is this session's outline write. Stopping before it leaves
+   the current version unchanged. The message that reports the save names
+   `<outlineId>` and the version from `issue outline get <outlineId> version`.
+4. After that save, a later message follows **Continued planner**.
+
+### Continued planner
 
 `issue outline view <outlineId>` prints the latest body.
 
@@ -182,10 +213,12 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize work)
-  until **## Conclude** runs `issue idea conclude`, or **## Append** concludes
-  and publishes the draft.
-- Do **not** ask a separate pre-outline “shared understanding?” confirm —
-  when the grill is ready, go straight to **## Conclude**.
+  until **## Conclude** runs `issue idea conclude`, **## Append** concludes
+  and publishes the draft, or a **New planning session** saves the next
+  outline version.
+- Do **not** ask a separate pre-outline “shared understanding?” confirm.
+  When the grill is ready, an Idea goes to **## Conclude** and a **New
+  planning session** goes to its save.
 
 This protocol is **inlined here**. Do **not** add or invoke a separate
 plugin-local grill-me skill.
@@ -324,7 +357,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea. An outline session's revision is the description save in **## Outline session** and does not start reconciliation.
+- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea. An outline session's revision, and each save a new planning session lands, is the description save in **## Outline session** and does not start reconciliation.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.

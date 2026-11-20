@@ -1,7 +1,7 @@
 ---
 name: issue-tracker-planner-opus
 model: claude-opus-5-5-thinking-high
-description: Runs issue-tracker-plan for an Idea grill or an Outline amend session.
+description: Runs issue-tracker-plan on the issue id in the spawn prompt.
 readonly: false
 ---
 

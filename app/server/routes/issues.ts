@@ -74,6 +74,7 @@ import {
 import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
   parseDecomposeRequest,
+  parsePlanningSessionRequest,
   startOutlinePlanningSession,
 } from "../services/outline-planning-session.js";
 import {
@@ -204,6 +205,28 @@ export function createIssuesRouter(
           role: "decomposer",
           version: outline.bodyVersion,
           ...request,
+        },
+        sessions,
+      );
+      res.status(201).json({
+        id: meta.id,
+        title: meta.title,
+        model: meta.model,
+      });
+    }),
+  );
+
+  router.post(
+    "/:id/planning/sessions",
+    asyncRoute(async (req, res) => {
+      const outline = readOutlineOrThrow(req.params.id);
+      const request = parsePlanningSessionRequest(req.body);
+      requireProjectWorkspace(outline.partOf);
+      const meta = await startOutlinePlanningSession(
+        {
+          outlineId: outline.id,
+          role: "planner",
+          brief: request.brief,
         },
         sessions,
       );

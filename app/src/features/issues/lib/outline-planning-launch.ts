@@ -1,9 +1,6 @@
-import { agentBodyPath } from "@/lib/plugin-paths";
+import { agentBodyPath, skillPath } from "@/lib/plugin-paths";
 import type { OutlineSessionRole } from "@server/schemas";
-import {
-  planningSessionMessage,
-  planningSessionTitle,
-} from "./planning-launch";
+import { planningSessionTitle } from "./planning-launch";
 
 /**
  * Session root model. Matches the planner wrapper pins:
@@ -50,9 +47,39 @@ export function outlinePlanningSessionModel(
   return OUTLINE_PLANNING_GROK_MODEL;
 }
 
-/** First prompt for a planner session: the Idea grill, with no stakeholder. */
-export function outlinePlannerSessionMessage(ideaId: string): string {
-  return planningSessionMessage(ideaId, undefined);
+/** Prompt text for one optional plan field. An omitted field is `unset`. */
+function planSettingPromptLabel(value: string | boolean | undefined): string {
+  if (value === undefined) return "unset";
+  return String(value);
+}
+
+/**
+ * First prompt for a new planner session. Plan settings come from the
+ * outline; `brief` is the revision the grill starts from.
+ */
+export function outlineNewPlanningSessionMessage(
+  outline: {
+    id: string;
+    bodyVersion: number;
+    executionGate?: "auto" | boolean;
+    codeApprovalRequired?: boolean;
+    mergeBase?: string;
+    mergePolicy?: string;
+    outOfBand?: boolean;
+  },
+  brief: string,
+): string {
+  return (
+    `Start a new planning session on ${outline.id} in the issue tracker. ` +
+    `Read ${skillPath("issue-tracker-plan")} and follow it. ` +
+    `Outline: \`${outline.id}\`. Version: \`${outline.bodyVersion}\`. ` +
+    `Execution gate: \`${planSettingPromptLabel(outline.executionGate)}\`. ` +
+    `Code approval required: \`${planSettingPromptLabel(outline.codeApprovalRequired)}\`. ` +
+    `Merge base: \`${planSettingPromptLabel(outline.mergeBase)}\`. ` +
+    `Merge policy: \`${planSettingPromptLabel(outline.mergePolicy)}\`. ` +
+    `Out of band: \`${planSettingPromptLabel(outline.outOfBand)}\`.\n` +
+    `Brief:\n${brief}`
+  );
 }
 
 /** First prompt for a decomposer session on one outline version. */

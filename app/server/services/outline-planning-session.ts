@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   outlineCheckSessionMessage,
   outlineDecomposerSessionMessage,
-  outlinePlannerSessionMessage,
+  outlineNewPlanningSessionMessage,
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
   outlineReconcileSessionMessage,
@@ -30,6 +30,7 @@ type IdeaIssue = Extract<Issue, { kind: "idea" }>;
 export type StartOutlinePlannerSession = {
   outlineId: string;
   role: "planner";
+  brief: string;
 };
 
 export type StartOutlineDecomposerSession = {
@@ -88,6 +89,35 @@ export function parseDecomposeRequest(body: unknown): DecomposeRequest {
   };
 }
 
+const planningSessionRequestSchema = z
+  .object({
+    brief: z.string(),
+  })
+  .strict();
+
+export type PlanningSessionRequest = Pick<StartOutlinePlannerSession, "brief">;
+
+/** A non-empty brief for a direct planner start. Blank input is refused. */
+function requirePlanningBrief(raw: string): string {
+  const brief = raw.trim();
+  if (brief === "") {
+    throw new IssueError("validation", "brief is required");
+  }
+  return brief;
+}
+
+/** Body of `POST /planning/sessions`. Unknown fields are refused. */
+export function parsePlanningSessionRequest(body: unknown): PlanningSessionRequest {
+  const parsed = planningSessionRequestSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    throw new IssueError(
+      "validation",
+      formatZodError(parsed.error, "invalid planning session body"),
+    );
+  }
+  return { brief: parsed.data.brief };
+}
+
 /**
  * Open a planner session on an outline's planning channel, or a decomposer,
  * reconcile, or check session on its decomposition channel, and start its
@@ -112,21 +142,22 @@ export async function createOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
   sessions: ConversationMessageSessions,
 ): Promise<{ meta: ConversationMeta; firstPrompt: FirstPrompt }> {
-  const outline = readOutlineOrThrow(input.outlineId);
+  const normalized = normalizePlanningSessionInput(input);
+  const outline = readOutlineOrThrow(normalized.outlineId);
   const outlineIdea = outline.sourceIdea
     ? readSourceIdeaOrThrow(outline.sourceIdea)
     : undefined;
   const model = outlinePlanningSessionModel(outlineIdea?.stakeholder);
-  const title = outlinePlanningSessionTitle(input.role, outline.title);
-  const message = sessionMessage(input, outline, outlineIdea);
+  const title = outlinePlanningSessionTitle(normalized.role, outline.title);
+  const message = sessionMessage(normalized, outline);
   const { meta, firstPrompt } = await createIssueChannelSession(
     {
       projectId: outline.partOf,
       title,
       model,
       issueId: outline.id,
-      channel: outlineChannelForRole(input.role),
-      outlineRole: input.role,
+      channel: outlineChannelForRole(normalized.role),
+      outlineRole: normalized.role,
       message,
     },
     sessions,
@@ -142,19 +173,19 @@ export function readSourceIdeaOrThrow(id: string): IdeaIssue {
   return readIdeaOrThrow(id, "source idea");
 }
 
+function normalizePlanningSessionInput(
+  input: StartOutlinePlanningSessionInput,
+): StartOutlinePlanningSessionInput {
+  if (input.role !== "planner") return input;
+  return { ...input, brief: requirePlanningBrief(input.brief) };
+}
+
 function sessionMessage(
   input: StartOutlinePlanningSessionInput,
   outline: OutlineIssue,
-  outlineIdea: IdeaIssue | undefined,
 ): string {
   if (input.role === "planner") {
-    if (!outlineIdea) {
-      throw new IssueError(
-        "validation",
-        `outline "${outline.id}" has no source idea to plan`,
-      );
-    }
-    return outlinePlannerSessionMessage(outlineIdea.id);
+    return outlineNewPlanningSessionMessage(outline, input.brief);
   }
   if (input.role === "check") {
     return outlineCheckSessionMessage({

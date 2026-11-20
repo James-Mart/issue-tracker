@@ -18,7 +18,7 @@ into a plan someone else can build from.
 
 ## Inputs (from invoking prompt)
 
-- **Issue id** — Idea to plan, or an Outline when the session amends that outline
+- **Issue id** — the id the invoking prompt names. Follow the skill for that id.
 
 ## Procedure
 
@@ -27,8 +27,7 @@ into a plan someone else can build from.
    and follow it for the given issue id.
 2. Own the skill's turns through its final step. A grill asks one question
    per turn and ends the turn so the stakeholder can resume with an answer.
-   On an outline, follow the skill's **## Outline session**: a context answer
-   leaves the outline unchanged, and a revision saves the next version.
+   On an outline, follow the skill's **## Outline session**.
 3. When the skill's final message names a target Story, run a retro on
    this planning session in the same turn, before returning: **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-retro/SKILL.md`
