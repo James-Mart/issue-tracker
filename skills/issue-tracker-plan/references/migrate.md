@@ -2,6 +2,52 @@
 
 ### Promoted mockup artifacts
 
+Outline decompose attaches mockup captures from this section. From
+`/root/.cursor/plugins/local/issue-tracker/app`, run
+`npm run outline-mockups -- directions <outlineId>`.
+
+When that prints a direction id, the outline has accepted directions.
+Follow **Fresh captures**.
+
+When that prints no direction id, the outline has no accepted directions.
+Follow **Chosen PNG archives**.
+
+#### Fresh captures
+
+1. From `/root/.cursor/plugins/local/issue-tracker/app`, run
+   `npm run outline-mockups -- capture <outlineId> --from-pack`.
+
+   The command restores the packed bundles first, which drops a failed
+   edit, then prints one absolute PNG path per line. Each basename is
+   `mockup-<directionId>-<stateSlug>-<viewport>.png` (`viewport` is
+   `phone` or `desktop`).
+
+2. For each direction id that `directions` printed and the outline
+   version names, the Story is the one that implements that surface:
+   the Story written for the outline section that names that direction
+   id. A printed PNG belongs to the longest such direction id for which
+   the basename starts with `mockup-<directionId>-` and ends with
+   `-phone.png` or `-desktop.png`. Attach each of that direction's
+   PNGs to that Story:
+
+   `issue attach <storyId> <pngPath>`
+
+   The Story holds those PNGs. The outline keeps no copy of them.
+
+3. Write the tweak wording into that Story's description, as **Chosen
+   PNG archives** step 2 does. The outline section that names the
+   direction states that wording.
+
+4. In that Story's prose, name each attached capture from step 1.
+   Write the paragraph in your own words — not a stock block. It must
+   make the **Captures** claims in **Chosen PNG archives**. The **Archive**
+   claims are for the archive that section copies onto the Story. The
+   live bundle stays on the outline.
+
+#### Chosen PNG archives
+
+This promotes the source Idea's chosen PNG archives.
+
 When the grill included mockup rounds with chosen directions, after the
 plan lands work on a Story implementing a mocked surface, for each chosen
 direction on that surface:
@@ -32,6 +78,9 @@ direction on that surface:
 
    Write the paragraph in your own words — not a stock block. It must make
    these claims:
+
+   **Captures**
+
    - The named screenshots record the direction chosen for the surface: its
      content and hierarchy, the states it must support, where affordances live,
      and how interactions behave. An implementor honors those decisions while
@@ -43,6 +92,9 @@ direction on that surface:
      repo conventions, or the app's real components, those still win. Better
      spacing, copy, or polish is expected rather than deviation.
    - No gate compares an implementation against the captures.
+
+   **Archive**
+
    - The named archive is reference material. Read it for composition, layout,
      class structure, and the enumeration of states the surface has to support.
      Lift from it deliberately.

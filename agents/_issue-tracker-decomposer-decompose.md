@@ -29,12 +29,13 @@ Absolute path for this file (Read this exact path):
    created: **Source outline (sourceOutline)** with this outline and version;
    **Source idea (sourceIdea)** with the source Idea, when there is one;
    **Merge-base override** with the merge-base branch, when there is one;
-   **Tasks with no diff (noDiff)**; and **Promoted mockup artifacts** for
-   each mockup direction the outline version names, copied from the source
-   Idea, with the tweak wording the outline states for it. With a **Merge
-   policy** input, run `issue <rootKind> set <rootId> mergePolicy <policy>`
-   after the merge-base override, where `<rootKind>` is `epic` or `story`
-   to match the root.
+   and **Tasks with no diff (noDiff)**. Then **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
+   and follow **Promoted mockup artifacts** for this outline. With a
+   **Merge policy** input, run
+   `issue <rootKind> set <rootId> mergePolicy <policy>` after the
+   merge-base override, where `<rootKind>` is `epic` or `story` to match
+   the root.
 4. **Polish.** **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
    and follow it on the root.
