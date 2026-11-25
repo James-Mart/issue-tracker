@@ -10,7 +10,7 @@ import {
 import { join } from "node:path";
 import { z } from "zod";
 import { conversationsDir } from "../config.js";
-import { isSlugSafe } from "../slug.js";
+import { assertSlug } from "../slug.js";
 
 const mockupStackStateSchema = z.object({
   port: z.number().int().positive(),
@@ -35,19 +35,11 @@ export type MockupSessionOutcome = z.infer<
 >["outcome"];
 
 function assertConversationId(conversationId: string): void {
-  if (!isSlugSafe(conversationId)) {
-    throw new Error(
-      `mockup scratch conversationId must be a slug, got ${JSON.stringify(conversationId)}`,
-    );
-  }
+  assertSlug(conversationId, "mockup scratch conversationId");
 }
 
 function assertDirectionId(directionId: string): void {
-  if (!isSlugSafe(directionId)) {
-    throw new Error(
-      `mockup scratch directionId must be a slug, got ${JSON.stringify(directionId)}`,
-    );
-  }
+  assertSlug(directionId, "mockup scratch directionId");
 }
 
 function metaPathFor(id: string): string {

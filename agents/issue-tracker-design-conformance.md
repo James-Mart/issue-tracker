@@ -55,21 +55,52 @@ Otherwise run **## Round** from step 1's spawn branch.
 
 ## Round
 
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-mockup-outline.md`
+and resolve `<outlineId>` per that file.
+
+From `/root/.cursor/plugins/local/issue-tracker/app`, when `<outlineId>`
+is known, run `npm run outline-mockups -- directions <outlineId>`. When
+that prints at least one id, the outline holds bundles: the author's
+workspace is the replay tree, and a finished return has already packed it.
+Follow **Outline review**. When `<outlineId>` is unknown or that command
+prints nothing, follow **Planning-scratch review**.
+
 1. **Author.** On the spawn branch, delegate the Author stub. On the
    resume branch, resume the same author with the Author (feedback) stub,
    using that instruction as the feedback. Keep the nested agent id as
    `resumeId`. When it is lost, look it up with `delegations`, taking the
    most recent entry whose role is `issue-tracker-mockup-author`. The
-   author starts the stack, renders and revises, and leaves the stack
-   running. It returns the direction ids and the named-export state names
-   produced under each, any state still not faithful after its own
-   review, and any decision it judged un-representable in a capture.
-2. **Start the stack.**
+   author renders and revises, and returns the direction ids and the
+   named-export state names produced under each, any state still not
+   faithful after its own review, and any decision it judged
+   un-representable in a capture. On the planning scratch it leaves that
+   stack running.
+
+### Outline review
+
+The author's pack is the save. A running Storybook updates in place.
+
+1. `npm run outline-mockups -- capture <outlineId>`
+   The printed lines are the PNG paths. Judge each capture the way
+   **Planning-scratch review** step 2 does.
+2. When a capture does not conform and fewer than three feedback rounds
+   have been taken on this run's own judgment, resume the author with the
+   Author (feedback) stub (same `resumeId` lookup as **Author**) naming
+   the violations, then repeat from step 1. The cap counts only these
+   own-judgment rounds. A redirection handed by the caller starts a fresh
+   count because it is a new instruction, not another unaided attempt.
+3. Return per **## Return**. The PNG paths from the last capture are the
+   absolute capture paths. The live bundles are already on the outline.
+
+### Planning-scratch review
+
+1. **Start the stack.**
    `npm run mockup-stack -- start <conversationId>`
    Start is idempotent: when the author already started the stack, this
    reuses it. Capture still uses the loopback base URL it prints; do not
    post that URL to the human.
-3. **Capture and review.** For each direction id, in the order the author
+2. **Capture and review.** For each direction id, in the order the author
    returned them:
    `npm run mockup-capture -- --conversation <conversationId> --direction <directionId>`
    Capture prints one absolute PNG path per line. Read every printed PNG.
@@ -77,25 +108,40 @@ Otherwise run **## Round** from step 1's spawn branch.
    `designSystem` doc's rules when that consult ran; the target's own
    components and conventions, then ordinary craft, when the consult was
    skipped.
-4. **Feedback.** When a capture does not conform and fewer than three
+3. **Feedback.** When a capture does not conform and fewer than three
    feedback rounds have been taken on this run's own judgment, resume the
-   author with the Author (feedback) stub (same `resumeId` lookup as step
-   1) naming the violations, then repeat from step 3. The harness stays
-   up. The cap counts only these own-judgment rounds. A redirection
-   handed by the caller starts a fresh count because it is a new
-   instruction, not another unaided attempt.
-5. **Promote.** For each direction id:
+   author with the Author (feedback) stub (same `resumeId` lookup as the
+   **Author** step) naming the violations, then repeat from step 2. The
+   harness stays up. The cap counts only these own-judgment rounds. A
+   redirection handed by the caller starts a fresh count because it is a
+   new instruction, not another unaided attempt.
+4. **Promote.** For each direction id:
    `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --mode candidate`
    Candidate mode stores the captures on the conversation, then prints one
    absolute capture path per line, then one embed line per PNG.
-6. **Live Storybook links.** For each direction id from step 1:
+5. **Live Storybook links.** For each direction id the author returned:
    `npm run mockup-live-links -- --conversation <conversationId> --direction <directionId>`
    Each run prints one `[Open live Storybook](...)` line on stdout.
-7. Return per **## Return**. Leave the stack running.
+6. Return per **## Return**. Leave the stack running.
 
 ## Acceptance
 
-In order:
+Resolve `<outlineId>` the way **## Round** does. From
+`/root/.cursor/plugins/local/issue-tracker/app`, when `<outlineId>` is
+known, run `npm run outline-mockups -- directions <outlineId>`.
+
+When that prints at least one id, the author's pack already saved every
+accepted direction, including one accepted after the first save. From that
+same directory run
+`npm run outline-mockups -- accept <outlineId> <chosenDirectionId> <issueId>`.
+That saves the chosen direction's bundle from the replay tree: onto the
+outline when the direction is already accepted or `<issueId>` is the
+outline, and onto the issue when the direction is new. `harness.json`,
+`package.json`, and the other directions stay. A running Storybook updates
+in place. Return per **## Return** from the outline capture's PNG paths,
+then stop.
+
+When the outline holds no bundles, in order:
 
 1. `npm run mockup-stack -- start <conversationId>`
 2. `npm run mockup-promote -- --conversation <conversationId> --direction <chosenDirectionId> --issue <issueId> --mode chosen`
@@ -108,9 +154,10 @@ In order:
 The entire final message carries:
 
 - the direction ids and each direction's state names
-- the embed lines and absolute capture paths that promote printed
-- one `[Open live Storybook](...)` markdown link per direction from step
-  6, when the stack is still up
+- the embed lines and absolute capture paths that promote printed, or the
+  outline capture's PNG paths when the outline holds bundles
+- one `[Open live Storybook](...)` markdown link per direction from the
+  planning-scratch live-links step, when that stack is still up
 - any decision judged un-representable in a capture
 - when three own-judgment feedback rounds ended without conformance, an
   escalation naming each unresolved violation beside the captures it did

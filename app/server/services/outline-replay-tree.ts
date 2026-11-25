@@ -1,16 +1,19 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   MAX_ATTACHMENT_BYTES,
   attachmentPath,
   listAttachments,
+  putAttachment,
+  removeOutlineAttachment,
+  replaceAttachment,
   replaceOutlineAttachment,
 } from "./attachments.js";
 import { readOutlineOrThrow } from "./issues.js";
-import { sandboxNpmCacheDir } from "./mockup-scratch.js";
-import { liveBundleDirectionId, liveBundleName } from "./outline-attachments.js";
+import { mockupScratchDir, sandboxNpmCacheDir } from "./mockup-scratch.js";
+import { liveBundleDirectionId, liveBundleName, requireLiveBundleName } from "./outline-attachments.js";
 import {
   readAuthorRunState,
   replayTreeDir,
@@ -44,6 +47,14 @@ function liveDirectionIds(outlineId: string): string[] {
 export function listAcceptedDirections(outlineId: string): { directionId: string }[] {
   readOutlineOrThrow(outlineId);
   return liveDirectionIds(outlineId).map((directionId) => ({ directionId }));
+}
+
+function assertReplayBundleWithinLimit(name: string, bytes: Uint8Array): void {
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error(
+      `replay bundle ${name} exceeds the ${MAX_ATTACHMENT_BYTES} byte attachment limit`,
+    );
+  }
 }
 
 function acceptedDirectionIds(outlineId: string): string[] {
@@ -134,16 +145,65 @@ export function packOutlineTree(outlineId: string): Promise<{ directionIds: stri
       name: liveBundleName(directionId),
       bytes: packReplayBundle(tree, directionId),
     }));
-    const oversized = bundles.find((bundle) => bundle.bytes.byteLength > MAX_ATTACHMENT_BYTES);
-    if (oversized) {
-      throw new Error(
-        `replay bundle ${oversized.name} exceeds the ${MAX_ATTACHMENT_BYTES} byte attachment limit`,
-      );
-    }
+    for (const bundle of bundles) assertReplayBundleWithinLimit(bundle.name, bundle.bytes);
     for (const bundle of bundles) {
       await replaceOutlineAttachment(outlineId, bundle.name, bundle.bytes);
     }
     return { directionIds };
+  });
+}
+
+/**
+ * Directory the mockup author writes. The outline's replay tree when it
+ * holds live bundles — a direction accepted after the first save lives in
+ * that same tree — and the planning scratch for `conversationId` otherwise.
+ */
+export function authorWorkspace(outlineId: string, conversationId: string): string {
+  readOutlineOrThrow(outlineId);
+  if (liveDirectionIds(outlineId).length > 0) return replayTreeDir(outlineId);
+  return mockupScratchDir(conversationId);
+}
+
+/**
+ * Save one direction's bundle from the replay tree. A direction the outline
+ * already accepted, and a direction whose receiving issue is the outline,
+ * is written onto the outline. A new direction is attached to `issueId`
+ * instead, so a later outline save can move it.
+ */
+export function acceptOutlineDirection(
+  outlineId: string,
+  directionId: string,
+  issueId: string,
+): Promise<void> {
+  readOutlineOrThrow(outlineId);
+  const name = requireLiveBundleName(directionId);
+  return withOutlineMockupsLock(outlineId, async () => {
+    const bytes = packReplayBundle(replayTreeDir(outlineId), directionId);
+    assertReplayBundleWithinLimit(name, bytes);
+    if (issueId === outlineId || liveDirectionIds(outlineId).includes(directionId)) {
+      await replaceOutlineAttachment(outlineId, name, bytes);
+      return;
+    }
+    if (listAttachments(issueId).some((attachment) => attachment.name === name)) {
+      await replaceAttachment(issueId, name, bytes);
+      return;
+    }
+    await putAttachment(issueId, name, bytes);
+  });
+}
+
+/**
+ * Remove one accepted direction. Deletes its live bundle and its folder in
+ * the replay tree. Shared `harness.json`, `package.json`, and other
+ * directions stay, so a running Storybook drops that direction's stories
+ * in place.
+ */
+export function dropOutlineDirection(outlineId: string, directionId: string): Promise<void> {
+  readOutlineOrThrow(outlineId);
+  const name = requireLiveBundleName(directionId);
+  return withOutlineMockupsLock(outlineId, async () => {
+    await removeOutlineAttachment(outlineId, name);
+    rmSync(join(replayTreeDir(outlineId), directionId), { recursive: true, force: true });
   });
 }
 

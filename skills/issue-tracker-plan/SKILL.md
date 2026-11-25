@@ -252,11 +252,20 @@ doc.
     exactly as a conformant one does, and is carried forward like one.
   - **Redirect** — the stakeholder's redirection goes back as feedback to the
     round already open, which resumes iterating on it with a fresh cap.
-  - **Drop** — from `/root/.cursor/plugins/local/issue-tracker/app`, stop
-    that conversation's stack with
-    `npm run mockup-stack -- stop <conversationId> --ended`, then the round
-    ends for that screen with no direction, and the plan proceeds without
-    one.
+  - **Drop** — `<outlineId>` is the outline this session is saving or
+    revising. Before the first save there is no outline. When `<outlineId>`
+    is known, from `/root/.cursor/plugins/local/issue-tracker/app` run
+    `npm run outline-mockups -- directions <outlineId>`. When that lists
+    `<directionId>`, run
+    `npm run outline-mockups -- drop <outlineId> <directionId>`.
+    That removes the live bundle and deletes that direction's stories from
+    the replay tree. `harness.json`, `package.json`, and the other
+    directions stay, and a running Storybook updates in place. Name that
+    direction id in the note to the mockup author; the name is the author's
+    context for the drop. When `<outlineId>` is unknown or directions does
+    not list `<directionId>`, stop that conversation's stack with
+    `npm run mockup-stack -- stop <conversationId> --ended`. The round ends
+    for that screen with no direction, and the plan proceeds without one.
 - **A new product question** — when a return raises a product or dependency
   decision the grill has not settled, ask it and have it answered before the
   next screen's round starts.

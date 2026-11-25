@@ -2286,13 +2286,25 @@ under this tree. Stories globs keep every direction folder present in the
 tree, and dependencies are the union. Other folders and installed packages
 stay. Restore then runs `npm install --ignore-scripts --cache <tree>/.npm` in
 the tree. `packOutlineTree` overwrites every accepted direction's live bundle
-from the tree, all built and size-checked before the first write. Archiving or
+from the tree, all built and size-checked before the first write.
+`authorWorkspace(outlineId, conversationId)` is that replay tree when the
+outline holds live bundles, including a direction accepted after the first
+save, and `conversationId`'s planning scratch otherwise.
+`dropOutlineDirection(outlineId, directionId)` removes the live bundle with
+`removeOutlineAttachment` and deletes that direction's folder from the tree.
+`harness.json`, `package.json`, and every other direction stay, so a running
+Storybook updates in place. `acceptOutlineDirection(outlineId, directionId,
+issueId)` saves that direction's bundle from the replay tree onto the outline
+when the direction is already accepted or `issueId` is the outline, and onto
+`issueId` when the direction is new. Archiving or
 deleting the outline stops its Storybook and deletes
 `outline-mockups/<outlineId>/`.
 
 **Author run.** `noteAuthorRun` records `running`, `failed`, or `clean`; no
 record reads `clean`. Restore is refused while `running` and leaves the run
-`clean`.
+`clean`. The mockup author's successful return calls `packOutlineTree` before
+the author is idle, then the run reads `clean`. A return that stops without
+a pack reads `failed`.
 
 **Leases.** One loopback Storybook serves an outline. It runs while a lease is
 held and stops on the last release. `acquireViewerLease` is the human session:

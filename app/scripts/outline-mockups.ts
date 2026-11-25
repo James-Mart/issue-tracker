@@ -8,6 +8,9 @@
 import { AUTHOR_RUN_STATES, type AuthorRunState } from "../server/services/outline-mockup-store.js";
 import { captureOutlineDirections } from "../server/services/outline-captures.js";
 import {
+  acceptOutlineDirection,
+  authorWorkspace,
+  dropOutlineDirection,
   listAcceptedDirections,
   noteAuthorRun,
   packOutlineTree,
@@ -29,6 +32,16 @@ restore <outlineId>
        and package.json into the replay tree, then install.
 pack <outlineId>
        Overwrite every accepted direction's bundle from the replay tree.
+workspace <outlineId> <conversationId>
+       Print the directory the mockup author writes. The replay tree when
+       the outline holds bundles, and the planning scratch otherwise.
+drop <outlineId> <directionId>
+       Remove that direction's live bundle and delete its stories from the
+       replay tree. harness.json, package.json, and other directions stay.
+accept <outlineId> <directionId> <issueId>
+       Save that direction's bundle from the replay tree. An accepted
+       direction, or a direction accepted onto the outline, is written on
+       the outline. A new direction is attached to the issue.
 author-run <outlineId> running|failed|clean
        Record the mockup author's run state.
 bind <outlineId> <conversationId>
@@ -81,6 +94,23 @@ async function main(): Promise<void> {
     case "pack": {
       const [outlineId] = expectArgs(args, 1);
       printLines((await packOutlineTree(outlineId!)).directionIds);
+      return;
+    }
+    case "workspace": {
+      const [outlineId, conversationId] = expectArgs(args, 2);
+      printLines([authorWorkspace(outlineId!, conversationId!)]);
+      return;
+    }
+    case "drop": {
+      const [outlineId, directionId] = expectArgs(args, 2);
+      await dropOutlineDirection(outlineId!, directionId!);
+      printLines([directionId!]);
+      return;
+    }
+    case "accept": {
+      const [outlineId, directionId, issueId] = expectArgs(args, 3);
+      await acceptOutlineDirection(outlineId!, directionId!, issueId!);
+      printLines([directionId!]);
       return;
     }
     case "author-run": {
