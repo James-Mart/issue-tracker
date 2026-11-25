@@ -3,6 +3,7 @@ import {
   roleFamilyCaption,
   roleFamilyTitle,
 } from "@/features/pipeline/role-family";
+import { isOutlineChannel } from "@/features/issues/lib/outline-session-role";
 import type {
   ConversationMeta,
   DelegationRecord,
@@ -715,9 +716,9 @@ function projectIdOfIssue(
   return undefined;
 }
 
-/** The Idea or outline a planning or decomposition session is anchored to. */
+/** The Idea or outline a session on an outline channel is anchored to. */
 function ideaOrOutlineAnchorId(meta: ConversationMeta): string | undefined {
-  if (meta.channel === "planning" || meta.channel === "decomposition") {
+  if (meta.channel !== undefined && isOutlineChannel(meta.channel)) {
     return meta.issueId;
   }
   return undefined;

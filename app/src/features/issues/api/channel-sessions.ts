@@ -108,6 +108,7 @@ const OUTLINE_SESSION_ROLE_LABELS: Record<OutlineSessionRole, string> = {
   decomposer: "Decomposer",
   reconcile: "Reconcile",
   check: "Outline check",
+  "mockup-author": "Mockup author",
 };
 
 /** Picker name for an outline session's role. */

@@ -112,7 +112,7 @@ function delegationLineTimestamp(raw: Record<string, unknown>): number | null {
   return null;
 }
 
-function readTranscriptEventAt(
+export function readTranscriptEventAt(
   conversationId: string,
   seq: number,
 ): TranscriptEvent {

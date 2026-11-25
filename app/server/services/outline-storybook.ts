@@ -205,13 +205,35 @@ export async function bindMockupSession(
   }
   await withOutlineMockupsLock(outlineId, async () => {
     if (readBoundSession(outlineId) === conversationId) return;
-    if (liveStorybook(outlineId)) {
-      throw new Error(
-        `outline ${JSON.stringify(outlineId)}'s Storybook is running under another session; release its leases first`,
-      );
-    }
+    refuseRebindWhileLive(outlineId);
     writeBoundSession(outlineId, conversationId);
   });
+}
+
+/**
+ * Bind the session `create` makes to the outline. The refusal while Storybook
+ * runs comes before `create`, so a refused bind creates nothing.
+ */
+export async function bindCreatedMockupSession<T>(
+  outlineId: string,
+  create: () => Promise<T>,
+  sessionOf: (created: T) => string,
+): Promise<T> {
+  readOutlineOrThrow(outlineId);
+  return withOutlineMockupsLock(outlineId, async () => {
+    refuseRebindWhileLive(outlineId);
+    const created = await create();
+    writeBoundSession(outlineId, sessionOf(created));
+    return created;
+  });
+}
+
+function refuseRebindWhileLive(outlineId: string): void {
+  if (liveStorybook(outlineId)) {
+    throw new Error(
+      `outline ${JSON.stringify(outlineId)}'s Storybook is running under another session; release its leases first`,
+    );
+  }
 }
 
 /**

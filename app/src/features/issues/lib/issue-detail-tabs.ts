@@ -1,5 +1,5 @@
 import { AGENT_RUNS_SURFACE_LABEL } from "@/features/agents/lib/agent-runs-surface-label";
-import { channelForIssue, offersDecompositionChannel } from "@server/kind";
+import { channelForIssue, offersOutlineChannels } from "@server/kind";
 import type { ConversationChannel, Issue, IssueKind } from "@server/schemas";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
@@ -27,6 +27,7 @@ const ISSUE_DETAIL_TAB_LABELS = {
   decomposition: "Decomposition",
   implementing: "Implementing",
   review: "Review",
+  mockups: "Mockups",
 } as const;
 
 /** Channel tab for an issue, when the kind offers one. */
@@ -81,7 +82,7 @@ export function tabsForIssueDetail(
       label: ISSUE_DETAIL_TAB_LABELS.overview,
     },
   ];
-  if (offersDecompositionChannel(issue)) {
+  if (offersOutlineChannels(issue)) {
     appendChannelTab(tabs, "planning");
     appendChannelTab(tabs, "decomposition");
   } else {
