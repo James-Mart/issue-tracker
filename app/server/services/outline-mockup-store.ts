@@ -183,6 +183,24 @@ export async function withOutlineMockupsLock<T>(
   }
 }
 
+/**
+ * Hold every outline's mockup lock until `fn` finishes. Locks are nested in
+ * id order so the earlier ones stay acquired; taking them one after another
+ * would release each before the next.
+ */
+export function withOutlineMockupsLocks<T>(
+  outlineIds: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  const ids = [...new Set(outlineIds)].sort();
+  const run = (index: number): Promise<T> => {
+    const id = ids[index];
+    if (id === undefined) return fn();
+    return withOutlineMockupsLock(id, () => run(index + 1));
+  };
+  return run(0);
+}
+
 /** A missing record means no author run has edited the tree since it last matched the bundles. */
 export function readAuthorRunState(outlineId: string): AuthorRunState {
   const path = join(outlineMockupsRoot(outlineId), "author-run.json");

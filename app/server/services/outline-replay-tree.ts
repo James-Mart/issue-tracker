@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -11,9 +11,17 @@ import {
   replaceAttachment,
   replaceOutlineAttachment,
 } from "./attachments.js";
-import { readOutlineOrThrow } from "./issues.js";
+import { readOutlineOrThrow, serialize } from "./issues.js";
 import { mockupScratchDir, sandboxNpmCacheDir } from "./mockup-scratch.js";
-import { liveBundleDirectionId, liveBundleName, requireLiveBundleName } from "./outline-attachments.js";
+import { appendOutlineLock } from "./outline-append-lock.js";
+import {
+  backupBundleName,
+  liveBundleName,
+  liveReplayDirectionIds,
+  requireLiveBundleName,
+} from "./outline-attachments.js";
+import { recordDraftPredatedDirectionIdsOnce } from "./outline-draft-predated.js";
+import { readOutlineDraft } from "./outline-draft-store.js";
 import {
   readAuthorRunState,
   replayTreeDir,
@@ -21,7 +29,7 @@ import {
   writeAuthorRunState,
   type AuthorRunState,
 } from "./outline-mockup-store.js";
-import { packReplayBundle, unpackReplayBundles } from "./replay-bundle.js";
+import { directionIdsInReplayTree, packReplayBundle, unpackReplayBundles } from "./replay-bundle.js";
 import { tailLines } from "./storybook-process.js";
 
 const execFileAsync = promisify(execFile);
@@ -37,16 +45,10 @@ export class MockupCommandFailure extends Error {
   }
 }
 
-function liveDirectionIds(outlineId: string): string[] {
-  return listAttachments(outlineId)
-    .map((attachment) => liveBundleDirectionId(attachment.name))
-    .filter((directionId) => directionId !== null);
-}
-
 /** The outline's live replay bundles, one per accepted direction. */
 export function listAcceptedDirections(outlineId: string): { directionId: string }[] {
   readOutlineOrThrow(outlineId);
-  return liveDirectionIds(outlineId).map((directionId) => ({ directionId }));
+  return liveReplayDirectionIds(outlineId).map((directionId) => ({ directionId }));
 }
 
 function assertReplayBundleWithinLimit(name: string, bytes: Uint8Array): void {
@@ -58,7 +60,7 @@ function assertReplayBundleWithinLimit(name: string, bytes: Uint8Array): void {
 }
 
 function acceptedDirectionIds(outlineId: string): string[] {
-  const directionIds = liveDirectionIds(outlineId);
+  const directionIds = liveReplayDirectionIds(outlineId);
   if (directionIds.length === 0) {
     throw new Error(`outline ${JSON.stringify(outlineId)} has no replay bundles`);
   }
@@ -124,7 +126,7 @@ export function replayTreeServePlan(
 export async function prepareReplayTreeForServe(outlineId: string): Promise<void> {
   const plan = replayTreeServePlan(
     readAuthorRunState(outlineId),
-    liveDirectionIds(outlineId).length,
+    liveReplayDirectionIds(outlineId).length,
     existsSync(join(replayTreeDir(outlineId), "harness.json")),
   );
   if (plan === "restore") {
@@ -151,19 +153,86 @@ export function restoreOutlineTree(outlineId: string): Promise<{ directionIds: s
 }
 
 /**
- * Overwrite every accepted direction's live bundle from the replay tree. All
- * bundles are built and size-checked before the first one is written.
+ * Directions whose live bundles predated this unpublished draft, plus the
+ * live ids already read. `predated` is null when this pack is not covering
+ * an append draft. The set is recorded once, before this pack writes.
+ */
+function predatedDirectionsForPack(outlineId: string): Promise<{
+  predated: Set<string> | null;
+  liveIds: string[];
+}> {
+  return serialize(() => {
+    const liveIds = liveReplayDirectionIds(outlineId);
+    const appending =
+      readOutlineDraft(outlineId) !== undefined || appendOutlineLock(outlineId) !== undefined;
+    if (!appending) return { predated: null, liveIds };
+    return {
+      predated: new Set(recordDraftPredatedDirectionIdsOnce(outlineId, liveIds)),
+      liveIds,
+    };
+  });
+}
+
+function directionIdsToPack(
+  outlineId: string,
+  predated: ReadonlySet<string> | null,
+  liveIds: readonly string[],
+): string[] {
+  if (predated === null) {
+    if (liveIds.length === 0) {
+      throw new Error(`outline ${JSON.stringify(outlineId)} has no replay bundles`);
+    }
+    return [...liveIds];
+  }
+  const ids = new Set([...liveIds, ...directionIdsInReplayTree(replayTreeDir(outlineId))]);
+  if (ids.size === 0) {
+    throw new Error(`outline ${JSON.stringify(outlineId)} has no replay bundles`);
+  }
+  return [...ids].sort();
+}
+
+/** Save the previous bytes of a predated live bundle the first time this draft replaces it. */
+async function keepPredatedBackups(
+  outlineId: string,
+  bundles: readonly { directionId: string }[],
+  predated: ReadonlySet<string>,
+): Promise<void> {
+  for (const bundle of bundles) {
+    if (!predated.has(bundle.directionId)) continue;
+    const backupName = backupBundleName(bundle.directionId);
+    const backupPath = attachmentPath(outlineId, backupName);
+    if (existsSync(backupPath)) continue;
+    const livePath = attachmentPath(outlineId, liveBundleName(bundle.directionId));
+    if (!existsSync(livePath)) {
+      throw new Error(
+        `outline ${JSON.stringify(outlineId)} has no live bundle to back up for direction ${JSON.stringify(bundle.directionId)}`,
+      );
+    }
+    await replaceOutlineAttachment(outlineId, backupName, readFileSync(livePath));
+  }
+}
+
+/**
+ * Overwrite live bundles from the replay tree. All bundles are built and
+ * size-checked before the first one is written. While an append draft is
+ * unpublished, or an append Idea holds the planner lock, every direction in
+ * the tree is written too. The first replacement of a bundle that predated
+ * the draft saves that bundle's previous bytes as its backup; a later pack
+ * leaves the backup unchanged, and a direction the draft added has none.
  */
 export function packOutlineTree(outlineId: string): Promise<{ directionIds: string[] }> {
   readOutlineOrThrow(outlineId);
   return withOutlineMockupsLock(outlineId, async () => {
-    const directionIds = acceptedDirectionIds(outlineId);
+    const { predated, liveIds } = await predatedDirectionsForPack(outlineId);
+    const directionIds = directionIdsToPack(outlineId, predated, liveIds);
     const tree = replayTreeDir(outlineId);
     const bundles = directionIds.map((directionId) => ({
+      directionId,
       name: liveBundleName(directionId),
       bytes: packReplayBundle(tree, directionId),
     }));
     for (const bundle of bundles) assertReplayBundleWithinLimit(bundle.name, bundle.bytes);
+    if (predated) await keepPredatedBackups(outlineId, bundles, predated);
     for (const bundle of bundles) {
       await replaceOutlineAttachment(outlineId, bundle.name, bundle.bytes);
     }
@@ -178,7 +247,7 @@ export function packOutlineTree(outlineId: string): Promise<{ directionIds: stri
  */
 export function authorWorkspace(outlineId: string, conversationId: string): string {
   readOutlineOrThrow(outlineId);
-  if (liveDirectionIds(outlineId).length > 0) return replayTreeDir(outlineId);
+  if (liveReplayDirectionIds(outlineId).length > 0) return replayTreeDir(outlineId);
   return mockupScratchDir(conversationId);
 }
 
@@ -198,7 +267,7 @@ export function acceptOutlineDirection(
   return withOutlineMockupsLock(outlineId, async () => {
     const bytes = packReplayBundle(replayTreeDir(outlineId), directionId);
     assertReplayBundleWithinLimit(name, bytes);
-    if (issueId === outlineId || liveDirectionIds(outlineId).includes(directionId)) {
+    if (issueId === outlineId || liveReplayDirectionIds(outlineId).includes(directionId)) {
       await replaceOutlineAttachment(outlineId, name, bytes);
       return;
     }

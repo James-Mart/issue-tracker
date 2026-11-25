@@ -16,8 +16,9 @@ import {
 } from "./issues.js";
 import { checkIntegrity } from "./integrity.js";
 import { appendTargetOutlineId } from "./append-target.js";
-import { pendingDraftVersionWrite } from "./outline-draft.js";
-import { removeOutlineDraftIfUnchanged } from "./outline-draft-store.js";
+import { pendingDraftVersionWrite, withAppendConcludePublish } from "./outline-draft.js";
+import { finishPublishedDraft } from "./outline-draft-mockups.js";
+import type { OutlineCapture } from "./outline-captures.js";
 import { withIdeaPlanSettings } from "./outline-plan-settings.js";
 import {
   decomposerSessionFromOutline,
@@ -85,35 +86,37 @@ export async function concludeIdea(
   codeGateVerdict: CodeGateVerdict,
   sessions: ConversationMessageSessions,
 ): Promise<ConcludeIdeaResult> {
-  const prepared = await serialize((): PreparedConclude => {
-    const idea = readIdeaOrThrow(ideaId);
-    if (idea.archived) {
-      throw new IssueError("validation", `idea "${idea.id}" is already archived`);
-    }
-    if (isAppendIdea(idea)) {
-      return concludeAppend(idea, outlineId, codeGateVerdict, sessions);
-    }
-    const outline = readOutlineOrThrow(outlineId);
-    if (outline.sourceIdea !== idea.id) {
-      throw new IssueError(
-        "validation",
-        `outline "${outline.id}" is not idea "${idea.id}"'s outline`,
+  const prepared = await withAppendConcludePublish(ideaId, outlineId, (captures) =>
+    serialize((): PreparedConclude => {
+      const idea = readIdeaOrThrow(ideaId);
+      if (idea.archived) {
+        throw new IssueError("validation", `idea "${idea.id}" is already archived`);
+      }
+      if (isAppendIdea(idea)) {
+        return concludeAppend(idea, outlineId, codeGateVerdict, sessions, captures);
+      }
+      const outline = readOutlineOrThrow(outlineId);
+      if (outline.sourceIdea !== idea.id) {
+        throw new IssueError(
+          "validation",
+          `outline "${outline.id}" is not idea "${idea.id}"'s outline`,
+        );
+      }
+      refuseIfChannelBusy(
+        outline.id,
+        outlineChannelForRole("decomposer"),
+        sessions,
       );
-    }
-    refuseIfChannelBusy(
-      outline.id,
-      outlineChannelForRole("decomposer"),
-      sessions,
-    );
 
-    const now = new Date().toISOString();
-    const written = concludeWrite(idea, outline, codeGateVerdict, now);
-    commitChecked([
-      { issue: written.idea },
-      { issue: written.outline },
-    ]);
-    return { concludedAt: now, start: written.start };
-  });
+      const now = new Date().toISOString();
+      const written = concludeWrite(idea, outline, codeGateVerdict, now);
+      commitChecked([
+        { issue: written.idea },
+        { issue: written.outline },
+      ]);
+      return { concludedAt: now, start: written.start };
+    }),
+  );
 
   const { start, ...concluded } = prepared;
   if (!start) return concluded;
@@ -160,6 +163,7 @@ function concludeAppend(
   outlineId: string,
   verdict: CodeGateVerdict,
   sessions: ConversationMessageSessions,
+  captures: readonly OutlineCapture[] | undefined,
 ): PreparedConclude {
   const { issues } = readAll();
   const outline = appendTargetOutline(issues, idea, outlineId);
@@ -185,7 +189,7 @@ function concludeAppend(
     [{ issue: ideaNext }, { ...write, issue: outlineNext }],
     issues,
   );
-  removeOutlineDraftIfUnchanged(outline.id, draft);
+  finishPublishedDraft(outline.id, draft, captures);
   const version = outlineNext.bodyVersion;
   if (!gatesStartSession(idea)) return { concludedAt: now, version };
   return {

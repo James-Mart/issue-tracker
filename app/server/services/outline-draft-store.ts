@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { issuesDir } from "../config.js";
 import { IssueError } from "./errors.js";
 import { replaceFileAtomically } from "./issues-store-lock.js";
+import { removeDraftPredatedDirectionIds } from "./outline-draft-predated.js";
 
 /** Sidecar for an outline's one pending draft. Absent when there is no draft. */
 export function outlineDraftPath(id: string): string {
@@ -28,6 +29,7 @@ export function removeOutlineDraft(id: string): void {
     throw new IssueError("validation", `outline "${id}" has no pending draft`);
   }
   rmSync(path);
+  removeDraftPredatedDirectionIds(id);
 }
 
 /** Drop the draft after publish when it is still the body that was saved. */
@@ -40,4 +42,5 @@ export function discardOutlineDraftIfPresent(id: string): void {
   const path = outlineDraftPath(id);
   if (!existsSync(path)) return;
   rmSync(path);
+  removeDraftPredatedDirectionIds(id);
 }
