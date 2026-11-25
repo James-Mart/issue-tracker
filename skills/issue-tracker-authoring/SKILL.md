@@ -217,47 +217,15 @@ existing value. Rules:
 
 ## Promoted mockup artifacts
 
-When a plan included mockup rounds with chosen directions, promote each
-direction onto the Story that implements its surface **after** `apply`
-(imperative only — not in the YAML doc). From `app/`:
+Outline decompose attaches captures in its post-apply step.
 
-`npm run mockup-promote -- --from-issue <fromIssueId> --direction <directionId> --issue <storyId> --mode copy`
+When the reconcile summary lists a held capture, reconcile follows
+**Held captures** in
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`.
 
-- `<fromIssueId>` — the Idea or work root being migrated, where the round
-  attached the chosen direction
-- `<directionId>` — the direction chosen for that surface during the grill
-- `<storyId>` — the Story that implements that surface
-
-Copy mode moves bytes already attached — the scratch and harness are gone by
-migrate time. `apply` never writes attachment bytes.
-
-Write the tweak wording held with that direction (**Held tweak wording** in
-issue-tracker-plan, or the outline section that names the direction) into
-that Story's description.
-
-In that Story's prose, name the copied files and state what they are:
-
-- each both-viewport capture
-  `mockup-<directionId>-<stateSlug>-<viewport>.png`
-- the archive `mockup-<directionId>.tar.gz`
-
-Write the paragraph in your own words. It must claim: the screenshots record
-the direction chosen for the surface (content and hierarchy, states to
-support, where affordances live, how interactions behave) and an implementor
-honors those decisions while owning the execution; where the Story's prose
-and the attached mockup disagree, the prose wins on the point it names and
-the mockup stays the direction for everything the prose does not change;
-where a mockup diverges from the `designSystem` supporting doc, existing
-repo conventions, or the app's real components, those still win and better spacing, copy, or polish
-is expected rather than deviation; no gate compares an implementation
-against the captures; the archive is reference material for composition,
-layout, class structure, and state enumeration (lift deliberately); prop shapes were invented for rendering
-and wiring to real state is the work; the archive's source may rot as the
-project moves; there is no restore path and the archive must not be described
-as restorable.
-
-Full migrate procedure:
-[issue-tracker-plan migrate reference](../issue-tracker-plan/references/migrate.md#promoted-mockup-artifacts).
+When a procedure names this section, **Read**
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
+and follow **Chosen PNG archives**.
 
 ## Completeness pass
 
@@ -301,10 +269,5 @@ Before done:
   `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the
   flag in the YAML doc.
-- Chosen mockup directions use imperative `mockup-promote` in copy mode after
-  `apply`, and the receiving Story's prose names the promoted files
-  (`mockup-<directionId>-<stateSlug>-<viewport>.png`,
-  `mockup-<directionId>.tar.gz`) and states what the captures carry (direction,
-  not contract) and what the archive is for (see
-  [Promoted mockup artifacts](#promoted-mockup-artifacts)) — not in the
-  YAML doc.
+- Outside decompose and reconcile, chosen mockup directions follow
+  **Promoted mockup artifacts** after `apply` — not in the YAML doc.
