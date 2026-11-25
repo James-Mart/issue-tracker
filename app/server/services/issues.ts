@@ -38,7 +38,12 @@ import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { recordOutlineBody } from "./outline-body.js";
 import { moveReplayBundlesFromIdea } from "./outline-attachments.js";
-import { discardUnpublishedAppendDrafts } from "./append-draft-discard.js";
+import { appendTargetOutlineId } from "./append-target.js";
+import {
+  discardUnpublishedAppendDrafts,
+  unpublishedAppendOutlineIds,
+} from "./append-draft-discard.js";
+import { withOutlineMockupsLocks } from "./outline-mockup-store.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
   assertGuestAllowsOutwardEffect,
@@ -566,13 +571,21 @@ function sameCommitShas(left: readonly string[], right: readonly string[]): bool
   return left.length === right.length && left.every((sha, index) => sha === right[index]);
 }
 
+function outlineIdLockedByAppendArchive(id: string, patch: IssuePatch): string | undefined {
+  if (patch.archived !== true) return undefined;
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "idea" || issue.archived || !issue.appendTo) return undefined;
+  return appendTargetOutlineId(readAll().issues, issue.appendTo);
+}
+
 export function update(
   id: string,
   patch: IssuePatch,
   options?: { refreshPrFacts?: boolean; rootMergeSettings?: RootMergeSettingsMode },
 ): Promise<IssueDetail> {
   const refreshPrFacts = options?.refreshPrFacts !== false;
-  return serialize(() => {
+  const outlineId = outlineIdLockedByAppendArchive(id, patch);
+  const run = () => serialize(() => {
     ensureMigrations();
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
@@ -803,7 +816,10 @@ export function update(
       reviewWorktrees,
       syncStoryId,
     };
-  }).then(async ({ detail, archivedOutline, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
+  });
+  const written =
+    outlineId === undefined ? run() : withOutlineMockupsLocks([outlineId], run);
+  return written.then(async ({ detail, archivedOutline, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
     if (archivedOutline) {
       const { removeOutlineReplayTree } = await import("./outline-storybook.js");
       await removeOutlineReplayTree(id);
@@ -867,6 +883,7 @@ export async function remove(id: string): Promise<DeletionResult> {
 
   const graph = readAll().issues;
   const preview = planDeletion(graph, id);
+  const discardOutlines = unpublishedAppendOutlineIds(graph, preview.deleteIds);
   const kinds = new Map(graph.map((issue) => [issue.id, issue.kind]));
   const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
   const { removeOutlineReplayTree } = await import("./outline-storybook.js");
@@ -884,7 +901,7 @@ export async function remove(id: string): Promise<DeletionResult> {
     }
   }
 
-  return serialize(() => {
+  const run = () => serialize(() => {
     assertStoreWritable();
     if (!existsSync(dirOf(id))) {
       throw new IssueError("not_found", `unknown issue "${id}"`);
@@ -959,4 +976,5 @@ export async function remove(id: string): Promise<DeletionResult> {
       retainedWorktrees,
     };
   });
+  return discardOutlines.length === 0 ? run() : withOutlineMockupsLocks(discardOutlines, run);
 }

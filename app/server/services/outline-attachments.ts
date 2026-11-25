@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync } from "fs";
+import { existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
 import { assertSlug, SLUG_PATTERN as SLUG } from "../slug.js";
 import { attachmentFilenames, attachmentsDir } from "./attachment-paths.js";
@@ -31,6 +31,16 @@ export function requireLiveBundleName(directionId: string): string {
 /** The direction a live bundle name carries, or null for any other name. */
 export function liveBundleDirectionId(name: string): string | null {
   return LIVE_BUNDLE_RE.exec(name)?.[1] ?? null;
+}
+
+/** The direction a backup bundle name carries, or null for any other name. */
+export function backupBundleDirectionId(name: string): string | null {
+  return BACKUP_BUNDLE_RE.exec(name)?.[1] ?? null;
+}
+
+/** A held capture PNG, which is not a direction. */
+export function isHeldCaptureName(name: string): boolean {
+  return HELD_CAPTURE_RE.test(name);
 }
 
 /** Direction ids of the live replay bundles attached to `outlineId`. */
@@ -101,4 +111,23 @@ export function moveNewReplayBundlesFromIdea(ideaId: string, outlineId: string):
     outlineId,
     liveBundleNames(ideaId).filter((name) => !taken.has(name)),
   );
+}
+
+/**
+ * Move one live bundle from `fromId` onto `toId` at the same basename.
+ * The caller holds the store lock.
+ */
+export function moveLiveBundle(fromId: string, toId: string, directionId: string): void {
+  const name = requireLiveBundleName(directionId);
+  const from = join(attachmentsDir(fromId), name);
+  if (!existsSync(from)) {
+    throw new Error(
+      `issue ${JSON.stringify(fromId)} has no live bundle for direction ${JSON.stringify(directionId)}`,
+    );
+  }
+  const destDir = attachmentsDir(toId);
+  if (existsSync(join(destDir, name))) {
+    throw new Error(`issue ${JSON.stringify(toId)} already has live bundle ${name}`);
+  }
+  moveNamedReplayBundles(fromId, toId, [name]);
 }

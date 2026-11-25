@@ -2286,6 +2286,18 @@ the draft. While the draft is unpublished those moved bundles are accepted
 directions, so the Mockups tab lists them with the directions that were
 already there.
 
+Discarding that draft removes each direction that was not in the predated
+set from the outline and from the replay tree, writes every backup back onto
+its live bundle, deletes the backup, and attaches the removed bundles to the
+append Idea. Publishing the draft keeps the rewritten live bundles, deletes
+the backups, restores the replay tree from those packed bundles, and captures
+phone and desktop PNGs of every packed direction (`captureOutlineDirections`
+with `fromPack`). The PNGs are stored on the outline as
+`mockup-<directionId>-<stateSlug>-<viewport>.png` and are not directions.
+The restore drops a failed edit. Draft update, an outline-check `yes`, and
+append conclude publish. Draft discard, and archiving or deleting the append
+Idea without conclude, discard.
+
 **Replay tree.** One per outline at `outline-mockups/<outlineId>/tree/`, a
 peer of `issues/` (never in the store). It is laid out like the planning
 scratch: the shared `harness.json` and `package.json` at its root and one
@@ -2348,6 +2360,8 @@ named as a held capture under `outline-mockups/<outlineId>/captures/`.
 `fromPack` restores the packed bundles first, dropping a failed edit. Without
 it, a `failed` run is refused, the tree is left alone, and no PNG is written.
 A run replaces the previous run's PNGs only when every capture succeeds.
+Publishing an append draft uses `fromPack` and then stores each returned PNG
+on the outline at that held-capture basename.
 
 ## Issue change
 

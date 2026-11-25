@@ -17,6 +17,14 @@ function appendIdeaIds(outlineId: string, issues: readonly Issue[]): string[] {
   return ids;
 }
 
+/** Unarchived Ideas in `issues` whose append target is this outline. */
+export function unarchivedAppendIdeaIds(
+  outlineId: string,
+  issues: readonly Issue[],
+): string[] {
+  return appendIdeaIds(outlineId, issues);
+}
+
 /**
  * Saving an append draft moves each new live bundle from the append Idea
  * onto the outline. Directions already live are the ones that predated the

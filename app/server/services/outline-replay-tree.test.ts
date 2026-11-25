@@ -9,44 +9,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { writeReplayScratch, writeStoredIssue } from "./outline-replay-fixtures.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
 let root: string;
 let issuesDir: string;
 
 function writeIssue(id: string, body: Record<string, unknown>): void {
-  mkdirSync(join(issuesDir, id), { recursive: true });
-  writeFileSync(join(issuesDir, id, "issue.json"), JSON.stringify({ id, ...body }));
+  writeStoredIssue(issuesDir, id, body);
 }
 
-/** A planning-scratch-shaped tree with one folder per direction. */
 function writeScratch(scratch: string, directions: string[]): void {
-  mkdirSync(scratch, { recursive: true });
-  for (const directionId of directions) {
-    mkdirSync(join(scratch, directionId, "parts"), { recursive: true });
-    writeFileSync(
-      join(scratch, directionId, `${directionId}.stories.tsx`),
-      `export default { title: "${directionId}/Screen" };\nexport const Default = {};\n`,
-    );
-    writeFileSync(join(scratch, directionId, "parts", "fixture.ts"), `export const id = "${directionId}";\n`);
-  }
-  const targetSrc = join(root, "target-src");
-  mkdirSync(targetSrc, { recursive: true });
-  writeFileSync(join(scratch, "vite.mockup.ts"), "export default {};\n");
-  writeFileSync(
-    join(scratch, "harness.json"),
-    JSON.stringify({
-      targetRoot: root,
-      cssEntries: [],
-      aliases: { "@scratch": targetSrc },
-      storiesGlobs: directions.map((directionId) => join(scratch, directionId, "**/*.stories.tsx")),
-      viteConfigPath: join(scratch, "vite.mockup.ts"),
-    }),
-  );
-  writeFileSync(
-    join(scratch, "package.json"),
-    JSON.stringify({ name: "mockup-sandbox", private: true, dependencies: {} }),
-  );
+  writeReplayScratch(root, scratch, directions);
 }
 
 beforeEach(() => {
