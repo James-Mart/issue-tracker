@@ -1,4 +1,3 @@
-import { mockupStorybookBase } from "./mockup-stack.js";
 import {
   listDirectionIds,
   readMockupStackState,
@@ -8,6 +7,7 @@ import {
   chooseLiveStoryForDirection,
   listStoryStates,
 } from "./mockup-story-states.js";
+import { mockupStorybookBase } from "./storybook-process.js";
 
 export interface LiveStorybookLink {
   directionId: string;

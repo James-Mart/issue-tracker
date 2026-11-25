@@ -1,17 +1,11 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "fs";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 import mime from "mime";
-import { issuesDir } from "../config.js";
+import type { Issue } from "../schemas.js";
+import { attachmentFilenames, attachmentsDir } from "./attachment-paths.js";
 import { IssueError } from "./errors.js";
 import { requireKindCapability, serialize } from "./issues.js";
+import { assertOutlineAttachmentName } from "./outline-attachments.js";
 import { assertStoreWritable } from "./store-read-only.js";
 import { firstFreeSuffixedName } from "./slug.js";
 
@@ -29,14 +23,7 @@ export interface AttachmentBytes {
   bytes: Buffer;
 }
 
-function attachmentsDir(id: string): string {
-  return join(issuesDir, id, "attachments");
-}
-
-/** Absolute on-disk path for `issues/<id>/attachments/<name>`. */
-export function attachmentPath(id: string, name: string): string {
-  return join(attachmentsDir(id), name);
-}
+export { attachmentPath } from "./attachment-paths.js";
 
 function mimeOf(name: string): string {
   return mime.lookup(name) || "application/octet-stream";
@@ -56,8 +43,13 @@ export function assertSafeAttachmentName(name: string): void {
   }
 }
 
-function requireAttachable(id: string): void {
-  requireKindCapability(id, "attachments");
+function requireAttachable(id: string): Issue {
+  return requireKindCapability(id, "attachments");
+}
+
+/** Outlines accept only their allow-listed names; every other attachable kind accepts any safe name. */
+function assertWritableAttachmentName(issue: Issue, name: string): void {
+  if (issue.kind === "outline") assertOutlineAttachmentName(name);
 }
 
 function toAttachment(dir: string, name: string): Attachment {
@@ -76,13 +68,6 @@ function splitBasename(name: string): { stem: string; ext: string } {
   return { stem: name.slice(0, lastDot), ext: name.slice(lastDot) };
 }
 
-function attachmentFilenames(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((name) => statSync(join(dir, name)).isFile())
-    .sort();
-}
-
 /** Collision-free basename among `taken` (stem + last extension). */
 export function uniqueAttachmentBasename(
   requested: string,
@@ -95,12 +80,12 @@ export function uniqueAttachmentBasename(
 function withAttachmentOp<T>(
   id: string,
   name: string,
-  fn: (dir: string) => T,
+  fn: (dir: string, issue: Issue) => T,
 ): Promise<T> {
   return serialize(() => {
-    requireAttachable(id);
+    const issue = requireAttachable(id);
     assertSafeAttachmentName(name);
-    return fn(attachmentsDir(id));
+    return fn(attachmentsDir(id), issue);
   });
 }
 
@@ -164,18 +149,48 @@ export function getAttachment(
   });
 }
 
-/** Store an attachment under a unique basename; creates the directory when needed. */
+/**
+ * Store an attachment under a unique basename; creates the directory when
+ * needed. An outline refuses a taken name instead, since a suffixed bundle
+ * name would read as another direction.
+ */
 export function putAttachment(
   id: string,
   name: string,
   bytes: Uint8Array,
 ): Promise<Attachment> {
-  return withAttachmentOp(id, name, (dir) => {
+  return withAttachmentOp(id, name, (dir, issue) => {
     assertWritableAttachmentBytes(bytes);
+    assertWritableAttachmentName(issue, name);
     mkdirSync(dir, { recursive: true });
-    const stored = uniqueAttachmentBasename(name, attachmentFilenames(dir));
+    const taken = attachmentFilenames(dir);
+    if (issue.kind === "outline" && taken.includes(name)) {
+      throw new IssueError(
+        "conflict",
+        `attachment "${name}" already exists on outline "${id}"`,
+      );
+    }
+    const stored = uniqueAttachmentBasename(name, taken);
     writeFileSync(join(dir, stored), bytes);
     return toAttachment(dir, stored);
+  });
+}
+
+/** Create or overwrite an outline attachment at the exact basename. */
+export function replaceOutlineAttachment(
+  outlineId: string,
+  name: string,
+  bytes: Uint8Array,
+): Promise<Attachment> {
+  return withAttachmentOp(outlineId, name, (dir, issue) => {
+    if (issue.kind !== "outline") {
+      throw new IssueError("validation", `issue "${outlineId}" is not an outline`);
+    }
+    assertWritableAttachmentBytes(bytes);
+    assertOutlineAttachmentName(name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, name), bytes);
+    return toAttachment(dir, name);
   });
 }
 
@@ -185,8 +200,9 @@ export function replaceAttachment(
   name: string,
   bytes: Uint8Array,
 ): Promise<Attachment> {
-  return withAttachmentOp(id, name, (dir) => {
+  return withAttachmentOp(id, name, (dir, issue) => {
     assertWritableAttachmentBytes(bytes);
+    assertWritableAttachmentName(issue, name);
     const path = requireExistingAttachmentFile(dir, id, name);
     writeFileSync(path, bytes);
     return toAttachment(dir, name);

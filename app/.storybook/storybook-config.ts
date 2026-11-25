@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Plugin } from "vite";
 import type { HarnessConfig } from "./harness-config.js";
-import { sandboxNodeModulesDir } from "./harness-paths.js";
+import { sandboxNodeModulesDir, storiesGlobRoot } from "./harness-paths.js";
 import { resolveTargetPostcssConfig } from "./harness-postcss.js";
 import { buildReactAliases, resolveReactRoot } from "./harness-react.js";
 import type { HarnessResolveRoots } from "./harness-importer.js";
@@ -84,16 +84,6 @@ export function mockupServerChannelShim(base: string): string {
   };
 })();
 </script>`;
-}
-
-/** Directory prefix of a glob pattern (path segment before the first wildcard). */
-export function storiesGlobRoot(glob: string): string {
-  const wildcardIndex = glob.search(/[*?[{]/);
-  if (wildcardIndex === -1) {
-    return path.dirname(glob);
-  }
-  const prefix = glob.slice(0, wildcardIndex).replace(/\/+$/, "");
-  return prefix || path.sep;
 }
 
 export function collectFsAllowPaths(

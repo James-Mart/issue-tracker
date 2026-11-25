@@ -40,7 +40,7 @@ function manifestSearchDir(from: string): string {
   return info.isDirectory() ? resolved : dirname(resolved);
 }
 
-function readManifest(manifestPath: string): Record<string, unknown> {
+export function readManifest(manifestPath: string): Record<string, unknown> {
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -129,7 +129,8 @@ function nearestDeclaredRanges(
   });
 }
 
-function dependencyMap(
+/** A manifest's `dependencies`, refused when any range is not a string. */
+export function dependencyMap(
   manifestPath: string,
   manifest: Record<string, unknown>,
 ): Record<string, string> {

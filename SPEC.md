@@ -112,7 +112,8 @@ Every issue has a `kind`, one of:
   1, and keeps every prior body. The latest body is `description.md`; snapshot
   `n` is `versions/<n>.md`. Stored `bodyVersion` is that latest integer.
   `issue outline get <id> version` prints it. `archived` defaults `false`.
-  No children, assignee, needs-attention, comments, or attachments. Sibling `order` is its
+  No children, assignee, needs-attention, or comments. Attachments are
+  limited to the [outline mockup](#outline-mockups) names. Sibling `order` is its
   own per-Project group, separate from the board, and `issue tree` does not
   render outlines.
 
@@ -633,9 +634,12 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `POST /api/stories/:id/human-done` with body `{ note?: string }` calls the
   same store operation and returns the comment.
 - **`add`** (outline) — `issue outline add --in <projectId> --title <title>
-  --description-file <path|->`. Creates an outline `partOf` that Project. The
-  file is body version 1 (`-` reads stdin). Prints the new id. Refuses a
-  parent that is not a Project.
+  --description-file <path|-> [--source-idea <ideaId>]`. Creates an outline
+  `partOf` that Project. The file is body version 1 (`-` reads stdin). With
+  `--source-idea`, the outline stores that `sourceIdea`, and every live replay
+  bundle on the Idea moves onto the outline (see
+  [Outline mockups](#outline-mockups)). Prints the new id. Refuses a parent
+  that is not a Project.
 - **`view`** (outline) — `issue outline view <id> [--version <n>]`. Prints
   metadata, including `version: <n>`, and a body. Without `--version`, `<n>`
   is the latest and the body is `description.md`. With `--version`, the body
@@ -1518,8 +1522,9 @@ Outline — the common-to-every-kind fields plus:
 | `concludedAt` | ISO string? | set by conclude; system-written; `issue outline get <id> concludedAt` prints it; unset until then |
 | `pendingAppends` | array? | system-written; one `{ targetStory, sourceIdea, executionGate, codeApprovalRequired }` entry per append Idea that concluded onto this outline and reconcile has not yet applied, oldest first; absent when none (see [Pending appends](#pending-appends)) |
 
-No assignee, needs-attention, stored status, worktree, comments, or
-attachments. Not a board child: `issue tree` does not render it; `issue list outline`
+No assignee, needs-attention, stored status, worktree, or comments.
+Attachments are limited to the [outline mockup](#outline-mockups) names. Not a
+board child: `issue tree` does not render it; `issue list outline`
 does. Deleting an outline removes its `versions/` snapshots with the directory.
 Derived **`readyToDecompose`** and **`reconciliationNeeded`** on get / list (see [Derived state](#derived-state) and [Conclude](#conclude)).
 
@@ -2197,7 +2202,10 @@ get/put/remove share the same `serialize` chain as `issues.ts` writes;
 `listAttachments` is unsynchronized.
 
 **Kinds.** Attach / list / download / detach on every kind with the attachments
-capability. Unknown ids are refused.
+capability. Unknown ids are refused. An Outline accepts only the
+[outline mockup](#outline-mockups) names and refuses any other name. Issue
+detail shows the attachments panel on every attachable kind except the
+Outline.
 
 **On-disk.** `issues/<id>/attachments/<basename>` — no manifest; metadata is
 filename + size + mtime, with MIME inferred from the extension
@@ -2210,7 +2218,10 @@ bytes, and any name that is not a plain basename. No extension allowlist.
 **Unique names.** `putAttachment` stores under a collision-free basename: the
 requested basename when free, otherwise `{stem}-{n}{ext}` with the smallest
 `n ≥ 2` not already taken (stem + last extension). `putAttachment` never
-overwrites an existing file.
+overwrites an existing file. On an Outline, a taken name is refused with
+`409` `conflict` instead, because a suffixed bundle name would read as another
+direction. `replaceOutlineAttachment` creates or overwrites an outline
+attachment at the exact basename.
 
 **Replace.** `replaceAttachment` overwrites bytes at the exact requested
 basename and refuses when that file is missing. `issue project attach
@@ -2239,6 +2250,73 @@ integrity check that the linked file exists.
 **`apply`.** Never creates, updates, or deletes attachment bytes (same seam as
 `comments.jsonl`). Rewriting `description.md` via apply leaves attachments
 untouched; only deleting the issue (or apply-pruning it) removes them.
+
+## Outline mockups
+
+Accepted mockup directions stay runnable on their outline as replay bundles.
+Services: `outline-attachments.ts` (names), `replay-bundle.ts` (bundle
+layout), `outline-replay-tree.ts` (restore, pack, author run),
+`outline-storybook.ts` (leases, binding, routing), and
+`outline-captures.ts`. Agents drive them with `npm run outline-mockups --`
+from `app/`; `--help` lists the commands.
+
+**Names.** An Outline holds three attachment shapes: a live replay bundle
+`mockup-<directionId>.tar.gz`, a hidden backup
+`mockup-<directionId>.backup.tar.gz`, and a held capture
+`mockup-<directionId>-<stateSlug>-<viewport>.png` (`viewport` is `phone` or
+`desktop`). `<directionId>` is a slug. The accepted directions are the live
+bundles; backups and captures are not directions.
+
+**Bundle.** A gzip tar of one direction. Its root holds `harness.json`,
+`package.json`, the Vite config file when `harness.json` names one (at its path
+under the tree root), and that direction's story and support files. It has no
+`node_modules` and no dot entries. The 25 MiB attachment limit applies.
+
+**First save.** Creating an outline with a `sourceIdea` moves every live
+bundle on that Idea onto the outline at the same name and removes it from the
+Idea. Captures and other attachments stay on the Idea.
+
+**Replay tree.** One per outline at `outline-mockups/<outlineId>/tree/`, a
+peer of `issues/` (never in the store). It is laid out like the planning
+scratch: the shared `harness.json` and `package.json` at its root and one
+folder per direction. `restoreOutlineTree` replaces each accepted direction's
+folder and rewrites the shared pair from the bundles. Paths under the tree a
+bundle was packed from, read off that direction's `storiesGlobs` entry, move
+under this tree. Stories globs keep every direction folder present in the
+tree, and dependencies are the union. Other folders and installed packages
+stay. Restore then runs `npm install --ignore-scripts --cache <tree>/.npm` in
+the tree. `packOutlineTree` overwrites every accepted direction's live bundle
+from the tree, all built and size-checked before the first write. Archiving or
+deleting the outline stops its Storybook and deletes
+`outline-mockups/<outlineId>/`.
+
+**Author run.** `noteAuthorRun` records `running`, `failed`, or `clean`; no
+record reads `clean`. Restore is refused while `running` and leaves the run
+`clean`.
+
+**Leases.** One loopback Storybook serves an outline. It runs while a lease is
+held and stops on the last release. `acquireViewerLease` is the human session:
+one per outline, held until released, and refused when no session is bound.
+It returns the public `/mockups/<conversationId>/`. `acquireCaptureLease` is an
+agent screenshot: it ends with its process and returns the loopback URL. A
+start restores a `clean` tree that has bundles. A `running` or `failed` run
+keeps the tree as it is, and only installs. A failed install or start leaves
+the bundles and tree as they are and throws `MockupCommandFailure` with the
+command and its output tail.
+
+**Routing.** `bindMockupSession(outlineId, conversationId)` binds one
+conversation to the outline; another binding is refused while Storybook is
+live. `/mockups/<conversationId>/` for a bound conversation proxies to the
+outline's Storybook, or shows the stack-down page while it is stopped. An
+unbound conversation keeps its planning scratch stack.
+
+**Captures.** `captureOutlineDirections(outlineId, { fromPack })` captures
+phone and desktop PNGs of every accepted direction under a capture lease and
+returns `{ directionId, stateSlug, viewport, pngPath }[]`, each `pngPath`
+named as a held capture under `outline-mockups/<outlineId>/captures/`.
+`fromPack` restores the packed bundles first, dropping a failed edit. Without
+it, a `failed` run is refused, the tree is left alone, and no PNG is written.
+A run replaces the previous run's PNGs only when every capture succeeds.
 
 ## Issue change
 

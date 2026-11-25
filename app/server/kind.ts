@@ -20,6 +20,8 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: true,
+    /** Detail UI offers the attachments panel and upload (distinct from storing attachments). */
+    detailAttachments: true,
     comments: true,
     // CLI `comment` and detail comments UI are narrower than comments storage
     // (project has comments storage, not comment).
@@ -34,6 +36,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: true,
+    detailAttachments: true,
     comments: true,
     comment: true,
     worktree: false,
@@ -45,6 +48,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: true,
     attachments: true,
+    detailAttachments: true,
     comments: true,
     comment: true,
     worktree: false,
@@ -56,6 +60,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: true,
     attachments: true,
+    detailAttachments: true,
     comments: true,
     comment: true,
     worktree: true,
@@ -67,6 +72,7 @@ export const KIND_CAPABILITIES = {
     assignee: true,
     attention: true,
     attachments: true,
+    detailAttachments: true,
     comments: true,
     comment: true,
     worktree: false,
@@ -78,6 +84,7 @@ export const KIND_CAPABILITIES = {
     assignee: false,
     attention: false,
     attachments: false,
+    detailAttachments: false,
     comments: true,
     comment: true,
     worktree: true,
@@ -88,7 +95,9 @@ export const KIND_CAPABILITIES = {
     archived: true,
     assignee: false,
     attention: false,
-    attachments: false,
+    // Only replay bundles, their backups, and held captures; see `outline-attachments.ts`.
+    attachments: true,
+    detailAttachments: false,
     comments: false,
     comment: false,
     worktree: false,
@@ -102,6 +111,7 @@ export const KIND_CAPABILITIES = {
     assignee: boolean;
     attention: boolean;
     attachments: boolean;
+    detailAttachments: boolean;
     comments: boolean;
     comment: boolean;
     worktree: boolean;

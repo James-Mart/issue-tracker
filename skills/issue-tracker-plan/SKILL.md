@@ -278,9 +278,8 @@ When the grill is ready (no extra pre-outline confirm):
    accepted a direction names that direction id and states its held tweak
    wording.
 2. **Save it.** The first save creates the outline under the Project:
-   `issue outline add --in <projectId> --title <title> --description-file <path>`
-   prints `<outlineId>`; then run
-   `issue outline set <outlineId> sourceIdea <ideaId>`. Each later save is
+   `issue outline add --in <projectId> --title <title> --description-file <path> --source-idea <ideaId>`
+   prints `<outlineId>`. Each later save is
    `issue outline set <outlineId> description --file <path>`. Every save is
    the outline's next version.
 3. **Judge the code-gate verdict** against the gate rubric's

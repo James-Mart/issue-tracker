@@ -30,6 +30,16 @@ export function sandboxNodeModulesDir(scratchRoot: string): string {
   return path.join(scratchRoot, "node_modules");
 }
 
+/** Directory prefix of a glob pattern (path segment before the first wildcard). */
+export function storiesGlobRoot(glob: string): string {
+  const wildcardIndex = glob.search(/[*?[{]/);
+  if (wildcardIndex === -1) {
+    return path.dirname(glob);
+  }
+  const prefix = glob.slice(0, wildcardIndex).replace(/\/+$/, "");
+  return prefix || path.sep;
+}
+
 /**
  * Walk directories from `start` upward. A start outside the plugin app stops
  * before that app, so the app's tsconfig and PostCSS config are not the target's.
