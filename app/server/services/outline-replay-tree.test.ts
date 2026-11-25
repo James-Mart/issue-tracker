@@ -154,3 +154,63 @@ it("drops one direction's bundle and stories and leaves the shared tree and the 
   );
   expect(authorWorkspace(outline.id, "conv")).toBe(tree);
 });
+
+it("keeps an unpublished draft's overwritten bundles reversible", async () => {
+  const { getAttachment, listAttachments, putAttachment } = await import("./attachments.js");
+  const { create } = await import("./issues.js");
+  const { setOutlineDraft } = await import("./outline-draft.js");
+  const { packOutlineTree } = await import("./outline-replay-tree.js");
+  const { replayTreeDir } = await import("./outline-mockup-store.js");
+  const outline = await create({
+    kind: "outline",
+    title: "Spec",
+    partOf: "p",
+    description: "# Spec\n",
+  });
+  writeIssue("story", {
+    kind: "story",
+    title: "Story",
+    partOf: "p",
+    sourceOutline: { outline: outline.id, version: 1 },
+    order: 2,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  writeIssue("append", {
+    kind: "idea",
+    title: "Append",
+    partOf: "p",
+    appendTo: "story",
+    archived: false,
+    order: 3,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+  const tree = replayTreeDir(outline.id);
+  writeScratch(tree, ["a", "c"]);
+  await putAttachment(outline.id, "mockup-a.tar.gz", Buffer.from("old-a"));
+  await putAttachment("append", "mockup-c.tar.gz", Buffer.from("idea-c"));
+
+  await setOutlineDraft(outline.id, "draft\n");
+
+  const bytes = async (id: string, name: string) => (await getAttachment(id, name)).bytes;
+  expect(await bytes(outline.id, "mockup-c.tar.gz")).toEqual(Buffer.from("idea-c"));
+  expect(listAttachments("append").map((attachment) => attachment.name)).toEqual([]);
+
+  expect(await packOutlineTree(outline.id)).toEqual({ directionIds: ["a", "c"] });
+  expect(await bytes(outline.id, "mockup-a.backup.tar.gz")).toEqual(Buffer.from("old-a"));
+  expect(listAttachments(outline.id).map((attachment) => attachment.name)).not.toContain(
+    "mockup-c.backup.tar.gz",
+  );
+
+  writeFileSync(
+    join(tree, "a", "a.stories.tsx"),
+    `export default { title: "a/Screen" };\nexport const Changed = {};\n`,
+  );
+  await packOutlineTree(outline.id);
+
+  expect(await bytes(outline.id, "mockup-a.backup.tar.gz")).toEqual(Buffer.from("old-a"));
+  expect(listAttachments(outline.id).map((attachment) => attachment.name)).not.toContain(
+    "mockup-c.backup.tar.gz",
+  );
+});

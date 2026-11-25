@@ -32,6 +32,9 @@ restore <outlineId>
        and package.json into the replay tree, then install.
 pack <outlineId>
        Overwrite every accepted direction's bundle from the replay tree.
+       With an unpublished draft or an append planner lock, also pack every
+       direction in the tree, and save a one-time backup of each bundle that
+       predated the draft.
 workspace <outlineId> <conversationId>
        Print the directory the mockup author writes. The replay tree when
        the outline holds bundles, and the planning scratch otherwise.

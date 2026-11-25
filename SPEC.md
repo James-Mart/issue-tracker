@@ -2278,6 +2278,14 @@ under the tree root), and that direction's story and support files. It has no
 bundle on that Idea onto the outline at the same name and removes it from the
 Idea. Captures and other attachments stay on the Idea.
 
+**Append draft.** `setOutlineDraft` on an outline that an unarchived Idea
+appends to moves each live bundle on that Idea whose basename is not already
+on the outline, and removes the moved file from the Idea. Directions already
+on the outline are recorded once, before that move, as the ones that predated
+the draft. While the draft is unpublished those moved bundles are accepted
+directions, so the Mockups tab lists them with the directions that were
+already there.
+
 **Replay tree.** One per outline at `outline-mockups/<outlineId>/tree/`, a
 peer of `issues/` (never in the store). It is laid out like the planning
 scratch: the shared `harness.json` and `package.json` at its root and one
@@ -2288,7 +2296,14 @@ under this tree. Stories globs keep every direction folder present in the
 tree, and dependencies are the union. Other folders and installed packages
 stay. Restore then runs `npm install --ignore-scripts --cache <tree>/.npm` in
 the tree. `packOutlineTree` overwrites every accepted direction's live bundle
-from the tree, all built and size-checked before the first write.
+from the tree, all built and size-checked before the first write. While a
+pending draft exists, or an append Idea holds the outline's planner lock,
+that pack also writes every direction folder the tree's harness lists. The
+first time it replaces a live bundle that predated the draft, it saves the
+previous bytes as `mockup-<directionId>.backup.tar.gz` and later packs in
+that draft leave the backup unchanged. A direction the draft added has no
+backup. A pack that then stops leaves the rewritten bundles and the backups
+on the outline.
 `authorWorkspace(outlineId, conversationId)` is that replay tree when the
 outline holds live bundles, including a direction accepted after the first
 save, and `conversationId`'s planning scratch otherwise.

@@ -17,6 +17,7 @@ import {
   type HarnessConfig,
 } from "../../.storybook/harness-config.js";
 import { isInsideDir, storiesGlobRoot } from "../../.storybook/harness-paths.js";
+import { isSlugSafe } from "../slug.js";
 import { dependencyMap, readManifest } from "./mockup-sandbox.js";
 
 /**
@@ -114,6 +115,21 @@ function assertPackedHarnessPaths(
       );
     }
   }
+}
+
+/** Direction folders the tree's harness lists that exist directly under the tree root. */
+export function directionIdsInReplayTree(treeRoot: string): string[] {
+  const harnessPath = join(treeRoot, HARNESS_FILE);
+  if (!existsSync(harnessPath)) return [];
+  const ids = new Set<string>();
+  for (const glob of readHarness(harnessPath).storiesGlobs) {
+    const dir = storiesGlobRoot(glob);
+    const directionId = basename(dir);
+    if (!isSlugSafe(directionId) || dir !== join(treeRoot, directionId)) continue;
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+    ids.add(directionId);
+  }
+  return [...ids].sort();
 }
 
 /** Bytes of `directionId`'s replay bundle packed from `treeRoot`. */

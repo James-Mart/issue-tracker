@@ -16,6 +16,7 @@ import {
   serialize,
   type IssueWrite,
 } from "./issues.js";
+import { adoptAppendDraftBundles } from "./outline-draft-bundles.js";
 import {
   readOutlineDraft,
   removeOutlineDraft,
@@ -81,6 +82,7 @@ export async function setOutlineDraft(id: string, body: string): Promise<void> {
   await serialize(() => {
     readOutlineOrThrow(id);
     writeOutlineDraft(id, body);
+    adoptAppendDraftBundles(id);
   });
 }
 

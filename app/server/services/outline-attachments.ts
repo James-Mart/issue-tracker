@@ -18,6 +18,10 @@ export function liveBundleName(directionId: string): string {
   return `mockup-${directionId}.tar.gz`;
 }
 
+export function backupBundleName(directionId: string): string {
+  return `mockup-${directionId}.backup.tar.gz`;
+}
+
 /** The live-bundle basename for a direction id, or a refusal when it is not a slug. */
 export function requireLiveBundleName(directionId: string): string {
   assertSlug(directionId, "direction id");
@@ -27,6 +31,14 @@ export function requireLiveBundleName(directionId: string): string {
 /** The direction a live bundle name carries, or null for any other name. */
 export function liveBundleDirectionId(name: string): string | null {
   return LIVE_BUNDLE_RE.exec(name)?.[1] ?? null;
+}
+
+/** Direction ids of the live replay bundles attached to `outlineId`. */
+export function liveReplayDirectionIds(outlineId: string): string[] {
+  return attachmentFilenames(attachmentsDir(outlineId)).flatMap((name) => {
+    const directionId = liveBundleDirectionId(name);
+    return directionId === null ? [] : [directionId];
+  });
 }
 
 export function isOutlineAttachmentName(name: string): boolean {
@@ -47,17 +59,46 @@ export function assertOutlineAttachmentName(name: string): void {
   );
 }
 
+function moveNamedReplayBundles(
+  ideaId: string,
+  outlineId: string,
+  names: readonly string[],
+): string[] {
+  if (names.length === 0) return [];
+  const outlineDir = attachmentsDir(outlineId);
+  mkdirSync(outlineDir, { recursive: true });
+  const ideaDir = attachmentsDir(ideaId);
+  for (const name of names) {
+    renameSync(join(ideaDir, name), join(outlineDir, name));
+  }
+  return [...names];
+}
+
+function liveBundleNames(ideaId: string): string[] {
+  return attachmentFilenames(attachmentsDir(ideaId)).filter(
+    (name) => liveBundleDirectionId(name) !== null,
+  );
+}
+
 /**
  * Move every live replay bundle from the Idea onto the outline at the same
  * basename; captures and anything else stay on the Idea. The caller holds
  * the store lock and has just created the outline, so no name is taken.
  */
 export function moveReplayBundlesFromIdea(ideaId: string, outlineId: string): string[] {
-  const moved = attachmentFilenames(attachmentsDir(ideaId)).filter((name) => liveBundleDirectionId(name) !== null);
-  if (moved.length === 0) return moved;
-  mkdirSync(attachmentsDir(outlineId), { recursive: true });
-  for (const name of moved) {
-    renameSync(join(attachmentsDir(ideaId), name), join(attachmentsDir(outlineId), name));
-  }
-  return moved;
+  return moveNamedReplayBundles(ideaId, outlineId, liveBundleNames(ideaId));
+}
+
+/**
+ * Move live bundles the outline does not already hold, at the same basename.
+ * A name already on the outline is left on both sides, so a direction that
+ * predated the draft is not replaced by the Idea's copy.
+ */
+export function moveNewReplayBundlesFromIdea(ideaId: string, outlineId: string): string[] {
+  const taken = new Set(attachmentFilenames(attachmentsDir(outlineId)));
+  return moveNamedReplayBundles(
+    ideaId,
+    outlineId,
+    liveBundleNames(ideaId).filter((name) => !taken.has(name)),
+  );
 }
