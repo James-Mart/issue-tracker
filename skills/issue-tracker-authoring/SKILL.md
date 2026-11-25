@@ -219,7 +219,11 @@ existing value. Rules:
 
 Outline decompose attaches captures in its post-apply step.
 
-Outside decompose, **Read**
+When the reconcile summary lists a held capture, reconcile follows
+**Held captures** in
+`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`.
+
+When a procedure names this section, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
 and follow **Chosen PNG archives**.
 
@@ -265,5 +269,5 @@ Before done:
   `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the
   flag in the YAML doc.
-- Outside decompose, chosen mockup directions follow
+- Outside decompose and reconcile, chosen mockup directions follow
   **Promoted mockup artifacts** after `apply` — not in the YAML doc.

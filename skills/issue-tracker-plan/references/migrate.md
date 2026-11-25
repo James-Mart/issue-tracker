@@ -12,6 +12,30 @@ Follow **Fresh captures**.
 When that prints no direction id, the outline has no accepted directions.
 Follow **Chosen PNG archives**.
 
+#### Direction and Story
+
+A capture basename is
+`mockup-<directionId>-<stateSlug>-<viewport>.png` (`viewport` is
+`phone` or `desktop`). The Story is the one whose surface that
+direction mocks: the Story written for the outline section that names
+that direction id. The basename belongs to the longest such direction
+id for which it starts with `mockup-<directionId>-` and ends with
+`-phone.png` or `-desktop.png`.
+
+#### Capture prose
+
+Once per Story, after that Story's captures are attached.
+
+1. Write the tweak wording into that Story's description, as **Chosen
+   PNG archives** step 2 does. The outline section that names the
+   direction states that wording.
+
+2. In that Story's prose, name each capture attached to that Story.
+   Write the paragraph in your own words — not a stock block. It must
+   make the **Captures** claims in **Chosen PNG archives**. The **Archive**
+   claims are for the archive that section copies onto the Story. The
+   live bundle stays on the outline.
+
 #### Fresh captures
 
 1. From `/root/.cursor/plugins/local/issue-tracker/app`, run
@@ -19,30 +43,42 @@ Follow **Chosen PNG archives**.
 
    The command restores the packed bundles first, which drops a failed
    edit, then prints one absolute PNG path per line. Each basename is
-   `mockup-<directionId>-<stateSlug>-<viewport>.png` (`viewport` is
-   `phone` or `desktop`).
+   the one **Direction and Story** names.
 
 2. For each direction id that `directions` printed and the outline
-   version names, the Story is the one that implements that surface:
-   the Story written for the outline section that names that direction
-   id. A printed PNG belongs to the longest such direction id for which
-   the basename starts with `mockup-<directionId>-` and ends with
-   `-phone.png` or `-desktop.png`. Attach each of that direction's
-   PNGs to that Story:
+   version names, attach each PNG **Direction and Story** assigns to
+   that direction:
 
    `issue attach <storyId> <pngPath>`
 
    The Story holds those PNGs. The outline keeps no copy of them.
+   Follow **Capture prose** for that Story.
 
-3. Write the tweak wording into that Story's description, as **Chosen
-   PNG archives** step 2 does. The outline section that names the
-   direction states that wording.
+#### Held captures
 
-4. In that Story's prose, name each attached capture from step 1.
-   Write the paragraph in your own words — not a stock block. It must
-   make the **Captures** claims in **Chosen PNG archives**. The **Archive**
-   claims are for the archive that section copies onto the Story. The
-   live bundle stays on the outline.
+Reconcile copies captures held on the outline onto the Stories the
+published version changes, then removes those PNGs from the outline.
+The summary the reconcile procedure ran before the root loop lists each
+attachment. A held capture is a listed attachment whose basename is the
+one **Direction and Story** names. The path on that summary line is the
+PNG path.
+
+For each Story **Direction and Story** assigns to a held capture on
+that summary, do the steps below when either holds:
+
+- This pass writes that Story's description.
+- This pass appends new Tasks to that Story.
+
+1. For each of that Story's held captures, when the Story already holds
+   that basename, `issue detach <storyId> <name>` first. Then:
+
+   `issue attach <storyId> <pngPath>`
+
+   `issue detach <outlineId> <name>`
+
+   The Story holds that PNG. The outline keeps no copy of it.
+
+2. Follow **Capture prose** for that Story.
 
 #### Chosen PNG archives
 
@@ -72,8 +108,7 @@ direction on that surface:
 3. In that Story's prose, name the copied files and state what they are so an
    implementor meets them where the work is. The files are those defined in
    `promote-direction-artifacts`:
-   - each both-viewport capture
-     `mockup-<directionId>-<stateSlug>-<viewport>.png`
+   - each both-viewport capture that **Direction and Story** names
    - the archive `mockup-<directionId>.tar.gz`
 
    Write the paragraph in your own words — not a stock block. It must make

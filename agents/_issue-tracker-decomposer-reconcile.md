@@ -20,13 +20,18 @@ Absolute path for this file (Read this exact path):
 
 1. **Pending appends.** `issue outline get <outlineId> pendingAppends`
    prints a JSON list of `{ targetStory, sourceIdea, executionGate,
-   codeApprovalRequired }`, or nothing when no append is pending. Steps 3–7
+   codeApprovalRequired }`, or nothing when no append is pending. Steps 3–8
    treat each entry's `targetStory` as a Target story whose Source idea is
    that entry's `sourceIdea`. `issue view` each entry's `sourceIdea`.
 2. **Roots.** `issue outline open-roots <outlineId>` prints one
    `<rootId> <from>` line per open root linked to the outline, where
-   `<from>` is the version that root is stamped with. Run steps 3–7 on each
-   root whose `<from>` is older than Version, in the printed order.
+   `<from>` is the version that root is stamped with. Before that loop,
+   `issue summary <outlineId>`. When that summary lists a held capture,
+   **Read**
+   `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
+   once. Run steps 3–8 on each root whose `<from>` is older than
+   Version, in the printed order. That summary decides step 6 on every
+   root.
 3. **Read.** `issue outline diff <outlineId> <from> <version>` — what the
    root has not yet absorbed. `issue tree <rootId>`, then `issue view <id>`
    on the root and on each Story and Task the diff bears on. `issue view`
@@ -44,21 +49,23 @@ Absolute path for this file (Read this exact path):
    it; otherwise it is the open Story in this root the change belongs with.
    Then follow the authoring skill **Tasks with no diff (noDiff)** on the
    created Tasks. For each Source idea, follow the authoring skill **Source
-   idea (sourceIdea)** on the Tasks created on its Target story, and
-   **Promoted mockup artifacts** for each mockup direction the diff names,
-   copied from that Source idea, with the tweak wording the outline states
-   for it.
-6. **Stamps.** Follow the authoring skill **Source outline (sourceOutline)**
+   idea (sourceIdea)** on the Tasks created on its Target story.
+6. **Captures.** When the step 2 summary lists a held capture, follow
+   **Held captures** for this root. When it lists none, for each Source
+   idea follow the authoring skill **Promoted mockup artifacts** for each
+   mockup direction the diff names, copied from that Source idea, with the
+   tweak wording the outline states for it.
+7. **Stamps.** Follow the authoring skill **Source outline (sourceOutline)**
    reconciliation rule with Version.
-7. **Polish.** The root is touched when step 4 or step 5 wrote to it, or
-   when its tree lists a Covered by Task. On a touched root, **Read**
+8. **Polish.** The root is touched when step 4, step 5, or step 6 wrote to
+   it, or when its tree lists a Covered by Task. On a touched root, **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`
    and follow it on the root with outline diff `<outlineId>`, `<from>`,
    `<version>`.
-8. **Finish.** Once every root has finished step 7:
+9. **Finish.** Once every root has finished step 8:
    - For each step 1 entry, run
      `issue outline apply-append <outlineId> <sourceIdea>`. It applies that
      append's gates to its target Story and drops the entry.
    - With a Source idea input, run `issue idea set <ideaId> archived true`.
-9. Your final message lists each root you ran steps 3–7 on, one id per
-   line, or `none` when no open root was older than Version.
+10. Your final message lists each root you ran steps 3–8 on, one id per
+    line, or `none` when no open root was older than Version.
