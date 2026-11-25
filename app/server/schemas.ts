@@ -8,3 +8,4 @@ export * from "./schemas/issue.js";
 export * from "./schemas/conversation.js";
 export * from "./schemas/app-config.js";
 export * from "./schemas/review.js";
+export * from "./schemas/outline-mockup-stack.js";

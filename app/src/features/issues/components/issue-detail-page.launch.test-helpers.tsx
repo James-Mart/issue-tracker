@@ -24,6 +24,14 @@ export const mutate = holders.mutate;
 export const sendMessageMutate = holders.sendMessageMutate;
 export const mockState = holders.mockState;
 
+vi.mock("../api/outline-mockups", () => ({
+  useOutlineMockupStackQuery: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock("../api/queries", () => ({
   useIssueDetailQuery: () => ({
     data: holders.mockState.issue,

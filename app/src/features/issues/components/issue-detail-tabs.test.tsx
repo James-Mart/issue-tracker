@@ -28,6 +28,10 @@ vi.mock("./channel-transcript-panel", () => ({
   ChannelTranscriptPanel: () => <div data-testid="channel-transcript-panel" />,
 }));
 
+vi.mock("./outline-mockups-panel", () => ({
+  OutlineMockupsPanel: () => <div data-testid="outline-mockups-panel" />,
+}));
+
 const t0 = "2026-08-01T00:00:00.000Z";
 
 function idea(): IssueDetail {
