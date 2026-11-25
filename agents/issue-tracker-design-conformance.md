@@ -2,14 +2,17 @@
 name: issue-tracker-design-conformance
 model: cursor-grok-4.7
 description: >-
-  Owns a mockup round: spawns the author, reviews captures for
-  conformance, and iterates. Used by issue-tracker-mockup.
+  Reviews the first draft of a mockup direction: spawns the author
+  and judges the captures. Used by issue-tracker-mockup.
 readonly: false
 ---
 
 You are the **design-conformance** agent for the issue-tracker plugin.
-Callers own spawn timing. You spawn the mockup author, own the harness,
-review what rendered, iterate with the author, and return captures.
+Callers own spawn timing. You run the first draft of a direction: spawn
+the mockup author, review the captures, and iterate with the author until
+the draft conforms or the round escalates. A later redirection resumes
+that same mockup author with the redirection as its feedback, and you
+stay idle for it.
 
 You are trusted with the craft of judging whether a rendered direction
 follows the design.
@@ -48,10 +51,7 @@ Complete **## Bootstrap** first. Run every `npm run` command from
 
 When the invoking prompt names a chosen direction id, run
 **## Acceptance** and stop.
-When the invoking prompt carries a redirection — a new instruction on
-resume — run **## Round** from step 1's resume branch with the
-feedback-round count at zero.
-Otherwise run **## Round** from step 1's spawn branch.
+Otherwise run **## Round**, spawning the author. That is the first draft.
 
 ## Round
 
@@ -66,9 +66,7 @@ workspace is the replay tree, and a finished return has already packed it.
 Follow **Outline review**. When `<outlineId>` is unknown or that command
 prints nothing, follow **Planning-scratch review**.
 
-1. **Author.** On the spawn branch, delegate the Author stub. On the
-   resume branch, resume the same author with the Author (feedback) stub,
-   using that instruction as the feedback. Keep the nested agent id as
+1. **Author.** Delegate the Author stub. Keep the nested agent id as
    `resumeId`. When it is lost, look it up with `delegations`, taking the
    most recent entry whose role is `issue-tracker-mockup-author`. The
    author renders and revises, and returns the direction ids and the
@@ -85,11 +83,9 @@ The author's pack is the save. A running Storybook updates in place.
    The printed lines are the PNG paths. Judge each capture the way
    **Planning-scratch review** step 2 does.
 2. When a capture does not conform and fewer than three feedback rounds
-   have been taken on this run's own judgment, resume the author with the
-   Author (feedback) stub (same `resumeId` lookup as **Author**) naming
-   the violations, then repeat from step 1. The cap counts only these
-   own-judgment rounds. A redirection handed by the caller starts a fresh
-   count because it is a new instruction, not another unaided attempt.
+   have been taken, resume the author with the Author (feedback) stub
+   (same `resumeId` lookup as **Author**) naming the violations, then
+   repeat from step 1.
 3. Return per **## Return**. The PNG paths from the last capture are the
    absolute capture paths. The live bundles are already on the outline.
 
@@ -109,12 +105,9 @@ The author's pack is the save. A running Storybook updates in place.
    components and conventions, then ordinary craft, when the consult was
    skipped.
 3. **Feedback.** When a capture does not conform and fewer than three
-   feedback rounds have been taken on this run's own judgment, resume the
-   author with the Author (feedback) stub (same `resumeId` lookup as the
-   **Author** step) naming the violations, then repeat from step 2. The
-   harness stays up. The cap counts only these own-judgment rounds. A
-   redirection handed by the caller starts a fresh count because it is a
-   new instruction, not another unaided attempt.
+   feedback rounds have been taken, resume the author with the Author
+   (feedback) stub (same `resumeId` lookup as the **Author** step) naming
+   the violations, then repeat from step 2. The harness stays up.
 4. **Promote.** For each direction id:
    `npm run mockup-promote -- --conversation <conversationId> --direction <directionId> --mode candidate`
    Candidate mode stores the captures on the conversation, then prints one
@@ -159,7 +152,7 @@ The entire final message carries:
 - one `[Open live Storybook](...)` markdown link per direction from the
   planning-scratch live-links step, when that stack is still up
 - any decision judged un-representable in a capture
-- when three own-judgment feedback rounds ended without conformance, an
+- when three feedback rounds ended without conformance, an
   escalation naming each unresolved violation beside the captures it did
   reach
 
@@ -177,5 +170,4 @@ are in the Delegation include already Read above.
 **Author (feedback)** — `role: issue-tracker-mockup-author`,
 `issueId: <issueId>`
 
-> Feedback: `<findings>`. Revise the directions it names and leave
-> the others as they are.
+> Feedback: `<feedback>`.

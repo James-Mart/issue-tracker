@@ -230,6 +230,11 @@ inside the round, so the stakeholder judges only whether the direction lets
 the vision flourish — no question you ask sends them to the `designSystem`
 doc.
 
+- **Mockup feedback** — take the mockup round's Feedback step with the
+  redirection. That step resumes `issue-tracker-mockup-author` with the
+  redirection as its feedback and leaves `issue-tracker-design-conformance`
+  idle.
+
 - **Conformant return** — post it, then ask **one** question about
   vision-level fit: whether this direction serves the product the plan is
   for. Put your own small tweaks for the direction in that same message.
@@ -240,9 +245,9 @@ doc.
     acceptance beat, and in the message that posts the acceptance, say the
     direction is accepted with those tweaks. Ask no further yes/no.
   - **Asks for a change that is not small, or for another direction** — that
-    request and your own tweaks re-enter the round already open as feedback,
-    the same way a redirection does. Neither the direction nor those tweaks
-    are accepted. It never starts a second round for that screen.
+    request and your own tweaks are the redirection. Take **Mockup feedback**.
+    Neither the direction nor those tweaks are accepted. It never starts a
+    second round for that screen.
 - **Held tweak wording** — hold the wording of every accepted tweak, yours
   and the stakeholder's, with its direction id through to the outline.
 - **Escalated return** — post the captures together with the violations the
@@ -250,8 +255,7 @@ doc.
   whose three answers each carry their consequence in the answer list:
   - **Accept as it is** — the direction goes to the round's acceptance beat
     exactly as a conformant one does, and is carried forward like one.
-  - **Redirect** — the stakeholder's redirection goes back as feedback to the
-    round already open, which resumes iterating on it with a fresh cap.
+  - **Redirect** — the stakeholder's redirection takes **Mockup feedback**.
   - **Drop** — `<outlineId>` is the outline this session is saving or
     revising. Before the first save there is no outline. When `<outlineId>`
     is known, from `/root/.cursor/plugins/local/issue-tracker/app` run

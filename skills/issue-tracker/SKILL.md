@@ -169,10 +169,10 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   Story, or append-target Story plan with parallel check agents, auto-apply
   of check fixes when safe, then one copyedit pass on every description; use
   when polishing a plan, cleaning up a tracker tree, or running plan-polish.
-- **`issue-tracker-mockup`** — run one mockup round for one UI surface via
-  the design-conformance agent (one conformant direction by default, capture,
-  attach); use when the user asks for a mockup round, UI mockups, or a design
-  direction for an issue.
+- **`issue-tracker-mockup`** — run one mockup round for one UI surface. The
+  first draft goes through the design-conformance agent; a later redirection
+  resumes the mockup author. Use when the user asks for a mockup round, UI
+  mockups, or a design direction for an issue.
 - **`issue-tracker-vision-docs`** — author or revise a Project vision doc (main
   vision or one subsystem vision) through a single grill and an approved
   draft; use when writing or refining project vision, authoring a subsystem

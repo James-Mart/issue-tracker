@@ -88,6 +88,8 @@ Lower fidelity has a fixed meaning:
 - **Conversation id** — session-root agent id from the caller for scratch
   paths
 - **Direction count** — how many directions to produce
+- **Feedback** — present when the caller resumes with a `Feedback:`
+  instruction. Names the revision to make. Absent on the first draft.
 
 ## Bootstrap
 
@@ -123,7 +125,7 @@ When `<outlineId>` is not known, run
 
 When the scratch root is the replay tree, record the run before any write:
 `npm run outline-mockups -- author-run <outlineId> running`.
-A run that stops without the pack in step 7 records
+A run that stops without the pack in **## First draft** step 7 records
 `npm run outline-mockups -- author-run <outlineId> failed`.
 
 **Sandbox packages.** When the scratch root is the replay tree, add the
@@ -139,6 +141,11 @@ When start or capture reported the import, retry the command that
 reported it. When `mockup-deps` refuses the package, or the import is
 not a package at all, stop and name the importing file and the
 unresolved import.
+
+When **Feedback** is present, run **## Feedback** and stop.
+Otherwise run **## First draft**.
+
+## First draft
 
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target
@@ -197,6 +204,16 @@ unresolved import.
    (name the state and what is wrong with it), and any decision you
    judged un-representable in a capture (**## Fidelity bar**). That
    return is the entire final message.
+
+## Feedback
+
+Apply the invoking **Feedback** instruction: revise the directions it names
+and leave the others as they are. When it names none, revise every direction
+already in the scratch root. Re-capture those directions the way **## First
+draft** step 6 does. When the scratch root is the replay tree, run **## First
+draft** step 7's `pack` and `author-run clean` commands, then return per that
+step and include every absolute capture path the re-capture printed in that
+same message.
 
 ## Dropped direction
 
