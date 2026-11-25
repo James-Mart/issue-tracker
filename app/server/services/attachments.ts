@@ -225,11 +225,25 @@ export function postAttachment(
   return putAttachment(id, name, bytes).then((meta) => ({ meta, created: true }));
 }
 
+function deleteExistingAttachment(dir: string, id: string, name: string): void {
+  assertStoreWritable();
+  rmSync(requireExistingAttachmentFile(dir, id, name));
+}
+
 /** Delete one attachment file. */
 export function removeAttachment(id: string, name: string): Promise<void> {
   return withAttachmentOp(id, name, (dir) => {
-    assertStoreWritable();
-    const path = requireExistingAttachmentFile(dir, id, name);
-    rmSync(path);
+    deleteExistingAttachment(dir, id, name);
+  });
+}
+
+/** Delete one outline attachment at the exact basename. */
+export function removeOutlineAttachment(outlineId: string, name: string): Promise<void> {
+  return withAttachmentOp(outlineId, name, (dir, issue) => {
+    if (issue.kind !== "outline") {
+      throw new IssueError("validation", `issue "${outlineId}" is not an outline`);
+    }
+    assertOutlineAttachmentName(name);
+    deleteExistingAttachment(dir, outlineId, name);
   });
 }

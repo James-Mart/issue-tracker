@@ -1,6 +1,6 @@
 import { mkdirSync, renameSync } from "fs";
 import { join } from "path";
-import { SLUG_PATTERN as SLUG } from "../slug.js";
+import { assertSlug, SLUG_PATTERN as SLUG } from "../slug.js";
 import { attachmentFilenames, attachmentsDir } from "./attachment-paths.js";
 import { IssueError } from "./errors.js";
 
@@ -16,6 +16,12 @@ const HELD_CAPTURE_RE = new RegExp(`^mockup-${SLUG}-(phone|desktop)\\.png$`);
 
 export function liveBundleName(directionId: string): string {
   return `mockup-${directionId}.tar.gz`;
+}
+
+/** The live-bundle basename for a direction id, or a refusal when it is not a slug. */
+export function requireLiveBundleName(directionId: string): string {
+  assertSlug(directionId, "direction id");
+  return liveBundleName(directionId);
 }
 
 /** The direction a live bundle name carries, or null for any other name. */

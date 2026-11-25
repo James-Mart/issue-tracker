@@ -35,8 +35,12 @@ import {
   type TranscriptEventInput,
 } from "../schemas.js";
 import {
+  isOutlineChannel,
+  OUTLINE_CHANNELS,
+} from "../../src/features/issues/lib/outline-session-role.js";
+import {
   channelForIssue,
-  offersDecompositionChannel,
+  offersOutlineChannels,
   offersReviewChannel,
 } from "../kind.js";
 import type { AgentSessions, StartClaim } from "./agent-sessions.js";
@@ -155,7 +159,9 @@ function channelsOfferedBy(issue: Issue): ConversationChannel[] {
       : channelForIssue(issue);
   const channels: ConversationChannel[] = [];
   if (primary) channels.push(primary);
-  if (offersDecompositionChannel(issue)) channels.push("decomposition");
+  if (offersOutlineChannels(issue)) {
+    channels.push(...OUTLINE_CHANNELS.filter((channel) => channel !== primary));
+  }
   if (offersReviewChannel(issue)) channels.push("review");
   return channels;
 }
@@ -407,20 +413,19 @@ function refuseIfPredecessorBusy(
 }
 
 /**
- * The channel that shares one live run with `channel` on the same issue. Only
- * outlines offer `decomposition`, and an outline allows one live run across it
- * and `planning`.
+ * The channels that share one live run with `channel` on the same issue. Only
+ * outlines offer `decomposition` and `mockups`, and an outline allows one live
+ * run across them and `planning`.
  */
-export function sharedRunChannel(
+export function sharedRunChannels(
   channel: ConversationChannel,
-): ConversationChannel | undefined {
-  if (channel === "planning") return "decomposition";
-  if (channel === "decomposition") return "planning";
-  return undefined;
+): ConversationChannel[] {
+  if (!isOutlineChannel(channel)) return [];
+  return OUTLINE_CHANNELS.filter((shared) => shared !== channel);
 }
 
 /**
- * Refuse a start or prompt on `issueId` + `channel` while the channel sharing
+ * Refuse a start or prompt on `issueId` + `channel` while a channel sharing
  * its live run is busy. The `conflict` names that busy channel.
  */
 export function refuseIfSharedRunBusy(
@@ -428,13 +433,14 @@ export function refuseIfSharedRunBusy(
   channel: ConversationChannel,
   sessions: BusyLookup,
 ): void {
-  const shared = sharedRunChannel(channel);
-  if (shared) refuseIfPredecessorBusy(issueId, shared, sessions);
+  for (const shared of sharedRunChannels(channel)) {
+    refuseIfPredecessorBusy(issueId, shared, sessions);
+  }
 }
 
 /**
  * Refuse a new session on `issueId` + `channel` while a session there, or on
- * the channel sharing its live run, is busy.
+ * a channel sharing its live run, is busy.
  */
 export function refuseIfChannelBusy(
   issueId: string,
@@ -464,7 +470,7 @@ export async function clearWorkQueueFields(issueId: string): Promise<void> {
  * issue+channel, create the anchored session, and optionally persist the first
  * prompt event and claim its start — one `serialize()` turn so concurrent
  * POSTs cannot leave two active sessions, and refused requests write nothing.
- * A busy predecessor refuses the creation, as does a busy session on the
+ * A busy predecessor refuses the creation, as does a busy session on an
  * outline channel sharing this one's live run. An implementing session needs a
  * free slot in its Project unless the root already holds one. Queue fields
  * stay until the caller clears them: the launcher does that only after the

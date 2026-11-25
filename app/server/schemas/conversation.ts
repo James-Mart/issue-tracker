@@ -27,6 +27,7 @@ export const CONVERSATION_CHANNELS = [
   "decomposition",
   "implementing",
   "review",
+  "mockups",
 ] as const;
 export type ConversationChannel = (typeof CONVERSATION_CHANNELS)[number];
 
@@ -40,8 +41,8 @@ export function outlineRoleChannelError(
     if (channel === expected) return undefined;
     return `outline role "${outlineRole}" runs on the ${expected} channel`;
   }
-  if (channel === "decomposition") {
-    return "a decomposition session requires an outline role";
+  if (channel === "decomposition" || channel === "mockups") {
+    return `a ${channel} session requires an outline role`;
   }
   return undefined;
 }

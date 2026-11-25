@@ -143,8 +143,11 @@ export function channelForIssue(
   }
 }
 
-/** Outlines run decomposer, reconcile, and check sessions beside their planning channel. */
-export function offersDecompositionChannel(issue: Issue): boolean {
+/**
+ * Outlines run decomposer, reconcile, and check sessions on `decomposition`
+ * and the handed-off mockup author on `mockups`, beside their planning channel.
+ */
+export function offersOutlineChannels(issue: Issue): boolean {
   return issue.kind === "outline";
 }
 

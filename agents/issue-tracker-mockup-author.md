@@ -88,6 +88,8 @@ Lower fidelity has a fixed meaning:
 - **Conversation id** — session-root agent id from the caller for scratch
   paths
 - **Direction count** — how many directions to produce
+- **Feedback** — present when the caller resumes with a `Feedback:`
+  instruction. Names the revision to make. Absent on the first draft.
 
 ## Bootstrap
 
@@ -103,16 +105,35 @@ Complete before **## Procedure**.
 
 ## Procedure
 
-From `/root/.cursor/plugins/local/issue-tracker/app`, run
-`npm run mockup-resolve -- <conversationId>` and take the printed line as
-`<resolvedConversationId>`.
+From `/root/.cursor/plugins/local/issue-tracker/app`, resolve the scratch root.
 
-Scratch root: join `/root/.cursor/plugins/local/issue-tracker` with
+**Read**
+`/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-mockup-outline.md`
+and resolve `<outlineId>` per that file.
+
+When `<outlineId>` is known, run
+`npm run outline-mockups -- workspace <outlineId> <conversationId>`
+and take the printed line as the scratch root. That directory is the
+outline's replay tree when the outline holds bundles, including a direction
+accepted after the first save, and the planning scratch otherwise.
+
+When `<outlineId>` is not known, run
+`npm run mockup-resolve -- <conversationId>` and take the printed line as
+`<resolvedConversationId>`. The scratch root joins
+`/root/.cursor/plugins/local/issue-tracker` with
 `conversations/<resolvedConversationId>/mockups/`.
 
-**Sandbox packages.** When an import from a target file resolves from
-neither the target's installed dependencies nor the sandbox, install
-that package from `/root/.cursor/plugins/local/issue-tracker/app`:
+When the scratch root is the replay tree, record the run before any write:
+`npm run outline-mockups -- author-run <outlineId> running`.
+A run that stops without the pack in **## First draft** step 7 records
+`npm run outline-mockups -- author-run <outlineId> failed`.
+
+**Sandbox packages.** When the scratch root is the replay tree, add the
+missing package to that tree's `package.json`. The outline Storybook install
+picks it up on the next start. When the scratch root is the planning
+scratch and an import from a target file resolves from neither the target's
+installed dependencies nor the sandbox, install that package from
+`/root/.cursor/plugins/local/issue-tracker/app`:
 
 `npm run mockup-deps -- <conversationId> --from <importing file> <package...>`
 
@@ -120,6 +141,11 @@ When start or capture reported the import, retry the command that
 reported it. When `mockup-deps` refuses the package, or the import is
 not a package at all, stop and name the importing file and the
 unresolved import.
+
+When **Feedback** is present, run **## Feedback** and stop.
+Otherwise run **## First draft**.
+
+## First draft
 
 1. Inspect **Target workspace** read-only. Form Read paths by joining
    **Target workspace** with workspace-relative paths. Pass **Target
@@ -152,20 +178,46 @@ unresolved import.
    `<directionId>/`. Compose **Surface** from the target's own components.
    One named export per state. Every file's default export `title` is
    `<directionId>/<component>`.
-6. From `/root/.cursor/plugins/local/issue-tracker/app`, start the
-   harness and review each direction. Start is idempotent. Leave the
-   stack running. An unresolved target import follows **Sandbox packages**.
+6. Review each direction. An unresolved target import follows **Sandbox
+   packages**.
+   When the scratch root is the planning scratch, from
+   `/root/.cursor/plugins/local/issue-tracker/app` start the harness and
+   leave it running. Start is idempotent.
    - `npm run mockup-stack -- start <conversationId>`
    - For each direction,
      `npm run mockup-capture -- --conversation <conversationId> --direction <directionId>`
      Capture writes both widths into the conversation scratch and
-     prints one absolute PNG path per line. Read every printed PNG
-     and compare it to what that state was meant to show
-     (**## Fidelity bar**). Revise the CSF files and re-capture
-     until each state is faithful, at most three passes per
-     direction.
-7. Return the direction ids and the named-export state names produced
+     prints one absolute PNG path per line.
+   When the scratch root is the replay tree, from that same directory run
+   `npm run outline-mockups -- capture <outlineId>`. A running Storybook
+   updates in place. The command prints one absolute PNG path per line.
+   Read every printed PNG and compare it to what that state was meant to
+   show (**## Fidelity bar**). Revise the CSF files and re-capture until
+   each state is faithful, at most three passes per direction.
+7. When the scratch root is the replay tree, a finished return packs
+   before the final message, which is when this author goes idle:
+   `npm run outline-mockups -- pack <outlineId>`
+   then
+   `npm run outline-mockups -- author-run <outlineId> clean`.
+   Return the direction ids and the named-export state names produced
    under each, any state still not faithful after the third pass
    (name the state and what is wrong with it), and any decision you
    judged un-representable in a capture (**## Fidelity bar**). That
    return is the entire final message.
+
+## Feedback
+
+Apply the invoking **Feedback** instruction: revise the directions it names
+and leave the others as they are. When it names none, revise every direction
+already in the scratch root. Re-capture those directions the way **## First
+draft** step 6 does. When the scratch root is the replay tree, run **## First
+draft** step 7's `pack` and `author-run clean` commands, then return per that
+step and include every absolute capture path the re-capture printed in that
+same message.
+
+## Dropped direction
+
+A note that names a direction is context for this scratch root. That
+direction's live bundle and its stories are gone from the replay tree.
+`harness.json`, `package.json`, and the other directions are still there.
+A running Storybook is already showing that tree.

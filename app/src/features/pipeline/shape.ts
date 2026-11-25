@@ -190,6 +190,7 @@ const planning: Pipeline = {
     { from: "grill", to: "research", kind: "spawn" },
     { from: "grill", to: "mockup-round", kind: "flow" },
     { from: "mockup-round", to: "design-conformance", kind: "spawn" },
+    { from: "mockup-round", to: "mockup-author", kind: "spawn" },
     { from: "design-conformance", to: "mockup-author", kind: "spawn" },
     { from: "mockup-round", to: "conclude", kind: "flow" },
     // Conclude starts the decomposer when the gates say so. This edge has

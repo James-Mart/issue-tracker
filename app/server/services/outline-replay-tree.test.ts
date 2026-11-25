@@ -109,3 +109,48 @@ it("restores an outline's bundles into its replay tree with harness paths rebase
   expect(readFileSync(join(tree, "draft-c", "keep.txt"), "utf8")).toBe("kept");
   expect(existsSync(join(tree, "package-lock.json"))).toBe(true);
 });
+
+it("drops one direction's bundle and stories and leaves the shared tree and the other direction", async () => {
+  const { listAttachments, putAttachment } = await import("./attachments.js");
+  const { create } = await import("./issues.js");
+  const { authorWorkspace, dropOutlineDirection } = await import("./outline-replay-tree.js");
+  const { outlineMockupsRoot, replayTreeDir, writeAuthorRunState } = await import(
+    "./outline-mockup-store.js"
+  );
+  mkdirSync(join(root, "conversations", "conv"), { recursive: true });
+  writeFileSync(join(root, "conversations", "conv", "meta.json"), "{}\n");
+  const outline = await create({
+    kind: "outline",
+    title: "O",
+    partOf: "p",
+    description: "# O\n",
+    sourceIdea: "i",
+  });
+  const tree = replayTreeDir(outline.id);
+  writeScratch(tree, ["a", "b"]);
+  mkdirSync(join(tree, "node_modules"), { recursive: true });
+  writeFileSync(join(tree, "node_modules", "keep.txt"), "installed");
+  const harness = readFileSync(join(tree, "harness.json"), "utf8");
+  const manifest = readFileSync(join(tree, "package.json"), "utf8");
+  mkdirSync(join(outlineMockupsRoot(outline.id), "storybook"), { recursive: true });
+  writeFileSync(join(outlineMockupsRoot(outline.id), "storybook", "marker.txt"), "live");
+  writeAuthorRunState(outline.id, "running");
+  await putAttachment(outline.id, "mockup-a.tar.gz", Buffer.from("bundle-a"));
+  await putAttachment(outline.id, "mockup-b.tar.gz", Buffer.from("bundle-b"));
+  await putAttachment(outline.id, "mockup-a.backup.tar.gz", Buffer.from("backup-a"));
+
+  await dropOutlineDirection(outline.id, "a");
+
+  const names = listAttachments(outline.id).map((attachment) => attachment.name);
+  expect(names).not.toContain("mockup-a.tar.gz");
+  expect(names).toEqual(["mockup-a.backup.tar.gz", "mockup-b.tar.gz"]);
+  expect(existsSync(join(tree, "a"))).toBe(false);
+  expect(readFileSync(join(tree, "b", "parts", "fixture.ts"), "utf8")).toContain('"b"');
+  expect(readFileSync(join(tree, "harness.json"), "utf8")).toBe(harness);
+  expect(readFileSync(join(tree, "package.json"), "utf8")).toBe(manifest);
+  expect(readFileSync(join(tree, "node_modules", "keep.txt"), "utf8")).toBe("installed");
+  expect(readFileSync(join(outlineMockupsRoot(outline.id), "storybook", "marker.txt"), "utf8")).toBe(
+    "live",
+  );
+  expect(authorWorkspace(outline.id, "conv")).toBe(tree);
+});

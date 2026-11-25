@@ -7,7 +7,7 @@ import {
   refuseIfSharedRunBusy,
   serialize,
   setPendingMessage,
-  sharedRunChannel,
+  sharedRunChannels,
   startConversationPrompt,
 } from "./conversations.js";
 import {
@@ -95,7 +95,7 @@ export async function postConversationMessage(
 }
 
 /**
- * Refuse while the channel sharing this conversation's live run is busy, and
+ * Refuse while a channel sharing this conversation's live run is busy, and
  * claim this conversation's start in the same write turn so a start there
  * sees this one as busy. Conversations on other channels need no claim.
  */
@@ -105,15 +105,17 @@ function claimSharedRunTurn(
 ): Promise<StartClaim | undefined> {
   return serialize(() => {
     const { issueId, channel } = readConversationMeta(conversationId);
-    if (!issueId || !channel || !sharedRunChannel(channel)) return undefined;
+    if (!issueId || !channel || sharedRunChannels(channel).length === 0) {
+      return undefined;
+    }
     refuseIfSharedRunBusy(issueId, channel, sessions);
     return sessions.claimStart(conversationId);
   });
 }
 
 /**
- * Start a turn on an idle conversation. On an outline, a live run on its other
- * channel refuses the turn with a `conflict` naming that channel.
+ * Start a turn on an idle conversation. On an outline, a live run on another of
+ * its channels refuses the turn with a `conflict` naming that channel.
  */
 export async function startIdleConversationTurn(
   conversationId: string,

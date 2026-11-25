@@ -34,6 +34,7 @@ export function outlinePlanningSessionTitle(
   if (role === "planner") return planningSessionTitle(outlineTitle);
   if (role === "reconcile") return `Reconcile ${outlineTitle}`;
   if (role === "check") return `Check ${outlineTitle}`;
+  if (role === "mockup-author") return `Mockups ${outlineTitle}`;
   return `Decompose ${outlineTitle}`;
 }
 

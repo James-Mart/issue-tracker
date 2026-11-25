@@ -8,3 +8,10 @@ export const SLUG_RE = new RegExp(`^${SLUG_PATTERN}$`);
 export function isSlugSafe(value: string): boolean {
   return SLUG_RE.test(value);
 }
+
+/** Refuse `value` unless it is a slug. `label` names the value in the error. */
+export function assertSlug(value: string, label: string): void {
+  if (!isSlugSafe(value)) {
+    throw new Error(`${label} must be a slug, got ${JSON.stringify(value)}`);
+  }
+}
