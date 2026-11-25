@@ -22,6 +22,7 @@ import {
   type InitiateRestart,
 } from "./routes/restart.js";
 import { mockupStackMiddleware } from "./routes/mockups.js";
+import { createOutlineMockupsRouter } from "./routes/outline-mockups.js";
 import { createReviewRuntimeRouter } from "./routes/review-runtime.js";
 import { storiesRouter } from "./routes/stories.js";
 import { transcriptionsRouter } from "./routes/transcriptions.js";
@@ -87,6 +88,7 @@ export function createApp(
     app.use(express.static(distDir));
   }
 
+  app.use("/api/issues", createOutlineMockupsRouter());
   app.use("/api/issues", createIssuesRouter(sessions));
   app.use("/api/channel-sessions", createChannelSessionsRouter(sessions));
   app.use("/api/stories", storiesRouter);

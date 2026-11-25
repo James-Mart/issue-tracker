@@ -106,18 +106,36 @@ async function restoreTreeFromBundles(outlineId: string): Promise<string[]> {
 }
 
 /**
- * Ready the tree for a Storybook start, for a caller holding the outline's
- * lock. A clean tree with bundles is restored from them; a running or failed
- * author run keeps the tree it left, which is installed as it stands.
+ * How a serve should ready the tree, from an author-run record already read.
+ * `restore` rebuilds a clean tree from its bundles. `install` keeps the tree
+ * a running or failed author left on disk.
  */
+export function replayTreeServePlan(
+  authorRun: AuthorRunState,
+  directionCount: number,
+  hasHarness: boolean,
+): "restore" | "install" | "none" {
+  if (authorRun === "clean" && directionCount > 0) return "restore";
+  if (hasHarness) return "install";
+  return "none";
+}
+
+/** Ready the tree for a Storybook start. The caller holds the outline's lock. */
 export async function prepareReplayTreeForServe(outlineId: string): Promise<void> {
-  if (readAuthorRunState(outlineId) === "clean" && liveDirectionIds(outlineId).length > 0) {
+  const plan = replayTreeServePlan(
+    readAuthorRunState(outlineId),
+    liveDirectionIds(outlineId).length,
+    existsSync(join(replayTreeDir(outlineId), "harness.json")),
+  );
+  if (plan === "restore") {
     await restoreTreeFromBundles(outlineId);
-  } else if (existsSync(join(replayTreeDir(outlineId), "harness.json"))) {
-    await installReplayTree(outlineId);
-  } else {
-    throw new Error(`outline ${JSON.stringify(outlineId)} has no mockups to serve`);
+    return;
   }
+  if (plan === "install") {
+    await installReplayTree(outlineId);
+    return;
+  }
+  throw new Error(`outline ${JSON.stringify(outlineId)} has no mockups to serve`);
 }
 
 /**

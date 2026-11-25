@@ -14,6 +14,7 @@ import {
 import { PageShell } from "@/components/page-shell";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils/cn";
+import { useOutlineMockupStackQuery } from "../api/outline-mockups";
 import { useChannelSessionsQuery, useIssueDetailQuery } from "../api/queries";
 import { useIssuesWithArchived } from "../hooks/use-issues-with-archived";
 import {
@@ -33,6 +34,7 @@ import {
   issueDetailTabTitleSuffix,
   mobileChannelChromeForTab,
   resolveIssueDetailTab,
+  outlineOffersMockupsTab,
   tabsForIssueDetail,
   type IssueDetailTab,
 } from "../lib/issue-detail-tabs";
@@ -335,10 +337,20 @@ export function IssueDetailPage() {
 
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const detailTabs = useMemo(
-    () => (issue ? tabsForIssueDetail(issue, parentKind) : []),
-    [issue, parentKind],
+  const mockupStack = useOutlineMockupStackQuery(
+    issue?.kind === "outline" ? issue.id : undefined,
   );
+  const detailTabs = useMemo(() => {
+    if (!issue) return [];
+    // Keep a Mockups deep link mounted until status loads, then drop it when
+    // this outline has neither a forked session nor anything to restore.
+    const showMockups =
+      issue.kind === "outline" &&
+      (mockupStack.data
+        ? outlineOffersMockupsTab(mockupStack.data)
+        : tabParam === "mockups");
+    return tabsForIssueDetail(issue, parentKind, { showMockups });
+  }, [issue, mockupStack.data, parentKind, tabParam]);
   const { boundShell, compactChannelChrome } = useIssueDetailShellFlags(
     issue,
     detailTabs,

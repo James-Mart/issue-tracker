@@ -24,6 +24,7 @@ import { isRecordedProcessLive, readProcInfo } from "./storybook-process.js";
  *   captures/         PNGs from the latest capture run
  *   author-run.json   the mockup author's last reported run state
  *   session.json      the conversation bound to this outline's Storybook
+ *   stack-failure.json  the last install or Storybook start that failed
  * ```
  */
 
@@ -45,6 +46,13 @@ const authorRunSchema = z.object({
 });
 
 const sessionSchema = z.object({ conversationId: z.string().min(1) });
+
+const stackFailureSchema = z.object({
+  command: z.string().min(1).optional(),
+  outputTail: z.string(),
+});
+
+export type OutlineStackFailure = z.infer<typeof stackFailureSchema>;
 
 const leaseSchema = z.object({
   id: z.string().min(1),
@@ -193,6 +201,18 @@ export function readBoundSession(outlineId: string): string | null {
 
 export function writeBoundSession(outlineId: string, conversationId: string): void {
   writeRecord(join(outlineMockupsRoot(outlineId), "session.json"), { conversationId });
+}
+
+export function readStackFailure(outlineId: string): OutlineStackFailure | null {
+  return readRecord(join(outlineMockupsRoot(outlineId), "stack-failure.json"), stackFailureSchema);
+}
+
+export function writeStackFailure(outlineId: string, failure: OutlineStackFailure): void {
+  writeRecord(join(outlineMockupsRoot(outlineId), "stack-failure.json"), failure);
+}
+
+export function removeStackFailure(outlineId: string): void {
+  rmSync(join(outlineMockupsRoot(outlineId), "stack-failure.json"), { force: true });
 }
 
 /** The outline whose Storybook a conversation is bound to, if any. */

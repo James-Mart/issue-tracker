@@ -1,6 +1,11 @@
 import { AGENT_RUNS_SURFACE_LABEL } from "@/features/agents/lib/agent-runs-surface-label";
 import { channelForIssue, offersOutlineChannels } from "@server/kind";
-import type { ConversationChannel, Issue, IssueKind } from "@server/schemas";
+import type {
+  ConversationChannel,
+  Issue,
+  IssueKind,
+  OutlineMockupStackStatus,
+} from "@server/schemas";
 
 export const DEFAULT_ISSUE_DETAIL_TAB = "overview" as const;
 export const AGENTS_DETAIL_TAB = "agents" as const;
@@ -68,13 +73,25 @@ function appendChannelTab(
 }
 
 /**
+ * The outline shows Mockups once a forked mockup-author session is bound or
+ * a bundle can be restored (including a tree the author left on disk).
+ */
+export function outlineOffersMockupsTab(
+  status: Pick<OutlineMockupStackStatus, "sessionId" | "canRestore" | "directions">,
+): boolean {
+  return status.sessionId !== undefined || status.canRestore || status.directions.length > 0;
+}
+
+/**
  * Page-level tab set for issue detail: Overview always; channel tabs,
- * Activity, and Diff. An outline has Planning and Decomposition. The project
- * issue uses the home bar instead of this set.
+ * Activity, and Diff. An outline has Planning and Decomposition, and Mockups
+ * when `showMockups` is set. The project issue uses the home bar instead of
+ * this set.
  */
 export function tabsForIssueDetail(
   issue: Issue,
   parentKind?: IssueKind,
+  options?: { showMockups?: boolean },
 ): IssueDetailTab[] {
   const tabs: IssueDetailTab[] = [
     {
@@ -85,6 +102,7 @@ export function tabsForIssueDetail(
   if (offersOutlineChannels(issue)) {
     appendChannelTab(tabs, "planning");
     appendChannelTab(tabs, "decomposition");
+    if (options?.showMockups) appendChannelTab(tabs, "mockups");
   } else {
     const channel = channelTabForIssue(issue, parentKind);
     if (channel) appendChannelTab(tabs, channel);

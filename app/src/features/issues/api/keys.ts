@@ -33,6 +33,8 @@ export const issuesKeys = {
     [...issuesKeys.all, "outlineBody", issueId, version] as const,
   outlineDiff: (issueId: string, from: number, to: number) =>
     [...issuesKeys.all, "outlineDiff", issueId, from, to] as const,
+  outlineMockups: (outlineId: string) =>
+    [...issuesKeys.all, "outlineMockups", outlineId] as const,
 };
 
 export const healthKeys = {

@@ -28,6 +28,7 @@ import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import type { ChannelTabIndicator } from "../lib/channel-tab-indicator";
 import { AgentRunsPanel } from "./agent-runs-panel";
 import { ChannelTranscriptPanel } from "./channel-transcript-panel";
+import { OutlineMockupsPanel } from "./outline-mockups-panel";
 import { IssueChangePanel } from "./issue-change-panel";
 
 function isAgentsTab(
@@ -50,7 +51,8 @@ function isChannelTab(
 
 /**
  * Page-level tab bar below the persistent header. Overview always; channel
- * tabs (an outline has Planning and Decomposition), plus Agents and Diff.
+ * tabs (an outline has Planning and Decomposition, and Mockups when it is in
+ * the set), plus Agents and Diff.
  * With Overview alone, no bar renders. The project issue uses the home bar
  * instead.
  */
@@ -196,18 +198,29 @@ export function IssueDetailTabs({
             role="tabpanel"
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           >
-            <ChannelTranscriptPanel
-              issueId={issue.id}
-              issue={issue}
-              channel={tab.channel}
-              label={tab.label}
-              projectId={projectId}
-              parentKind={parentKind}
-              mobileFullViewport={mobileChannelChrome}
-              onBackToOverview={
-                mobileChannelChrome ? onBackToOverview : undefined
-              }
-            />
+            {tab.channel === "mockups" ? (
+              <OutlineMockupsPanel
+                issueId={issue.id}
+                projectId={projectId}
+                mobileFullViewport={mobileChannelChrome}
+                onBackToOverview={
+                  mobileChannelChrome ? onBackToOverview : undefined
+                }
+              />
+            ) : (
+              <ChannelTranscriptPanel
+                issueId={issue.id}
+                issue={issue}
+                channel={tab.channel}
+                label={tab.label}
+                projectId={projectId}
+                parentKind={parentKind}
+                mobileFullViewport={mobileChannelChrome}
+                onBackToOverview={
+                  mobileChannelChrome ? onBackToOverview : undefined
+                }
+              />
+            )}
           </div>
         );
       })}
