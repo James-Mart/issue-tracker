@@ -152,9 +152,8 @@ export function issueDetailChannelLabel(
 }
 
 /**
- * Parse `tab` against the eligible set. An outline tab set with no `tab`,
- * or an ineligible one, opens Planning so a link to the outline page shows
- * planner sessions. Every other missing or ineligible value opens Overview.
+ * Parse `tab` against the eligible set. Missing or ineligible values open
+ * Overview.
  */
 export function resolveIssueDetailTab(
   value: string | null,
@@ -163,7 +162,6 @@ export function resolveIssueDetailTab(
   if (value != null && tabs.some((tab) => tab.key === value)) {
     return value as IssueDetailTabKey;
   }
-  if (isOutlinePlanningDecompositionTabSet(tabs)) return "planning";
   return DEFAULT_ISSUE_DETAIL_TAB;
 }
 
