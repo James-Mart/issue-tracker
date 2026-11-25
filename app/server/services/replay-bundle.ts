@@ -91,12 +91,38 @@ function requireFile(path: string, owner: string): void {
   if (!existsSync(path)) throw new Error(`${owner} has no ${basename(path)}`);
 }
 
+/**
+ * An alias or CSS entry inside the tree is archived only as part of this
+ * direction's folder. A path elsewhere in the tree is not in the bundle and
+ * would be missing after restore.
+ */
+function assertPackedHarnessPaths(
+  harness: HarnessConfig,
+  treeRoot: string,
+  directionRoot: string,
+): void {
+  const entries = [
+    ...harness.cssEntries.map((entry) => ["cssEntries", entry] as const),
+    ...Object.entries(harness.aliases).map(
+      ([alias, entry]) => [`aliases.${alias}`, entry] as const,
+    ),
+  ];
+  for (const [field, value] of entries) {
+    if (isInsideDir(treeRoot, value) && !isInsideDir(directionRoot, value)) {
+      throw new Error(
+        `${field} ${value} is inside the replay tree ${treeRoot} outside ${directionRoot}`,
+      );
+    }
+  }
+}
+
 /** Bytes of `directionId`'s replay bundle packed from `treeRoot`. */
 export function packReplayBundle(treeRoot: string, directionId: string): Buffer {
   const owner = `replay tree ${treeRoot}`;
   requireFile(join(treeRoot, HARNESS_FILE), owner);
   requireFile(join(treeRoot, MANIFEST_FILE), owner);
-  const viteRel = viteConfigRelative(readHarness(join(treeRoot, HARNESS_FILE)), treeRoot);
+  const harness = readHarness(join(treeRoot, HARNESS_FILE));
+  const viteRel = viteConfigRelative(harness, treeRoot);
   const shared = [HARNESS_FILE, MANIFEST_FILE, ...(viteRel ? [viteRel] : [])];
 
   const directionRoot = join(treeRoot, directionId);
@@ -113,6 +139,7 @@ export function packReplayBundle(treeRoot: string, directionId: string): Buffer 
       `direction ${JSON.stringify(directionId)} holds ${clash}, which its replay bundle reserves for the shared tree file`,
     );
   }
+  assertPackedHarnessPaths(harness, treeRoot, directionRoot);
 
   const out = mkdtempSync(join(tmpdir(), "replay-bundle-"));
   try {

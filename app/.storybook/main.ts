@@ -101,6 +101,7 @@ function createConfig(): StorybookConfig {
       const postcss = await loadHarnessPostcss(
         options.postcssConfigFile,
         options.resolveRoots.scratchRoot,
+        options.resolveRoots.targetRoot,
       );
       const merged = mergeConfig(viteConfig, {
         cacheDir: options.cacheDir,

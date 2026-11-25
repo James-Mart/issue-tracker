@@ -30,13 +30,15 @@ function writeScratch(scratch: string, directions: string[]): void {
     );
     writeFileSync(join(scratch, directionId, "parts", "fixture.ts"), `export const id = "${directionId}";\n`);
   }
+  const targetSrc = join(root, "target-src");
+  mkdirSync(targetSrc, { recursive: true });
   writeFileSync(join(scratch, "vite.mockup.ts"), "export default {};\n");
   writeFileSync(
     join(scratch, "harness.json"),
     JSON.stringify({
       targetRoot: root,
       cssEntries: [],
-      aliases: { "@scratch": join(scratch, directions[0]!) },
+      aliases: { "@scratch": targetSrc },
       storiesGlobs: directions.map((directionId) => join(scratch, directionId, "**/*.stories.tsx")),
       viteConfigPath: join(scratch, "vite.mockup.ts"),
     }),
@@ -99,7 +101,7 @@ it("restores an outline's bundles into its replay tree with harness paths rebase
     join(tree, "b", "**/*.stories.tsx"),
   ]);
   expect(harness.viteConfigPath).toBe(join(tree, "vite.mockup.ts"));
-  expect(harness.aliases).toEqual({ "@scratch": join(tree, "a") });
+  expect(harness.aliases).toEqual({ "@scratch": join(root, "target-src") });
   expect(harness.targetRoot).toBe(root);
   expect(JSON.stringify(harness)).not.toContain(scratch);
   expect(readFileSync(join(tree, "b", "parts", "fixture.ts"), "utf8")).toContain('"b"');
