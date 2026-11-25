@@ -1,10 +1,6 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
-import {
-  PLUGIN_APP_DIR,
-  isInsideDir,
-  sandboxNodeModulesDir,
-} from "./harness-paths.js";
+import { isForbiddenTargetSource, sandboxNodeModulesDir } from "./harness-paths.js";
 
 /** Packages that must resolve as one installed copy for the preview and the target. */
 export const REACT_PACKAGES = ["react", "react-dom"] as const;
@@ -28,27 +24,28 @@ export function buildReactAliases(reactRoot: string): Record<string, string> {
 
 /**
  * `node_modules` that holds an installed `react` and `react-dom`, or null
- * when either package is missing or resolves inside the plugin app.
+ * when either package is missing or is forbidden target source.
  */
-function installedReactRoot(modulesDir: string): string | null {
+function installedReactRoot(modulesDir: string, targetRoot: string): string | null {
   for (const name of REACT_PACKAGES) {
     const pkgDir = path.join(modulesDir, name);
     if (!existsSync(path.join(pkgDir, "package.json"))) return null;
-    if (isInsideDir(PLUGIN_APP_DIR, realpathSync(pkgDir))) return null;
+    if (isForbiddenTargetSource(targetRoot, realpathSync(pkgDir))) return null;
   }
   return modulesDir;
 }
 
 /**
  * Nearest installed React a component in `start` would resolve by walking
- * up through `node_modules`. The plugin app is never that copy.
+ * up through `node_modules`. An external target skips the plugin app's copy.
+ * A target that contains the plugin app uses that copy — it is the target's.
  */
-function reactRootFrom(start: string): string | null {
+function reactRootFrom(start: string, targetRoot: string): string | null {
   const real = realpathSync(start);
   let dir = statSync(real).isDirectory() ? real : path.dirname(real);
   for (;;) {
-    if (isInsideDir(PLUGIN_APP_DIR, dir)) return null;
-    const found = installedReactRoot(path.join(dir, "node_modules"));
+    if (isForbiddenTargetSource(targetRoot, dir)) return null;
+    const found = installedReactRoot(path.join(dir, "node_modules"), targetRoot);
     if (found) return found;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
@@ -66,11 +63,12 @@ export function resolveReactRoot(input: {
   targetRoot: string;
   scratchRoot: string;
 }): string | null {
+  const targetRoot = realpathSync(input.targetRoot);
   for (const aliasPath of Object.values(input.aliases)) {
-    const found = reactRootFrom(aliasPath);
+    const found = reactRootFrom(aliasPath, targetRoot);
     if (found) return found;
   }
-  const fromTarget = reactRootFrom(input.targetRoot);
+  const fromTarget = reactRootFrom(targetRoot, targetRoot);
   if (fromTarget) return fromTarget;
-  return installedReactRoot(sandboxNodeModulesDir(input.scratchRoot));
+  return installedReactRoot(sandboxNodeModulesDir(input.scratchRoot), targetRoot);
 }

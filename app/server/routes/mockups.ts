@@ -8,7 +8,8 @@ import { connect, type Socket } from "node:net";
 import type { NextFunction, Request, Response } from "express";
 import { isMockupStackLive } from "../services/mockup-stack.js";
 import { readMockupStackState, readSessionOutcome } from "../services/mockup-scratch.js";
-import { mockupFallbackHtml } from "./mockup-fallback-page.js";
+import { boundMockupSessionTarget } from "../services/outline-storybook.js";
+import { mockupFallbackHtml, type MockupFallbackKind } from "./mockup-fallback-page.js";
 
 const PREFIX = "/mockups/";
 
@@ -67,9 +68,11 @@ function emptyStatus(res: ServerResponse, status: number): void {
   res.end();
 }
 
-function sendFallback(res: ServerResponse, conversationId: string): void {
-  const outcome = readSessionOutcome(conversationId);
-  const kind = outcome === "ended" ? "session-ended" : "stack-down";
+function sendFallback(
+  res: ServerResponse,
+  conversationId: string,
+  kind: MockupFallbackKind,
+): void {
   const html = mockupFallbackHtml(kind, conversationId);
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -195,8 +198,10 @@ function proxyUpgrade(
 /**
  * Reverse-proxy one conversation's loopback Storybook. HTTP and the websocket
  * upgrade on `/mockups/:conversationId/` share this handler. A conversation
- * with no live stack is never sent to another port: HTTP gets the session-ended
- * page when the outcome is ended, and the loud-failure page otherwise.
+ * bound to an outline is served that outline's Storybook; any other
+ * conversation is served its planning scratch stack. A conversation with no
+ * live stack is never sent to another port: HTTP gets the session-ended page
+ * when the scratch outcome is ended, and the loud-failure page otherwise.
  */
 export function mockupStackProxy(
   req: IncomingMessage,
@@ -213,10 +218,19 @@ export function mockupStackProxy(
     return;
   }
 
-  const baseUrl = liveBaseUrl(conversationId);
+  const outline = boundMockupSessionTarget(conversationId);
+  const baseUrl = outline ? outline.baseUrl : liveBaseUrl(conversationId);
   if (!baseUrl) {
     if (upgrade) rejectUpgrade(resOrSocket);
-    else sendFallback(resOrSocket, conversationId);
+    else {
+      sendFallback(
+        resOrSocket,
+        conversationId,
+        !outline && readSessionOutcome(conversationId) === "ended"
+          ? "session-ended"
+          : "stack-down",
+      );
+    }
     return;
   }
 

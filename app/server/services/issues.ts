@@ -37,6 +37,7 @@ import { runStoreMigrations } from "./store-migrations.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { recordOutlineBody } from "./outline-body.js";
+import { moveReplayBundlesFromIdea } from "./outline-attachments.js";
 import { discardUnpublishedAppendDrafts } from "./append-draft-discard.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
@@ -441,6 +442,9 @@ export function create(
     assertWritable(parsed.issue, issues);
     const description = input.description ?? `# ${title}\n`;
     commitIssueBatch([{ issue: parsed.issue, description }], []);
+    if (parsed.issue.kind === "outline" && parsed.issue.sourceIdea) {
+      moveReplayBundlesFromIdea(parsed.issue.sourceIdea, parsed.issue.id);
+    }
     return toRecord(parsed.issue);
   });
 }
@@ -669,6 +673,7 @@ export function update(
     ) {
       return {
         detail: read(id),
+        archivedOutline: false,
         attemptIds: [] as string[],
         recordedPrProjectId: undefined,
         reviewWorktrees: { remove: [] as string[], ensure: [] as string[] },
@@ -783,6 +788,11 @@ export function update(
         : undefined;
     return {
       detail: toIssueDetail(parsed.issue, jsonText, finalDescription),
+      archivedOutline:
+        existing.kind === "outline" &&
+        !existing.archived &&
+        parsed.issue.kind === "outline" &&
+        parsed.issue.archived,
       attemptIds: storyIdsForLifecycleRemoval(
         existing,
         parsed.issue,
@@ -793,7 +803,11 @@ export function update(
       reviewWorktrees,
       syncStoryId,
     };
-  }).then(async ({ detail, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
+  }).then(async ({ detail, archivedOutline, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
+    if (archivedOutline) {
+      const { removeOutlineReplayTree } = await import("./outline-storybook.js");
+      await removeOutlineReplayTree(id);
+    }
     if (recordedPrProjectId) {
       const { refreshRecordedPrFacts } = await import("./pr-facts-read.js");
       await refreshRecordedPrFacts(recordedPrProjectId);
@@ -855,7 +869,12 @@ export async function remove(id: string): Promise<DeletionResult> {
   const preview = planDeletion(graph, id);
   const kinds = new Map(graph.map((issue) => [issue.id, issue.kind]));
   const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
-  for (const delId of preview.deleteIds) {
+  const { removeOutlineReplayTree } = await import("./outline-storybook.js");
+  const isOutline = (delId: string) => kinds.get(delId) === "outline";
+  for (const outlineId of preview.deleteIds.filter(isOutline)) {
+    await removeOutlineReplayTree(outlineId);
+  }
+  for (const delId of preview.deleteIds.filter((delId) => !isOutline(delId))) {
     const result =
       kinds.get(delId) === "review"
         ? await attemptReviewWorktreeRemoval(delId)

@@ -29,6 +29,8 @@ export let backupStatusPath = join(dirname(issuesDir), "backup-status.json");
 export let logsDir = join(dirname(issuesDir), "logs");
 /** Peer of `issuesDir` — review-owned runtime records. Not conversation agent stacks. */
 export let reviewRuntimesDir = join(dirname(issuesDir), "review-runtimes");
+/** Peer of `issuesDir` — one directory per outline holding its replay tree, Storybook, and leases. */
+export let outlineMockupsDir = join(dirname(issuesDir), "outline-mockups");
 
 export function refreshStorePathsFromEnv(): void {
   issuesDir = process.env.ISSUES_DIR ?? defaultIssuesDir;
@@ -44,6 +46,7 @@ export function refreshStorePathsFromEnv(): void {
   backupStatusPath = join(dirname(issuesDir), "backup-status.json");
   logsDir = join(dirname(issuesDir), "logs");
   reviewRuntimesDir = join(dirname(issuesDir), "review-runtimes");
+  outlineMockupsDir = join(dirname(issuesDir), "outline-mockups");
 }
 
 // Cursor SDK credential. Read once here so every `@cursor/sdk` call can pass it

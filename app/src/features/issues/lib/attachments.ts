@@ -2,9 +2,9 @@ import type { IssueKind } from "@server/schemas";
 import { kindHas } from "@server/kind";
 import { ISSUE_LINK_PREFIX } from "./links";
 
-/** Attachments are allowed on every kind that has the attachments capability. */
+/** The attachments panel and upload show on every kind with the detail attachments capability. */
 export function supportsAttachments(kind: IssueKind): boolean {
-  return kindHas(kind, "attachments");
+  return kindHas(kind, "detailAttachments");
 }
 
 export function isImageMime(mime: string): boolean {

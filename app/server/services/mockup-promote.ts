@@ -30,6 +30,8 @@ import {
   resolveMockupConversationId,
 } from "./mockup-scratch.js";
 import type { CaptureResult, ViewportName } from "./mockup-story-capture.js";
+import { liveBundleName } from "./outline-attachments.js";
+import { STORY_FILE_RE } from "./replay-bundle.js";
 import { slugify } from "./slug.js";
 
 export type PromoteMode = "candidate" | "chosen" | "copy";
@@ -53,7 +55,6 @@ export interface PendingAttachment {
 }
 
 const CANDIDATE_PREFIX = "mockup-candidate-";
-const STORY_FILE_RE = /\.stories\.(tsx|ts|jsx|js|mdx)$/;
 
 export function stateSlug(storyId: string, directionId: string): string {
   const slug = slugify(storyId);
@@ -97,10 +98,6 @@ export function chosenAttachmentName(
   viewport: ViewportName,
 ): string {
   return `mockup-${directionId}-${stateSlug(storyId, directionId)}-${viewport}.png`;
-}
-
-export function chosenArchiveName(directionId: string): string {
-  return `mockup-${directionId}.tar.gz`;
 }
 
 export function chosenPngPrefix(directionId: string): string {
@@ -191,7 +188,7 @@ export function matchesChosenArchiveForReplace(
   name: string,
   directionId: string,
 ): boolean {
-  if (name === chosenArchiveName(directionId)) return true;
+  if (name === liveBundleName(directionId)) return true;
   const prefix = `mockup-${directionId}.tar-`;
   if (!name.startsWith(prefix) || !name.endsWith(".gz")) return false;
   const n = name.slice(prefix.length, -".gz".length);
@@ -292,7 +289,7 @@ export function createDirectionArchive(
   }
 
   const staging = mkdtempSync(join(tmpdir(), "mockup-promote-archive-"));
-  const archivePath = join(staging, chosenArchiveName(directionId));
+  const archivePath = join(staging, liveBundleName(directionId));
   try {
     copyFile(harnessPath, join(staging, "harness.json"));
     for (const rel of storyRels) {
@@ -306,7 +303,7 @@ export function createDirectionArchive(
     );
     if (packed.status !== 0) {
       throw new Error(
-        `failed to create archive ${chosenArchiveName(directionId)}: ${packed.stderr || packed.stdout}`,
+        `failed to create archive ${liveBundleName(directionId)}: ${packed.stderr || packed.stdout}`,
       );
     }
     return archivePath;
@@ -464,7 +461,7 @@ export async function attachCapturedDirection(options: {
     );
     try {
       pending.files.push({
-        name: chosenArchiveName(options.directionId),
+        name: liveBundleName(options.directionId),
         bytes: readFileSync(archivePath),
       });
     } finally {
@@ -483,7 +480,7 @@ export async function copyDirectionArtifacts(options: {
 }): Promise<PromoteResult> {
   listAttachments(options.issueId);
   const source = listAttachments(options.fromIssueId);
-  const archive = chosenArchiveName(options.directionId);
+  const archive = liveBundleName(options.directionId);
   const otherDirectionIds = directionIdsFromArchives(
     source.map((att) => att.name),
   );

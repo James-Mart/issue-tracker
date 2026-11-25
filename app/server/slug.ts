@@ -2,7 +2,8 @@
 // hyphen-separated groups, no leading/trailing/doubled hyphen. Kept at the
 // server root so schemas and services share one source of truth without
 // schemas depending on the services tree.
-export const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SLUG_PATTERN = "[a-z0-9]+(?:-[a-z0-9]+)*";
+export const SLUG_RE = new RegExp(`^${SLUG_PATTERN}$`);
 
 export function isSlugSafe(value: string): boolean {
   return SLUG_RE.test(value);

@@ -93,15 +93,21 @@ export function registerKindAdd(
         "--description-file <path>",
         "read the outline body from a file (use - for stdin)",
       )
-      .action((opts: { in: string; title: string; descriptionFile: string }) =>
-        run(() =>
-          create({
-            kind: "outline",
-            title: opts.title,
-            partOf: opts.in,
-            description: readCliFileArg(opts.descriptionFile),
-          }),
-        ),
+      .option(
+        "--source-idea <ideaId>",
+        "the Idea this outline was planned from; its replay bundles move onto the outline",
+      )
+      .action(
+        (opts: { in: string; title: string; descriptionFile: string; sourceIdea?: string }) =>
+          run(() =>
+            create({
+              kind: "outline",
+              title: opts.title,
+              partOf: opts.in,
+              description: readCliFileArg(opts.descriptionFile),
+              sourceIdea: opts.sourceIdea,
+            }),
+          ),
       );
     return;
   }

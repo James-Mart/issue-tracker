@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import type { Plugin } from "vite";
@@ -8,7 +8,11 @@ import {
   prepareHarnessRoots,
   type HarnessResolveRoots,
 } from "./harness-importer.js";
-import { PLUGIN_APP_DIR, findInAncestors, isInsideDir } from "./harness-paths.js";
+import {
+  findInAncestors,
+  forbiddenTargetSourcePlace,
+  isForbiddenTargetSource,
+} from "./harness-paths.js";
 
 /** One `paths` entry from a target tsconfig, with targets resolved from its baseUrl. */
 export type TsconfigPath = {
@@ -74,13 +78,14 @@ function concretePathPrefix(target: string): string {
   return (star === -1 ? target : target.slice(0, star)).replace(/\/+$/, "");
 }
 
-function assertOutsidePluginApp(mapping: TsconfigPath): void {
+function assertTsconfigSource(realTargetRoot: string, mapping: TsconfigPath): void {
   for (const target of mapping.targets) {
     const concrete = concretePathPrefix(target);
+    // A target that is only `*` has no directory prefix to test.
     if (concrete.length === 0) continue;
-    if (isInsideDir(PLUGIN_APP_DIR, concrete)) {
+    if (isForbiddenTargetSource(realTargetRoot, concrete)) {
       throw new Error(
-        `tsconfig paths for ${JSON.stringify(mapping.pattern)} in ${mapping.configFile} point inside the plugin app ${PLUGIN_APP_DIR}`,
+        `tsconfig paths for ${JSON.stringify(mapping.pattern)} in ${mapping.configFile} point inside ${forbiddenTargetSourcePlace(realTargetRoot)}`,
       );
     }
   }
@@ -107,6 +112,7 @@ export function deriveTsconfigPaths(input: {
   authoredAliases: Record<string, string>;
 }): { paths: TsconfigPath[]; fsAllow: string[] } {
   const authored = new Set(Object.keys(input.authoredAliases).map((key) => aliasPrefix(key)));
+  const realTargetRoot = realpathSync(input.targetRoot);
   const configFiles = new Set<string>();
   for (const start of [...input.aliasDirs, input.targetRoot]) {
     const found = nearestTsconfig(start);
@@ -117,7 +123,7 @@ export function deriveTsconfigPaths(input: {
   for (const configFile of configFiles) {
     for (const mapping of readTsconfigPaths(configFile)) {
       if (authored.has(aliasPrefix(mapping.pattern))) continue;
-      assertOutsidePluginApp(mapping);
+      assertTsconfigSource(realTargetRoot, mapping);
       const existing = byPattern.get(mapping.pattern);
       if (existing && !sameTargets(existing.targets, mapping.targets)) {
         throw new Error(

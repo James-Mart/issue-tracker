@@ -1,5 +1,10 @@
 import { realpathSync } from "node:fs";
-import { PLUGIN_APP_DIR, isInsideDir, sandboxNodeModulesDir } from "./harness-paths.js";
+import {
+  PLUGIN_APP_NODE_MODULES,
+  isForbiddenTargetSource,
+  isInsideDir,
+  sandboxNodeModulesDir,
+} from "./harness-paths.js";
 
 /** Package specifiers only: not relative, absolute, or scheme-prefixed (`virtual:`, `node:`). */
 export const BARE_IMPORT_RE = /^[\w@][^:]*$/;
@@ -35,15 +40,18 @@ export function prepareHarnessRoots(roots: HarnessResolveRoots): PreparedHarness
 }
 
 /**
- * Plugin-app files are Storybook's runtime, and sandbox `node_modules`
- * files are installed packages resolving their own dependencies; both keep
- * Vite's resolution.
+ * The Storybook config directory keeps Vite's resolution, and so does the
+ * rest of the plugin app unless `targetRoot` contains that app — then its
+ * source is the target. The plugin app's `node_modules` and the sandbox's
+ * `node_modules` are installed packages resolving their own dependencies,
+ * and keep Vite's resolution.
  */
 export function harnessImporterKind(
   importer: string,
   roots: PreparedHarnessRoots,
 ): ImporterKind | null {
-  if (isInsideDir(PLUGIN_APP_DIR, importer)) return null;
+  if (isInsideDir(PLUGIN_APP_NODE_MODULES, importer)) return null;
+  if (isForbiddenTargetSource(roots.targetRoot, importer)) return null;
   if (isInsideDir(roots.sandboxNodeModules, importer)) return null;
   if (isInsideDir(roots.scratchRoot, importer)) return "scratch";
   if (isInsideDir(roots.targetRoot, importer)) return "target";

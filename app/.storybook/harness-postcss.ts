@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import postcssrc from "postcss-load-config";
 import type { ProcessOptions } from "postcss";
 import { BARE_IMPORT_RE } from "./harness-importer.js";
-import { PLUGIN_APP_DIR, findInAncestors, isInsideDir } from "./harness-paths.js";
+import { findInAncestors, isForbiddenTargetSource } from "./harness-paths.js";
 
 const TAILWIND_HELPER = fileURLToPath(new URL("./harness-tailwind.cjs", import.meta.url));
 
@@ -69,31 +69,40 @@ function missingPlugin(specifier: string, configFile: string, scratchRoot: strin
   );
 }
 
+/** An allowed install of `specifier` from `parentFile`, or undefined when that parent does not supply one. */
+function resolveAllowedPackage(
+  specifier: string,
+  parentFile: string,
+  realTargetRoot: string,
+  original: ResolveFilename,
+): string | undefined {
+  try {
+    const resolved = original.call(Module, specifier, parentModule(parentFile), false);
+    if (!isForbiddenTargetSource(realTargetRoot, realpathSync(resolved))) return resolved;
+    return undefined;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "MODULE_NOT_FOUND") throw err;
+    return undefined;
+  }
+}
+
 function resolvePackage(
   specifier: string,
   configFile: string,
   scratchRoot: string,
+  realTargetRoot: string,
   original: ResolveFilename,
 ): string {
-  try {
-    const resolved = original.call(Module, specifier, parentModule(configFile), false);
-    if (!isInsideDir(PLUGIN_APP_DIR, realpathSync(resolved))) return resolved;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== "MODULE_NOT_FOUND") throw err;
-  }
-  try {
-    const resolved = original.call(
-      Module,
-      specifier,
-      parentModule(path.join(scratchRoot, "package.json")),
-      false,
-    );
-    if (!isInsideDir(PLUGIN_APP_DIR, realpathSync(resolved))) return resolved;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code !== "MODULE_NOT_FOUND") throw err;
-  }
+  const fromConfig = resolveAllowedPackage(specifier, configFile, realTargetRoot, original);
+  if (fromConfig !== undefined) return fromConfig;
+  const fromScratch = resolveAllowedPackage(
+    specifier,
+    path.join(scratchRoot, "package.json"),
+    realTargetRoot,
+    original,
+  );
+  if (fromScratch !== undefined) return fromScratch;
   throw missingPlugin(specifier, configFile, scratchRoot);
 }
 
@@ -161,6 +170,7 @@ function tailwindWrapperFile(
 type ResolveSession = {
   configFile: string;
   scratchRoot: string;
+  targetRoot: string;
   nearestTailwind: string | undefined;
   original: ResolveFilename;
 };
@@ -170,6 +180,7 @@ function resolvedSpecifier(session: ResolveSession, specifier: string): string {
     specifier,
     session.configFile,
     session.scratchRoot,
+    session.targetRoot,
     session.original,
   );
   if (specifier !== "tailwindcss") return resolved;
@@ -183,11 +194,13 @@ function resolvedSpecifier(session: ResolveSession, specifier: string): string {
 async function withPluginResolve<T>(
   configFile: string,
   scratchRoot: string,
+  targetRoot: string,
   load: () => Promise<T>,
 ): Promise<T> {
   const session: ResolveSession = {
     configFile: realpathSync(configFile),
     scratchRoot: realpathSync(scratchRoot),
+    targetRoot: realpathSync(targetRoot),
     nearestTailwind: nearestConfig(configFile, TAILWIND_CONFIG_FILES),
     original: moduleInternals._resolveFilename,
   };
@@ -261,14 +274,16 @@ export type HarnessPostcss = ProcessOptions & {
 /**
  * Plugins for Vite's `css.postcss`. No target config is an empty list so Vite
  * does not search from the plugin app and run that app's pipeline.
- * Plugin packages resolve from the target, then the sandbox.
+ * Plugin packages resolve from the target, then the sandbox. A package inside
+ * the plugin app is the target's when `targetRoot` contains that app.
  */
 export async function loadHarnessPostcss(
   configFile: string | undefined,
   scratchRoot: string,
+  targetRoot: string,
 ): Promise<HarnessPostcss> {
   if (configFile === undefined) return { plugins: [] };
-  const result = await withPluginResolve(configFile, scratchRoot, () =>
+  const result = await withPluginResolve(configFile, scratchRoot, targetRoot, () =>
     postcssrc({}, path.dirname(configFile)),
   );
   if (!sameFile(result.file, configFile)) {
