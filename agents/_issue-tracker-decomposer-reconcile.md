@@ -33,8 +33,10 @@ Absolute path for this file (Read this exact path):
    each Covered by Task the tree lists: that part of the change already has
    its Task.
 4. **Prose.** For each open Epic and Story in the root whose slice the diff
-   changes, write the updated description and set it per the authoring
-   skill **Source outline (sourceOutline)** reconciliation rule.
+   changes, write the updated description and set it with
+   `issue <kind> set <id> description --file <path>`, following the outline
+   linking rule in the authoring skill section **Source outline
+   (sourceOutline)**.
 5. **Append.** For the Tasks the change still needs beyond the Covered by
    Tasks, author one story-form apply doc per receiving Story and run
    `issue story append <storyId> <file>`. Show its stdout. The receiving
