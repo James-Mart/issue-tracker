@@ -53,6 +53,7 @@ import {
   PlanningNewRunControl,
 } from "./planning-launch-control";
 import { OutlineChannelBusyNote } from "./outline-channel-busy-note";
+import { OutlineReviewDraftNote } from "./outline-review-draft-note";
 import { OutlineDecompositionEmptyState } from "./outline-decomposition-empty";
 import { OutlineNewPlanningSessionControl } from "./outline-new-planning-session";
 import {
@@ -250,6 +251,12 @@ export function ChannelTranscriptPanel({
         runTitle={busyRun.title}
       />
     ) : null;
+  const reviewDraftNote = planningOutline?.pendingDraft ? (
+    <OutlineReviewDraftNote
+      projectId={planningOutline.partOf}
+      reviewId={planningOutline.pendingDraft.review}
+    />
+  ) : null;
   const launchFromList = pendingLaunch
     ? launchTranscriptSession(pendingLaunch, sessions)
     : undefined;
@@ -436,6 +443,7 @@ export function ChannelTranscriptPanel({
     );
     const emptyBody = (
       <>
+        {reviewDraftNote}
         {launchFaultBanner}
         {emptyAction}
         {busyNote}
@@ -581,8 +589,9 @@ export function ChannelTranscriptPanel({
           ) : undefined
         }
         banner={
-          launchFaultBanner || concludedBanner ? (
+          launchFaultBanner || concludedBanner || reviewDraftNote ? (
             <>
+              {reviewDraftNote}
               {launchFaultBanner}
               {concludedBanner}
             </>
