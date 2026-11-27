@@ -26,16 +26,18 @@ export function resolveExecutionGate(
   return codeApprovalRequired === true ? "on" : "off";
 }
 
-/** Session title for a run on an outline. */
+/** Session title for a run on an outline. A decomposer in update mode reads `Update`. */
 export function outlinePlanningSessionTitle(
   role: OutlineSessionRole,
   outlineTitle: string,
+  decomposerMode?: "update",
 ): string {
   if (role === "planner") return planningSessionTitle(outlineTitle);
   if (role === "reconcile" || role === "reconciler") return `Reconcile ${outlineTitle}`;
   if (role === "polish") return `Polish ${outlineTitle}`;
   if (role === "check") return `Check ${outlineTitle}`;
   if (role === "mockup-author") return `Mockups ${outlineTitle}`;
+  if (decomposerMode === "update") return `Update ${outlineTitle}`;
   return `Decompose ${outlineTitle}`;
 }
 
@@ -99,6 +101,21 @@ export function outlineDecomposerSessionMessage(input: {
     `Execution gate: \`${input.executionGate}\`.`;
   if (!input.mergePolicy) return message;
   return `${message} Merge policy: \`${input.mergePolicy}\`.`;
+}
+
+/** First prompt for a decomposer placing new outline work on one existing root. */
+export function outlineDecomposerUpdateSessionMessage(input: {
+  outlineId: string;
+  version: number;
+  rootId: string;
+}): string {
+  return (
+    `Update ${input.rootId} from ${input.outlineId} in the issue tracker. ` +
+    `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
+    `Mode: \`update\`. ` +
+    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`. ` +
+    `Root: \`${input.rootId}\`.`
+  );
 }
 
 /** Optional reconcile inputs a triggering flow passes along with the version. */

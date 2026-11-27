@@ -55,7 +55,6 @@ import {
 import { OutlineChannelBusyNote } from "./outline-channel-busy-note";
 import { OutlineDecompositionEmptyState } from "./outline-decomposition-empty";
 import { OutlineNewPlanningSessionControl } from "./outline-new-planning-session";
-import { OutlineReconciliationNeeded } from "./outline-reconciliation-needed";
 import {
   PlanningConcludedBanner,
   PlanningReadOnlyBadge,
@@ -366,16 +365,6 @@ export function ChannelTranscriptPanel({
     setSelectedId(session.id);
     setPendingStart(session);
   };
-  const channelBusy =
-    Boolean(busyRun) || sessions.some((session) => session.activeRun);
-  const reconciliation =
-    outlineView?.channel === "decomposition" ? (
-      <OutlineReconciliationNeeded
-        outline={outlineView.issue}
-        blocked={channelBusy}
-        onStarted={onSessionStarted}
-      />
-    ) : null;
 
   if (pendingLaunch && !launchId) {
     const copy = detailLaunchPendingCopy(pendingLaunch.kind);
@@ -447,7 +436,6 @@ export function ChannelTranscriptPanel({
     );
     const emptyBody = (
       <>
-        {reconciliation}
         {launchFaultBanner}
         {emptyAction}
         {busyNote}
@@ -565,7 +553,6 @@ export function ChannelTranscriptPanel({
 
   return (
     <ChannelPanelFrame mobileFullViewport={mobileFullViewport}>
-      {reconciliation}
       {mobileFullViewport ? null : desktopHeader}
       <ConversationThread
         key={selectedSession.id}

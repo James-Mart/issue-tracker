@@ -11,12 +11,18 @@ import {
 import { stampedBoardRoots } from "./linked-roots.js";
 import { derive } from "./derive.js";
 import {
+  requireNoPlacement,
   startOutlinePlanningSession,
   type StartOutlinePlanningSessionInput,
 } from "./outline-planning-session.js";
 import { releaseWorkRoot } from "./release-work-root.js";
 import type { ConversationMeta, Issue } from "../schemas.js";
-import type { PlacementChain, PlacementStep } from "../schemas/placement-chain.js";
+import type {
+  PlacementAction,
+  PlacementChain,
+  PlacementStep,
+} from "../schemas/placement-chain.js";
+import { PLACEMENT_FIRST_STEP } from "../../src/features/issues/lib/placement-actions.js";
 import type { TaskingRunOutcome } from "./review-tasking.js";
 
 type OutlineIssue = Extract<Issue, { kind: "outline" }>;
@@ -93,10 +99,19 @@ function requireBehindOpenRoot(outlineId: string, rootId: string): number {
   return root.version;
 }
 
-function followUpSession(
+function stepSession(
   outlineId: string,
-  chain: Omit<PlacementChain, "step"> & { step: "reconciler" | "polish" },
+  chain: PlacementChain,
 ): StartOutlinePlanningSessionInput {
+  if (chain.step === "decomposer") {
+    return {
+      outlineId,
+      role: "decomposer",
+      mode: "update",
+      version: chain.version,
+      rootId: chain.root,
+    };
+  }
   if (chain.step === "reconciler") {
     return {
       outlineId,
@@ -115,31 +130,27 @@ function followUpSession(
 }
 
 /**
- * Start Reconcile only: store the chain at `reconciler`, then open that
- * session. A stored chain or a busy outline channel is `409`. A root that
- * is not an open behind linked root is refused. The chain is cleared when
- * the session does not start.
+ * Start Update or Reconcile only on one root: store the chain at the
+ * action's first step, then open that session. A stored chain or a busy
+ * outline channel is `409`. A root that is not an open behind linked root
+ * is refused. The chain is cleared when the session does not start.
  */
-export async function startRootReconcile(
+export async function startRootPlacement(
   outlineId: string,
   rootId: string,
+  action: PlacementAction,
   sessions: ConversationMessageSessions,
 ): Promise<ConversationMeta> {
   const chain = await serialize(() => {
     const outline = readOutlineOrThrow(outlineId);
-    if (outline.placementChain) {
-      throw new IssueError(
-        "conflict",
-        `outline "${outlineId}" has a placement in progress`,
-      );
-    }
+    requireNoPlacement(outline);
     const from = requireBehindOpenRoot(outlineId, rootId);
-    const next = {
+    const next: PlacementChain = {
       root: rootId,
-      action: "reconcile" as const,
+      action,
       from,
       version: outline.bodyVersion,
-      step: "reconciler" as const,
+      step: PLACEMENT_FIRST_STEP[action],
     };
     writeOutline({
       ...outline,
@@ -150,7 +161,7 @@ export async function startRootReconcile(
   });
   try {
     return await startOutlinePlanningSession(
-      followUpSession(outlineId, chain),
+      stepSession(outlineId, chain),
       sessions,
     );
   } catch (error) {
@@ -221,7 +232,7 @@ export async function classifyPlacementRun(
 
   try {
     await startOutlinePlanningSession(
-      followUpSession(outline.id, { ...chain, step: next }),
+      stepSession(outline.id, { ...chain, step: next }),
       sessions,
     );
   } catch (error) {

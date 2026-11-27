@@ -200,6 +200,16 @@ or Tasks. It skips any Story whose `needsAttention` is true.
   skipped stays behind until a later run stamps it. Stamp the prompt's
   Version, including when the outline's latest body is newer.
 
+### Decomposer update
+
+The decomposer in update mode places new Stories and Tasks under one open
+root and leaves every existing Epic and Story description as it is.
+
+- Stamp Version on each Story and Task this run created:
+  `issue <kind> set <id> sourceOutline '{"outline":"<outlineId>","version":<n>}'`
+  Existing issues keep their stamps; the reconciler run that follows
+  stamps the issues it rewrites.
+
 ### Decomposer reconcile
 
 Reconciling a newer version `<n>` into an open root stamped with that
@@ -278,7 +288,7 @@ Before done:
   (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
 - Outline decompositions stamp `sourceOutline` on every created item after
-  `apply`. Reconciler and decomposer reconcile follow
+  `apply`. Reconciler, decomposer update, and decomposer reconcile follow
   [Source outline (sourceOutline)](#source-outline-sourceoutline). Each Epic
   and Story links to the outline sections it builds on.
 - Every Task with no diff uses imperative `noDiff` after `apply` or

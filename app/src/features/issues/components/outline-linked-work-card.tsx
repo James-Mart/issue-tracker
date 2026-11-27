@@ -6,7 +6,7 @@ import { ShellInlineFault, ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
-import { useReconcileRoot } from "../api/mutations";
+import { usePlaceOnRoot } from "../api/mutations";
 import { useIssuesIncludingArchived } from "../hooks/use-issues-with-archived";
 import {
   type IssueBackLocationState,
@@ -19,6 +19,7 @@ import {
   type LinkedRoot,
 } from "../lib/outline-links";
 import { writeIssueDetailTabParam } from "../lib/issue-detail-tabs";
+import type { PlacementAction } from "../lib/placement-actions";
 import { linkedRootVersionLabel } from "../lib/project-outlines";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { AxisChips, BEHIND_AXIS_CHIP } from "./axis-chips";
@@ -35,7 +36,7 @@ export function OutlineLinkedWorkCard({
   const showArchived = useIssueUiStore((state) => state.showArchived);
   const query = useIssuesIncludingArchived(showArchived);
   const placementLive = query.data?.derived[issue.id]?.placementLive === true;
-  const reconcile = useReconcileRoot(issue.id);
+  const place = usePlaceOnRoot(issue.id);
   const [, setSearchParams] = useSearchParams();
   const roots = useMemo(() => {
     if (!query.data) return [];
@@ -103,19 +104,23 @@ export function OutlineLinkedWorkCard({
                 latest={issue.bodyVersion}
                 projectId={issue.partOf}
                 linkState={linkState}
-                showReconcile={root.open && root.behind && !placementLive}
-                reconcilePending={
-                  reconcile.isPending && reconcile.variables === root.id
+                showActions={root.open && root.behind && !placementLive}
+                placePending={
+                  place.isPending && place.variables?.rootId === root.id
                 }
-                onReconcile={() => {
-                  reconcile.mutate(root.id, {
-                    onSuccess: () => {
-                      setSearchParams(
-                        (prev) => writeIssueDetailTabParam(prev, "decomposition"),
-                        { replace: true },
-                      );
+                onPlace={(action) => {
+                  place.mutate(
+                    { rootId: root.id, action },
+                    {
+                      onSuccess: () => {
+                        setSearchParams(
+                          (prev) =>
+                            writeIssueDetailTabParam(prev, "decomposition"),
+                          { replace: true },
+                        );
+                      },
                     },
-                  });
+                  );
                 }}
               />
             </li>
@@ -143,17 +148,17 @@ function LinkedRootRow({
   latest,
   projectId,
   linkState,
-  showReconcile,
-  reconcilePending,
-  onReconcile,
+  showActions,
+  placePending,
+  onPlace,
 }: {
   root: LinkedRoot;
   latest: number;
   projectId: string;
   linkState: ReturnType<typeof issueBackNavigateState>;
-  showReconcile: boolean;
-  reconcilePending: boolean;
-  onReconcile: () => void;
+  showActions: boolean;
+  placePending: boolean;
+  onPlace: (action: PlacementAction) => void;
 }) {
   const version = linkedRootVersionLabel(root.version, latest);
   return (
@@ -166,7 +171,7 @@ function LinkedRootRow({
         state={linkState}
         className={cn(
           "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md border border-transparent py-2.5 text-foreground hover:border-[hsl(var(--rail-lit))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          showReconcile
+          showActions
             ? "shell:col-span-3 shell:grid shell:grid-cols-subgrid shell:gap-x-4"
             : "shell:col-span-4 shell:grid shell:grid-cols-subgrid shell:gap-x-4",
         )}
@@ -192,10 +197,10 @@ function LinkedRootRow({
         <span
           className={cn(
             "flex items-center justify-end gap-2",
-            showReconcile && "shell:hidden",
+            showActions && "shell:hidden",
           )}
         >
-          {root.behind && !showReconcile ? (
+          {root.behind && !showActions ? (
             <AxisChips chips={[BEHIND_AXIS_CHIP]} />
           ) : null}
           <ChevronRight
@@ -204,7 +209,7 @@ function LinkedRootRow({
           />
         </span>
       </Link>
-      {showReconcile ? (
+      {showActions ? (
         <span className="flex items-center justify-end gap-2 pb-2.5 shell:col-start-4 shell:pb-0">
           {root.behind ? <AxisChips chips={[BEHIND_AXIS_CHIP]} /> : null}
           <Button
@@ -212,10 +217,20 @@ function LinkedRootRow({
             variant="outline"
             size="sm"
             data-testid={`outline-root-reconcile-${root.id}`}
-            disabled={reconcilePending}
-            onClick={onReconcile}
+            disabled={placePending}
+            onClick={() => onPlace("reconcile")}
           >
             Reconcile only
+          </Button>
+          <Button
+            type="button"
+            variant="current"
+            size="sm"
+            data-testid={`outline-root-update-${root.id}`}
+            disabled={placePending}
+            onClick={() => onPlace("update")}
+          >
+            Update
           </Button>
         </span>
       ) : null}

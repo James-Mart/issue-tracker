@@ -1,9 +1,15 @@
 import { z } from "zod";
+import {
+  PLACEMENT_ACTIONS,
+  PLACEMENT_STEPS,
+  type PlacementAction,
+  type PlacementStep,
+} from "../../src/features/issues/lib/placement-actions.js";
+
+export { PLACEMENT_ACTIONS };
+export type { PlacementAction, PlacementStep };
 
 const nonEmpty = z.string().min(1);
-
-export const PLACEMENT_ACTIONS = ["update", "reconcile"] as const;
-export const PLACEMENT_STEPS = ["decomposer", "reconciler", "polish"] as const;
 
 /**
  * One in-progress placement on an outline. `version` is the outline
@@ -20,5 +26,3 @@ export const placementChainSchema = z
   .strict();
 
 export type PlacementChain = z.infer<typeof placementChainSchema>;
-export type PlacementAction = PlacementChain["action"];
-export type PlacementStep = PlacementChain["step"];

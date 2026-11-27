@@ -38,6 +38,10 @@ import type { Attachment } from "@server/services/attachments";
 import type { DeletionResult } from "@server/services/deletion";
 import { subtreeIds } from "@server/services/subtree";
 import { attachmentsApiPath } from "../lib/attachments";
+import {
+  PLACEMENT_FIRST_STEP,
+  type PlacementAction,
+} from "../lib/placement-actions";
 import type { OutboxComment } from "../lib/comment-outbox";
 import { useCommentEditStore } from "../store/use-comment-edit-store";
 import { useCommentOutboxStore } from "../store/use-comment-outbox-store";
@@ -640,23 +644,20 @@ export function useStartOutlinePlanningSession(outlineId: string) {
   });
 }
 
-function useStartOutlineRoleSession(
-  outlineId: string,
-  action: "decompose" | "reconcile",
-  outlineRole: Extract<OutlineSessionRole, "decomposer" | "reconcile">,
-) {
+/** Start a decomposer on the outline's decomposition channel at its latest version. */
+export function useDecomposeOutline(outlineId: string) {
   const qc = useQueryClient();
   return useMutation<StartedChannelSession, Error, void>({
     mutationFn: () =>
       request<StartedChannelSession>(
-        `/api/issues/${encodeURIComponent(outlineId)}/outline/${action}`,
+        `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
         { method: "POST", body: {} },
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
       rememberStartedChannelSession(qc, outlineId, "decomposition", {
         ...data,
-        outlineRole,
+        outlineRole: "decomposer",
       });
     },
     onSettled: () => {
@@ -665,30 +666,25 @@ function useStartOutlineRoleSession(
   });
 }
 
-/** Start a decomposer on the outline's decomposition channel at its latest version. */
-export function useDecomposeOutline(outlineId: string) {
-  return useStartOutlineRoleSession(outlineId, "decompose", "decomposer");
-}
+export type RootPlacement = { rootId: string; action: PlacementAction };
 
-/** Start reconcile on the outline's decomposition channel at its latest version. */
-export function useReconcileOutline(outlineId: string) {
-  return useStartOutlineRoleSession(outlineId, "reconcile", "reconcile");
-}
-
-/** Start reconciler, then plan polish, on one behind open root. */
-export function useReconcileRoot(outlineId: string) {
+/**
+ * Start Update (decomposer, reconciler, then plan polish) or Reconcile only
+ * (reconciler, then plan polish) on one behind open root.
+ */
+export function usePlaceOnRoot(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<StartedChannelSession, Error, string>({
-    mutationFn: (rootId) =>
+  return useMutation<StartedChannelSession, Error, RootPlacement>({
+    mutationFn: ({ rootId, action }) =>
       request<StartedChannelSession>(
-        `/api/issues/${encodeURIComponent(outlineId)}/roots/${encodeURIComponent(rootId)}/reconcile`,
+        `/api/issues/${encodeURIComponent(outlineId)}/roots/${encodeURIComponent(rootId)}/${action}`,
         { method: "POST", body: {} },
       ),
     onError: (err) => toast.error(messageOf(err)),
-    onSuccess: (data) => {
+    onSuccess: (data, { action }) => {
       rememberStartedChannelSession(qc, outlineId, "decomposition", {
         ...data,
-        outlineRole: "reconciler",
+        outlineRole: PLACEMENT_FIRST_STEP[action],
       });
     },
     onSettled: () => {

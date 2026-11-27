@@ -77,7 +77,7 @@ async function load() {
 describe("classifyPlacementRun", () => {
   it("runs polish after the reconciler and releases when polish finishes", async () => {
     const {
-      startRootReconcile,
+      startRootPlacement,
       classifyPlacementRun,
       listConversations,
       transcriptPathOf,
@@ -86,7 +86,7 @@ describe("classifyPlacementRun", () => {
       sessions,
       list,
     } = await load();
-    const reconciler = await startRootReconcile("spec", "root", sessions);
+    const reconciler = await startRootPlacement("spec", "root", "reconcile", sessions);
     await update("spec", { description: "version three\n" });
     expect(readIssue("spec").placementChain).toMatchObject({ version: 2, step: "reconciler" });
     expect(readIssue("spec").bodyVersion).toBe(3);
