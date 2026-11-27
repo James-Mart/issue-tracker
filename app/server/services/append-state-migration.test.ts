@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe("ensureAppendStateCleared", () => {
-  it("clears appendTo on Ideas and stored appendLock, then no-ops", async () => {
+  it("clears appendTo, appendLock, and outline pendingAppends, then no-ops", async () => {
     writeIssue("capture", {
       kind: "idea",
       title: "Capture",
@@ -44,7 +44,32 @@ describe("ensureAppendStateCleared", () => {
       partOf: "p",
       bodyVersion: 1,
       appendLock: { ideaId: "capture", ideaTitle: "Capture" },
+      pendingAppends: [
+        {
+          targetStory: "open-story",
+          sourceIdea: "capture",
+          executionGate: "auto",
+          codeApprovalRequired: false,
+        },
+      ],
       order: 2,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    writeIssue("later", {
+      kind: "outline",
+      title: "Later",
+      partOf: "p",
+      bodyVersion: 2,
+      pendingAppends: [
+        {
+          targetStory: "open-story",
+          sourceIdea: "capture",
+          executionGate: true,
+          codeApprovalRequired: true,
+        },
+      ],
+      order: 3,
       createdAt: AT,
       updatedAt: AT,
     });
@@ -52,10 +77,13 @@ describe("ensureAppendStateCleared", () => {
 
     const { ensureAppendStateCleared } = await import("./append-state-migration.js");
     const first = ensureAppendStateCleared();
-    expect(first.updated.sort()).toEqual(["capture", "spec"]);
+    expect([...first.updated].sort()).toEqual(["capture", "later", "spec"]);
     expect(readIssue("capture").appendTo).toBeUndefined();
     expect(readIssue("spec").appendLock).toBeUndefined();
+    expect(readIssue("spec").pendingAppends).toBeUndefined();
     expect(readIssue("spec").bodyVersion).toBe(1);
+    expect(readIssue("later").pendingAppends).toBeUndefined();
+    expect(readIssue("later").bodyVersion).toBe(2);
     expect(readFileSync(join(dir, "p", "issue.json"), "utf8")).toBe(before);
 
     expect(ensureAppendStateCleared().updated).toEqual([]);

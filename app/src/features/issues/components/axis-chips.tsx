@@ -40,12 +40,6 @@ export const BEHIND_AXIS_CHIP: AxisChip = {
   label: "behind",
 };
 
-/** Story still waiting on an append reconcile. */
-export const PENDING_APPEND_AXIS_CHIP: AxisChip = {
-  variant: "secondary",
-  label: "pending append",
-};
-
 /** Shared status/axis chip row (status, review, retro, …). */
 export function AxisChips({
   chips,

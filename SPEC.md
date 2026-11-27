@@ -324,11 +324,11 @@ These are computed by `derive()` and never written to disk (see
   status is not `done`. Also `issue epic|story|task get … behind`. Tree chip
   `behind` when true. `issue view` prints `behind: true` when the flag holds.
 - **Reconciliation needed** — derived on Outlines. `true` when any open
-  linked root is behind the outline's latest version, or `pendingAppends`
-  is non-empty; otherwise `false`. An open linked root is the set
-  `issue outline open-roots` lists. Behind stays derived from that root's
-  `sourceOutline` (see **behind**). Also `issue outline get <id>
-  reconciliationNeeded`, which prints `true` or `false`.
+  linked root is behind the outline's latest version; otherwise `false`.
+  An open linked root is the set `issue outline open-roots` lists. Behind
+  stays derived from that root's `sourceOutline` (see **behind**). Also
+  `issue outline get <id> reconciliationNeeded`, which prints `true` or
+  `false`.
 - **mergeBase** — tree chip `mergeBase=<ref>` / `mergeBase=(unset)`;
   also `issue story get … mergeBase`. Resolution:
   [stacked-PR merge model](#the-stacked-pr-merge-model). No second name
@@ -643,12 +643,6 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   unarchived root Epic or project-level Story whose `sourceOutline` names
   this outline. It is open when it is an Epic whose `epicStatus` is not
   `done`, or a Story that is not `merged`.
-- **`apply-append`** (outline) — `issue outline apply-append <id> <sourceIdea>`.
-  Applies the gates of the pending append that `<sourceIdea>` concluded
-  onto the outline and drops that entry (see
-  [Pending appends](#pending-appends)). Prints nothing. An outline with no
-  pending append from that Idea, or a target Story that no longer exists,
-  is an error.
 - **`draft set`** (outline) — `issue outline draft set <id> <file>`.
   Replaces the outline's one pending draft with the file (`-` reads stdin).
   Does not add a version. A non-outline id is an error.
@@ -1173,9 +1167,9 @@ A one-time migration moves outline sessions from `planning` to `decomposition` w
 
 The Decomposition tab starts a decomposer from **Decompose** when the outline is Ready to decompose. The execution-gate control beside Decompose opens on the outline's stored `executionGate` (`auto`, `true`, or `false`; absent is treated as `auto`). **Decompose** saves that value on the outline, then posts `POST /api/issues/:id/outline/decompose` with `{}`. A body that carries `executionGate`, `mergePolicy`, or any other field is refused. The handler reads `executionGate` and `mergePolicy` from the outline and calls `startOutlinePlanningSession` for role `decomposer` on that outline's `decomposition` channel at the latest `bodyVersion`. The prompt's execution gate is `on` when the stored gate is `true`, `off` when it is `false`, and, when it is `auto` or absent, `on` when `codeApprovalRequired` is true and `off` otherwise. A stored merge policy is appended to the prompt; a blank one is refused. The response is `201` `{ id, title, model }`, and that session is selected. The line under the control uses the same execution-gate effect lines as the Idea Planning tab. With `outOfBand` set, that tab's empty state reads **Implemented out of band**, shows the out-of-band toggle, and has no Decompose control; it says that turning the toggle off makes the outline ready to decompose. Turning the toggle off saves `outOfBand: false`. With `outOfBand` not set, the toggle sits beside the execution-gate control beside Decompose. A non-outline id, a non-empty body, or a Project with no workspace is an error. A busy session on any outline channel is `409`, the same refusal as any other outline start. The decomposer does not queue the new root; plan-polish's [release](#plan-release) is what queues it.
 
-`POST /api/issues/:id/outline/reconcile` with `{}` starts reconcile on that outline's `decomposition` channel at the latest `bodyVersion`. Any field in the body is refused. The handler calls `startOutlinePlanningSession` for role `reconcile` with no target Story, covered-by list, or source Idea. The response is `201` `{ id, title, model }`, and the Decomposition tab selects that session. A non-outline id, a non-empty body, or a Project with no workspace is an error. A busy session on any outline channel is `409`. **Reconciliation needed**, on the Decomposition tab, lists each behind open linked root and each pending append's target Story, with one **Reconcile** action that posts that empty body. The section is absent when that list is empty.
+`POST /api/issues/:id/outline/reconcile` with `{}` starts reconcile on that outline's `decomposition` channel at the latest `bodyVersion`. Any field in the body is refused. The handler calls `startOutlinePlanningSession` for role `reconcile` with no target Story, covered-by list, or source Idea. The response is `201` `{ id, title, model }`, and the Decomposition tab selects that session. A non-outline id, a non-empty body, or a Project with no workspace is an error. A busy session on any outline channel is `409`. **Reconciliation needed**, on the Decomposition tab, lists each behind open linked root, with one **Reconcile** action that posts that empty body. The section is absent when that list is empty.
 
-A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Idea is archived once every touched root is polished. It reads the outline's [pending appends](#pending-appends) the same way: each entry's Tasks go to its `targetStory`, and once every touched root is polished it runs `issue outline apply-append` for each entry.
+A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Idea is archived once every touched root is polished.
 
 `issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `decomposition` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. A source Idea, when given, is appended as `Source idea`. No execution gate and no merge policy are sent. A busy session on any outline channel is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Decomposition tab with that reconcile session selected. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
 
@@ -1191,18 +1185,9 @@ When the Idea's `outOfBand` is true or its `decompositionGate` is true, conclude
 
 A zero exit prints `concludedAt`, then the decomposer session id when one started.
 
-<a id="pending-appends"></a>
-
-**Pending appends.** `issue outline get <outlineId> pendingAppends` prints a JSON list of `{ targetStory, sourceIdea, executionGate, codeApprovalRequired }`, oldest first, and prints nothing when none is pending. An outline may hold several. The outline page shows Pending appends only when `pendingAppends` is non-empty. With none, the page has no pending-appends section, heading, or empty state. Patches to the field are refused. Reconcile appends each entry's Tasks to its `targetStory`, brings every other open linked root up to the version, and then runs `issue outline apply-append <outlineId> <sourceIdea>` for each entry. Apply, in one serialized write, drops the entry and applies its gates to the target Story:
-
-- When `codeApprovalRequired` is true, the target Story and any descendant whose effective merge policy ranks above `manual` are lowered to `manual`.
-- The execution gate decides whether the target Story's work root joins its Project's [work queue](#work-queue). `true` leaves the queue alone. `false` queues the root when it is idle; a root that manual enqueue would refuse (holding a slot through an existing implementing session, already queued or parked, finished, archived, or blocked) is left as it is. `auto` follows `codeApprovalRequired` the same way release does: `true` waits, otherwise the root is queued as for `false`.
-
-A later [release](#plan-release) of that root leaves this lowered merge policy and this queue choice in place.
-
 **Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The Decomposition tab's empty state reads **Ready to decompose** when it is true. The cockpit lists each such outline in a **Ready to decompose** group, using that page's section, project grouping, and row pattern. An outline with `outOfBand` true is absent from the group. Each row opens the outline at `tab=decomposition`. The cockpit group of epics and stories that can start implementation is labeled **Ready for implementation**.
 
-**Reconciliation needed** is derived. `issue outline get <outlineId> reconciliationNeeded` prints `true` or `false`. It is true when any open linked root is behind the current version, or `pendingAppends` is non-empty. Otherwise it is false. Behind stays derived from each root's `sourceOutline`. A planner revision saves the next version with `issue outline set <id> description` and does not start reconciliation. Review-driven draft publish starts reconcile on the outline's `decomposition` channel when an amended submission becomes `done`.
+**Reconciliation needed** is derived. `issue outline get <outlineId> reconciliationNeeded` prints `true` or `false`. It is true when any open linked root is behind the current version. Otherwise it is false. Behind stays derived from each root's `sourceOutline`. A planner revision saves the next version with `issue outline set <id> description` and does not start reconciliation. Review-driven draft publish starts reconcile on the outline's `decomposition` channel when an amended submission becomes `done`.
 
 <a id="planner-handoff"></a>
 
@@ -1498,7 +1483,6 @@ Outline — the common-to-every-kind fields plus:
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | absent until conclude copies the Idea's policy; absent when the base is trunk |
 | `outOfBand` | boolean? | absent until conclude copies the Idea's value (`false` when the Idea's default applies); stays settable on the outline; `true` means implemented outside the tracker |
 | `concludedAt` | ISO string? | set by conclude; system-written; `issue outline get <id> concludedAt` prints it; unset until then |
-| `pendingAppends` | array? | system-written; one `{ targetStory, sourceIdea, executionGate, codeApprovalRequired }` entry reconcile has not yet applied, oldest first; absent when none (see [Pending appends](#pending-appends)) |
 
 No assignee, needs-attention, stored status, worktree, or comments.
 Attachments are limited to the [outline mockup](#outline-mockups) names. Not a
@@ -2796,9 +2780,9 @@ so cannot drift:
   stored half for every Outline. `list()` clears it while a decomposition
   run is live. `issue outline get <id> readyToDecompose` prints `true` or
   `false`. See [Conclude](#conclude).
-- **Outline `reconciliationNeeded`** — `true` when `pendingAppends` is
-  non-empty, or any open linked root has derived `behind`; otherwise
-  `false`. An open linked root is the set `issue outline open-roots` lists.
+- **Outline `reconciliationNeeded`** — `true` when any open linked root has
+  derived `behind`; otherwise `false`. An open linked root is the set
+  `issue outline open-roots` lists.
   `behind` stays derived from that root's `sourceOutline`. Computed by
   `derive()`. `issue outline get <id> reconciliationNeeded` prints `true`
   or `false`. See [Conclude](#conclude).

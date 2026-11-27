@@ -344,7 +344,6 @@ export const OUTLINE_GET_FIELDS = {
   mergePolicy: STORED,
   outOfBand: STORED,
   concludedAt: STORED,
-  pendingAppends: STORED,
   readyToDecompose: DERIVED,
   reconciliationNeeded: DERIVED,
   order: STORED,

@@ -8,9 +8,10 @@ export interface AppendStateMigrationResult {
 }
 
 /**
- * Delete stored `appendTo` on an Idea and `appendLock` on any issue.
- * Rewrites an issue.json only when one of those keys is still present, so
- * a later pass can clear more keys on a store this one already rewrote.
+ * Delete stored `appendTo` on an Idea, `appendLock` on any issue, and
+ * `pendingAppends` on an Outline. Rewrites an issue.json only when one of
+ * those keys is still present, so a later pass can clear more keys on a
+ * store this one already rewrote.
  */
 export function ensureAppendStateCleared(): AppendStateMigrationResult {
   const updated: string[] = [];
@@ -24,6 +25,10 @@ export function ensureAppendStateCleared(): AppendStateMigrationResult {
     }
     if ("appendLock" in obj) {
       delete obj.appendLock;
+      changed = true;
+    }
+    if (issue.kind === "outline" && "pendingAppends" in obj) {
+      delete obj.pendingAppends;
       changed = true;
     }
     if (!changed) continue;
