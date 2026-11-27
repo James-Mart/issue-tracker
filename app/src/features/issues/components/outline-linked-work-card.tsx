@@ -30,8 +30,11 @@ import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
  */
 export function OutlineLinkedWorkCard({
   issue,
+  bodyEditing,
 }: {
   issue: Extract<IssueDetail, { kind: "outline" }>;
+  /** True while the outline body card is editing the next version. */
+  bodyEditing: boolean;
 }) {
   const showArchived = useIssueUiStore((state) => state.showArchived);
   const query = useIssuesIncludingArchived(showArchived);
@@ -106,7 +109,11 @@ export function OutlineLinkedWorkCard({
                 projectId={issue.partOf}
                 linkState={linkState}
                 showActions={
-                  root.open && root.behind && !placementLive && !reviewDraftOpen
+                  root.open &&
+                  root.behind &&
+                  !placementLive &&
+                  !reviewDraftOpen &&
+                  !bodyEditing
                 }
                 placePending={
                   place.isPending && place.variables?.rootId === root.id
