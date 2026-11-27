@@ -1,5 +1,6 @@
 import type { Issue } from "../schemas.js";
 import { ensureAppendStateCleared } from "./append-state-migration.js";
+import { discardUnownedOutlineDrafts } from "./outline-draft-migration.js";
 import { ensureArchivedBackfilled } from "./archived.js";
 import { ensureGithubCommentsMigrated } from "./github-comment-migration.js";
 import { ensureKindRenamed } from "./kind-rename.js";
@@ -25,6 +26,7 @@ export function runStoreMigrations(persistIssue: (issue: Issue) => void): void {
   // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
   ensureKindRenamed();
   ensureAppendStateCleared();
+  discardUnownedOutlineDrafts();
   ensureMergeBaseStripped(persistIssue);
   ensureArchivedBackfilled(persistIssue);
   ensureMergedAtBackfilled(persistIssue);

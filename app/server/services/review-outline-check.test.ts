@@ -66,6 +66,11 @@ describe("review outline check", () => {
     const { threadId, submissionId, conversationId } = await submitAndCheck(api, sessions);
 
     await api.setOutlineDraft(OUTLINE_ID, "amended\n");
+    expect(api.readOutlineDraft(OUTLINE_ID)).toEqual({
+      body: "amended\n",
+      review: REVIEW_ID,
+      submission: submissionId,
+    });
     await expect(
       api.recordOutlineCheckVerdict(REVIEW_ID, submissionId, "proposed"),
     ).resolves.toMatchObject({ status: "waiting" });

@@ -648,24 +648,20 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   this outline. It is open when it is an Epic whose `epicStatus` is not
   `done`, or a Story that is not `merged`.
 - **`draft set`** (outline) — `issue outline draft set <id> <file>`.
-  Replaces the outline's one pending draft with the file (`-` reads stdin).
-  Does not add a version. A non-outline id is an error.
+  The outline-check gate's write. The file (`-` reads stdin) is the body.
+  When a draft is already open, this replaces its text and keeps
+  `{ review, submission }`. When none is open, this opens one owned by the
+  single outline check in `checking` for this outline, stored as
+  `{ body, review, submission }`. It does not add a version. A non-outline
+  id, no open draft and no such check, or more than one such check, is an
+  error.
+- **`draft approve`** (outline) — `issue outline draft approve <id>`.
+  Settles that draft's outline-check gate as `yes`, the same path as
+  `issue review outline-check yes`. Prints `settled <version>`.
 - **`draft discard`** (outline) — `issue outline draft discard <id>`.
-  Deletes the pending draft. An outline with no pending draft is an error.
-- **`draft update`** (outline) — `issue outline draft update <id>
-  [--target-story <id>] [--covered-by <taskIds...>] [--source-idea <id>]`.
-  When the draft text differs from the saved body, saves it as the next
-  version, drops the draft, and starts reconciliation on the outline's
-  decomposition channel at that version. Prints the new version.
-  `--target-story` is the Story that receives new Tasks. `--covered-by` is
-  one or more Task ids the triggering flow already created, separated by
-  spaces or commas. `--source-idea` is the Idea recorded as `sourceIdea` on
-  the Tasks appended to the target Story; reconciliation archives it after
-  polish. A missing draft, a draft that matches the saved body, a target
-  that is not a Story, a covered-by id that is not a Task, a duplicate
-  covered-by id, a source idea that is not an Idea, a source idea without a
-  target Story, a Project with no workspace, or a busy planning session is
-  an error. Every refusal happens before the version is saved.
+  Settles that draft's outline-check gate as `not-now`, the same path as
+  `issue review outline-check not-now`. Prints `settled <version>`. An
+  outline with no pending draft is an error.
 - **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
   returns `{ version, body }`. `<n>` is a positive integer through
   `bodyVersion`. The latest body is `description.md`; an older body is
@@ -674,18 +670,19 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `issue outline diff` (empty when the bodies match). A non-outline id, a
   missing or non-integer version, or a version past `bodyVersion` is an error.
 - **HTTP** (outline draft) — `PUT /api/issues/:id/outline-draft` with
-  `{ body }` replaces the pending draft and returns `{ body }`. It does not
-  add a version. `DELETE /api/issues/:id/outline-draft` drops it and returns
-  204. `POST /api/issues/:id/outline-draft/update` with optional
-  `{ targetStory?, coveredBy?, sourceIdea? }` saves a differing draft as the
-  next version and starts reconciliation. Unknown fields are refused. The
-  response is `201` `{ id, title, model, version }` for the planning
-  session. While a draft exists, `GET /api/issues/:id` includes
-  `pendingDraft`. A missing draft, a draft that matches the saved body, a
-  non-outline id, a `targetStory` that is not a Story, a `coveredBy` id that
-  is not a Task, a `sourceIdea` that is not an Idea or comes without
-  `targetStory`, a Project with no workspace, or a busy planning session is
-  an error. Every refusal happens before the version is saved.
+  `{ body }` rewrites the open draft's text and returns
+  `{ body, review, submission }`. It does not add a version and does not
+  open a draft. `POST /api/issues/:id/outline-draft/approve` with `{}`
+  settles the gate as `yes` and returns the settled outline check.
+  `DELETE /api/issues/:id/outline-draft` settles the gate as `not-now` and
+  returns 204. Unknown fields are refused. While a review-owned draft
+  exists, `GET /api/issues/:id` includes `pendingDraft`
+  `{ body, review, submission }`. A missing draft, a non-outline id, a gate
+  that is not `waiting`, or a draft that matches the saved body on approve
+  is an error. Approve's refusal happens before the version is saved. A
+  startup migration discards a pending draft that is not review-owned: a
+  legacy `draft.md`, or a `draft.json` that does not record `review` and
+  `submission`. A review-owned draft is left in place.
 - **`version`** (outline get) — `issue outline get <id> version` prints the
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
@@ -1177,9 +1174,9 @@ The Decomposition tab starts a decomposer from **Decompose** when the outline is
 
 A decomposer in `update` mode takes `Mode` (`update`), `Outline`, `Version`, and `Root`. It reads the root's whole subtree and diffs the outline from each issue's own stamp through `Version`. It places new Stories and Tasks where they belong, stamps them at `Version`, and leaves existing Epic and Story descriptions unchanged. Open work whose scope the diff removes or changes is archived when unstarted (a `todo` Task, or a Story with no `branchName`), and changed scope gets a replacement placed at `Version`. Other such work gets `needsAttention` with a reason naming the outline version and the removed or changed `##` section (`agents/_issue-tracker-decomposer-update.md`).
 
-A decomposer in `reconcile` mode serves the review-driven draft publish below. It takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Idea is archived once every touched root is polished.
+A decomposer in `reconcile` mode takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Idea is archived once every touched root is polished.
 
-`issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `decomposition` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. A source Idea, when given, is appended as `Source idea`. No execution gate and no merge policy are sent. A busy session on any outline channel is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Decomposition tab with that reconcile session selected. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
+The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. The heading sits beside a **from review** link to the review that owns the draft. The editor rewrites the open draft's text and is refused when none is open; edits do not add a version. **Discard** and **Approve** sit over that text. **Discard** asks for confirmation, then settles the outline-check gate as `not-now`. **Approve** settles it as `yes`. Both are the same server path as `issue review outline-check`.
 
 <a id="conclude"></a>
 
@@ -1851,6 +1848,12 @@ threads that change what the outline states, and reports with
   `amended: true`.
 - `not-now` discards the pending draft and moves `waiting` to `settled` at
   the latest version.
+
+`issue outline draft approve <outlineId>` and
+`POST /api/issues/:id/outline-draft/approve` record `yes` for the review and
+submission stored on the pending draft. `issue outline draft discard
+<outlineId>` and `DELETE /api/issues/:id/outline-draft` record `not-now`.
+Both go through the same verdict write as `issue review outline-check`.
 
 When the check session's run ends with the check `settled`, the server
 starts the tasker. Its prompt adds `Outline` and `Version` (the settled

@@ -7,6 +7,7 @@ import {
 import { toast } from "sonner";
 import { deleteConversation } from "@/features/agents/api/client";
 import { agentsKeys } from "@/features/agents/api/keys";
+import { reviewKeys } from "@/features/reviews/api/keys";
 import { request } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import {
@@ -26,6 +27,8 @@ import {
   type CreateInput,
   type IssueDetail,
   type IssuePatch,
+  type OutlineCheck,
+  type OutlinePendingDraft,
   type IssueRecord,
   type IssuesResponse,
   type MergeStoryBody,
@@ -695,78 +698,64 @@ export function usePlaceOnRoot(outlineId: string) {
   });
 }
 
-export type UpdateOutlineDraftResult = {
-  id: string;
-  title: string;
-  model: string;
-  version: number;
-};
-
 function outlineDraftApiPath(outlineId: string): string {
   return `/api/issues/${encodeURIComponent(outlineId)}/outline-draft`;
 }
 
-/** Replace an outline's pending draft. Does not add a version. */
+function clearPendingDraft(qc: QueryClient, outlineId: string): void {
+  qc.setQueryData<IssueDetail>(issuesKeys.detail(outlineId), (prev) =>
+    prev && prev.kind === "outline" ? { ...prev, pendingDraft: undefined } : prev,
+  );
+}
+
+function refreshSettledDraft(qc: QueryClient, outlineId: string): void {
+  qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
+  qc.invalidateQueries({ queryKey: issuesKeys.list() });
+  qc.invalidateQueries({ queryKey: reviewKeys.details() });
+}
+
+/** Rewrite an outline's open draft. Does not add a version. */
 export function useSetOutlineDraft(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<{ body: string }, Error, string>({
+  return useMutation<OutlinePendingDraft, Error, string>({
     mutationFn: (body) =>
-      request<{ body: string }>(outlineDraftApiPath(outlineId), {
+      request<OutlinePendingDraft>(outlineDraftApiPath(outlineId), {
         method: "PUT",
         body: { body },
       }),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
       qc.setQueryData<IssueDetail>(issuesKeys.detail(outlineId), (prev) =>
-        prev && prev.kind === "outline"
-          ? { ...prev, pendingDraft: data.body }
-          : prev,
+        prev && prev.kind === "outline" ? { ...prev, pendingDraft: data } : prev,
       );
     },
   });
 }
 
-/** Save the pending draft as the next version and start reconciliation. */
-export function useUpdateOutlineDraft(outlineId: string) {
+/** Settle the open draft's outline-check gate as yes. */
+export function useApproveOutlineDraft(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<UpdateOutlineDraftResult, Error, void>({
+  return useMutation<OutlineCheck, Error, void>({
     mutationFn: () =>
-      request<UpdateOutlineDraftResult>(
-        `${outlineDraftApiPath(outlineId)}/update`,
-        { method: "POST", body: {} },
-      ),
+      request<OutlineCheck>(`${outlineDraftApiPath(outlineId)}/approve`, {
+        method: "POST",
+        body: {},
+      }),
     onError: (err) => toast.error(messageOf(err)),
-    onSuccess: (data) => {
-      rememberStartedChannelSession(qc, outlineId, "decomposition", {
-        ...data,
-        outlineRole: "reconcile",
-      });
-    },
-    onSettled: () => {
-      invalidateStartedChannelSession(qc, outlineId, "decomposition");
-      qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
-      qc.invalidateQueries({ queryKey: issuesKeys.list() });
-    },
+    onSuccess: () => clearPendingDraft(qc, outlineId),
+    onSettled: () => refreshSettledDraft(qc, outlineId),
   });
 }
 
-/** Drop the pending draft. */
+/** Settle the open draft's outline-check gate as not-now. */
 export function useDiscardOutlineDraft(outlineId: string) {
   const qc = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: () =>
       request<void>(outlineDraftApiPath(outlineId), { method: "DELETE" }),
     onError: (err) => toast.error(messageOf(err)),
-    onSuccess: () => {
-      qc.setQueryData<IssueDetail>(issuesKeys.detail(outlineId), (prev) =>
-        prev && prev.kind === "outline"
-          ? { ...prev, pendingDraft: undefined }
-          : prev,
-      );
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
-    },
+    onSuccess: () => clearPendingDraft(qc, outlineId),
+    onSettled: () => refreshSettledDraft(qc, outlineId),
   });
 }
 

@@ -7,12 +7,10 @@ import {
   parseOutlineVersion,
 } from "./server/services/outline-body.js";
 import {
-  discardOutlineDraft,
-  publishOutlineDraft,
+  formatOutlineCheckVerdict,
   setOutlineDraft,
-  type OutlineDraftUpdate,
-} from "./server/services/outline-draft.js";
-import { agentSessions } from "./server/services/agent-sessions.js";
+  settleOutlineDraft,
+} from "./server/services/review-outline-check.js";
 import { list } from "./server/services/issues.js";
 
 type Run = (action: () => unknown) => Promise<void>;
@@ -66,61 +64,30 @@ export function registerOutlineCommands(kindCmd: Command, run: Run): void {
 
   const draft = kindCmd
     .command("draft")
-    .description("the outline's one pending body, which is not a version until update");
+    .description("the outline's one pending body, owned by a review's outline check");
 
   draft
     .command("set")
     .argument("<id>", "outline id")
     .argument("<file>", "draft body (use - for stdin)")
-    .description("replace the pending draft without adding a version")
+    .description("open the outline-check draft, or replace its text")
     .action((id: string, file: string) =>
       run(() => setOutlineDraft(id, readCliFileArg(file))),
     );
 
-  draft
-    .command("update")
-    .argument("<id>", "outline id")
-    .option("--target-story <id>", "story that receives new tasks")
-    .option(
-      "--covered-by <taskIds...>",
-      "tasks this flow already created (spaces or commas)",
-    )
-    .option(
-      "--source-idea <id>",
-      "idea recorded as sourceIdea on tasks appended to the target story",
-    )
-    .description(
-      "save the pending draft as the next version and start reconciliation",
-    )
-    .action((id: string, opts: OutlineDraftUpdate) =>
-      run(async () => {
-        const published = await publishOutlineDraft(
-          id,
-          {
-            targetStory: opts.targetStory,
-            coveredBy: coveredByIds(opts.coveredBy),
-            sourceIdea: opts.sourceIdea,
-          },
-          agentSessions,
-        );
-        process.stdout.write(`${published.version}\n`);
-      }),
-    );
-
-  draft
-    .command("discard")
-    .argument("<id>", "outline id")
-    .description("drop the pending draft")
-    .action((id: string) => run(() => discardOutlineDraft(id)));
-}
-
-function coveredByIds(raw: string[] | undefined): string[] | undefined {
-  if (!raw || raw.length === 0) return undefined;
-  const ids = raw.flatMap((part) =>
-    part
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean),
-  );
-  return ids.length > 0 ? ids : undefined;
+  for (const [verdict, name, description] of [
+    ["yes", "approve", "settle the outline-check gate as yes"],
+    ["not-now", "discard", "settle the outline-check gate as not-now"],
+  ] as const) {
+    draft
+      .command(name)
+      .argument("<id>", "outline id")
+      .description(description)
+      .action((id: string) =>
+        run(async () => {
+          const check = await settleOutlineDraft(id, verdict);
+          process.stdout.write(`${formatOutlineCheckVerdict(check)}\n`);
+        }),
+      );
+  }
 }

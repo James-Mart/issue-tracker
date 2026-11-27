@@ -75,24 +75,6 @@ beforeEach(async () => {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("task-a", {
-    kind: "task",
-    title: "Already covered",
-    partOf: "story-open",
-    order: 0,
-    status: "todo",
-    createdAt: AT,
-    updatedAt: AT,
-  });
-  writeIssue("idea-append", {
-    kind: "idea",
-    title: "Append idea",
-    partOf: "p",
-    order: 3,
-    archived: false,
-    createdAt: AT,
-    updatedAt: AT,
-  });
 
   sessions = fakeLauncherSessions().sessions;
   const { createApp } = await import("../app.js");
@@ -115,35 +97,59 @@ afterEach(async () => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
-describe("outline draft HTTP API", () => {
-  it("publishes the draft as the next version and starts reconciliation", async () => {
-    expect(
-      (await request("PUT", "/api/issues/spec/outline-draft", { body: "next\n" }))
-        .status,
-    ).toBe(200);
+const REVIEW_ID = "11111111-1111-4111-8111-111111111111";
+const SUBMISSION_ID = "sub";
 
-    const updated = await request("POST", "/api/issues/spec/outline-draft/update", {
-      targetStory: "story-open",
-      coveredBy: ["task-a"],
-      sourceIdea: "idea-append",
-    });
-    expect(updated.status).toBe(201);
-    const body = (await updated.json()) as {
-      id: string;
-      title: string;
-      model: string;
-      version: number;
-    };
-    expect(body).toMatchObject({
-      title: "Reconcile Feature outline",
-      model: "cursor-grok-4.7",
+async function writeOwnedDraft(body: string): Promise<void> {
+  const { writeOutlineDraft } = await import("../services/outline-draft-store.js");
+  writeOutlineDraft("spec", {
+    body,
+    review: REVIEW_ID,
+    submission: SUBMISSION_ID,
+  });
+}
+
+function writeWaitingReview(): void {
+  writeIssue(REVIEW_ID, {
+    kind: "review",
+    title: "Open story",
+    partOf: "p",
+    story: "story-open",
+    archived: false,
+    marks: { all: {}, commits: {} },
+    submissions: [
+      {
+        id: SUBMISSION_ID,
+        at: AT,
+        threadIds: ["thread-1"],
+        status: "tasking",
+        outlineCheck: { outline: "spec", status: "waiting" },
+      },
+    ],
+    order: 4,
+    createdAt: AT,
+    updatedAt: AT,
+  });
+}
+
+describe("outline draft HTTP API", () => {
+  it("approves the draft as the next version through the outline-check gate", async () => {
+    await writeOwnedDraft("next\n");
+    writeWaitingReview();
+
+    const approved = await request("POST", "/api/issues/spec/outline-draft/approve", {});
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({
+      outline: "spec",
+      status: "settled",
       version: 4,
+      amended: true,
     });
 
     const detail = (await (await request("GET", "/api/issues/spec")).json()) as {
       bodyVersion: number;
       description: string;
-      pendingDraft?: string;
+      pendingDraft?: unknown;
     };
     expect(detail.bodyVersion).toBe(4);
     expect(detail.description).toBe("next\n");
@@ -154,53 +160,5 @@ describe("outline draft HTTP API", () => {
     expect(readFileSync(join(issuesDir, "spec", "versions", "4.md"), "utf8")).toBe(
       "next\n",
     );
-
-    const { listConversations } = await import("../services/conversations.js");
-    const { transcriptPathOf } = await import(
-      "../services/conversation-transcript-seq.js"
-    );
-    const { outlineReconcileSessionMessage } = await import(
-      "../../src/features/issues/lib/outline-planning-launch.js"
-    );
-    const [meta] = listConversations();
-    expect(meta).toMatchObject({
-      id: body.id,
-      issueId: "spec",
-      channel: "decomposition",
-      outlineRole: "reconcile",
-      title: "Reconcile Feature outline",
-    });
-    const line = readFileSync(transcriptPathOf(meta!.id), "utf8").trim();
-    const { text } = JSON.parse(line) as { text: string };
-    expect(text).toBe(
-      outlineReconcileSessionMessage({
-        outlineId: "spec",
-        version: 4,
-        targetStory: "story-open",
-        coveredBy: ["task-a"],
-        sourceIdea: "idea-append",
-      }),
-    );
-  });
-
-  it("refuses a source idea without a target story before saving a version", async () => {
-    await request("PUT", "/api/issues/spec/outline-draft", { body: "next\n" });
-
-    const refused = await request(
-      "POST",
-      "/api/issues/spec/outline-draft/update",
-      { sourceIdea: "idea-append" },
-    );
-    expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: string }).error).toContain(
-      "source idea requires a target story",
-    );
-
-    const detail = (await (await request("GET", "/api/issues/spec")).json()) as {
-      bodyVersion: number;
-      pendingDraft?: string;
-    };
-    expect(detail.bodyVersion).toBe(3);
-    expect(detail.pendingDraft).toBe("next\n");
   });
 });

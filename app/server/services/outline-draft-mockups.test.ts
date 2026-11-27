@@ -39,7 +39,7 @@ afterEach(() => {
 async function seedPackedDraft(): Promise<{ outlineId: string; tree: string }> {
   const { putAttachment } = await import("./attachments.js");
   const { create } = await import("./issues.js");
-  const { setOutlineDraft } = await import("./outline-draft.js");
+  const { writeOutlineDraft } = await import("./outline-draft-store.js");
   const { packOutlineTree } = await import("./outline-replay-tree.js");
   const { replayTreeDir } = await import("./outline-mockup-store.js");
   const outline = await create({
@@ -61,7 +61,11 @@ async function seedPackedDraft(): Promise<{ outlineId: string; tree: string }> {
   writeScratch(tree, ["a", "c"]);
   await putAttachment(outline.id, "mockup-a.tar.gz", Buffer.from("old-a"));
   await putAttachment(outline.id, "mockup-c.tar.gz", Buffer.from("idea-c"));
-  await setOutlineDraft(outline.id, "draft\n");
+  writeOutlineDraft(outline.id, {
+    body: "draft\n",
+    review: "review",
+    submission: "submission",
+  });
   await packOutlineTree(outline.id);
   return { outlineId: outline.id, tree };
 }

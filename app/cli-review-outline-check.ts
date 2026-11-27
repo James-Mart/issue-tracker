@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import {
+  formatOutlineCheckVerdict,
   OUTLINE_CHECK_VERDICTS,
   recordOutlineCheckVerdict,
 } from "./server/services/review-outline-check.js";
@@ -28,9 +29,7 @@ export function registerReviewOutlineCheckCommands(kindCmd: Command, run: Run): 
       .action((reviewId: string, submissionId: string) =>
         run(async () => {
           const check = await recordOutlineCheckVerdict(reviewId, submissionId, verdict);
-          const line =
-            check.status === "settled" ? `settled ${check.version}` : check.status;
-          process.stdout.write(`${line}\n`);
+          process.stdout.write(`${formatOutlineCheckVerdict(check)}\n`);
         }),
       );
   }
