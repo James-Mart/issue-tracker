@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { skillPath } from "@/lib/plugin-paths";
-import { resetAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { PlanningChannelEmptyState } from "./planning-launch-control";
 
@@ -146,7 +145,6 @@ afterEach(() => {
   mutate.mockReset();
   mutateAsync.mockReset();
   resetCockpitLaunchStore();
-  resetAppendTargetDraftStore();
 });
 
 describe("PlanningChannelEmptyState", () => {

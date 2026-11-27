@@ -182,8 +182,9 @@ export function ReviewSubmitActions({
   const reason = header.submit?.reason ?? header.retry?.reason;
   const describedBy = reason ? "review-submit-merged-reason" : undefined;
   const retryAction = header.retry;
-  const followUpStoryId =
-    review.story && storyOpen && review.status !== "archived" ? review.story : undefined;
+  const showFollowUpIdea = Boolean(
+    review.story && storyOpen && review.status !== "archived",
+  );
 
   return (
     <div
@@ -205,8 +206,8 @@ export function ReviewSubmitActions({
           />
         ) : null}
         {header.tasking ? <TaskingStatus projectId={projectId} status={header.tasking} /> : null}
-        {followUpStoryId ? (
-          <ReviewFollowUpIdeaButton projectId={projectId} storyId={followUpStoryId} />
+        {showFollowUpIdea ? (
+          <ReviewFollowUpIdeaButton projectId={projectId} />
         ) : null}
         <SubmitAction
           header={header}

@@ -1,4 +1,5 @@
 import type { Issue } from "../schemas.js";
+import { ensureAppendStateCleared } from "./append-state-migration.js";
 import { ensureArchivedBackfilled } from "./archived.js";
 import { ensureGithubCommentsMigrated } from "./github-comment-migration.js";
 import { ensureKindRenamed } from "./kind-rename.js";
@@ -15,13 +16,15 @@ import { ensureSpecReviewRenamed } from "./story-review.js";
 import { ensureWorkQueuePositionsBackfilled } from "./work-queue.js";
 
 /**
- * Run every one-shot on-disk migration. Each no-ops after its marker exists.
+ * Run every startup migration. Marker steps no-op once their marker exists.
+ * Content steps no-op when the store no longer holds what they clear.
  * `persistIssue` rewrites one parsed issue's issue.json in place.
  */
 export function runStoreMigrations(persistIssue: (issue: Issue) => void): void {
   if (refusesStoreWrites()) return;
   // Kind rename must run before parseIssue-based migrations (old kinds won't parse).
   ensureKindRenamed();
+  ensureAppendStateCleared();
   ensureMergeBaseStripped(persistIssue);
   ensureArchivedBackfilled(persistIssue);
   ensureMergedAtBackfilled(persistIssue);

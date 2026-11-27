@@ -19,7 +19,6 @@ import {
 } from "./issue-attention-fields";
 import { IssueAssigneeField } from "./issue-assignee-field";
 import { IssueAssignmentLabelsField } from "./issue-assignment-labels-field";
-import { IssueAppendToField } from "./issue-append-to-field";
 import { IssuePartOfField } from "./issue-part-of-field";
 import { IssueGeneratedIssuesField } from "./issue-generated-issues-field";
 import { IssueSourceIdeaField } from "./issue-source-idea-field";
@@ -118,18 +117,6 @@ function renderOverviewPropertyRow(
             <IssueAssignmentLabelsField
               issue={issue as LabelAssignableIssue}
               catalog={catalog}
-            />
-          }
-        />
-      );
-    case "appendTo":
-      return (
-        <MetaRow
-          key="appendTo"
-          label={FIELD_LABELS.appendTo}
-          value={
-            <IssueAppendToField
-              issue={issue as Extract<IssueDetail, { kind: "idea" }>}
             />
           }
         />

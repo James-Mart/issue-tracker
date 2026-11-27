@@ -123,7 +123,6 @@ export const IDEA_RUNTIME_OPTIONAL_KEYS = [
   "mergeBase",
   "mergePolicy",
   "codeApprovalRequired",
-  "appendTo",
   "planQueuedAt",
 ] as const;
 
@@ -170,7 +169,6 @@ export const CLEARABLE_KEYS = [
   "mergeBase",
   "mergePolicy",
   "sourceIdea",
-  "appendTo",
   "workQueuedAt",
   "workParkedAt",
   "workResumeNote",
@@ -245,7 +243,6 @@ export const FIELD_LABELS = {
   executionGate: "Execution gate",
   outOfBand: "Implemented out of band",
   codeApprovalRequired: "Code approval required",
-  appendTo: "Append to",
   sourceIdea: "Source idea",
   sourceOutline: "Source outline",
   generatedOutline: "Generated outline",

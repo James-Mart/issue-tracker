@@ -274,8 +274,7 @@ export function derive(issues: Issue[]): DeriveResult {
     if (issue.kind !== "outline") continue;
     const existing = state[issue.id] ?? { blocked: false };
     existing.readyToDecompose = outlineReadyToDecompose(issue, linkedRoots);
-    existing.reconciliationNeeded =
-      Boolean(issue.pendingAppends?.length) || openBehindOutlines.has(issue.id);
+    existing.reconciliationNeeded = openBehindOutlines.has(issue.id);
     state[issue.id] = existing;
   }
 

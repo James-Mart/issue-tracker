@@ -2,15 +2,14 @@
 name: issue-tracker-plan-polish
 disable-model-invocation: true
 description: >-
-  Polish an existing Epic, project-level Story, or append-target Story
-  with parallel checks, auto-apply of check fixes when safe, then one
-  copyedit pass.
+  Polish an existing Epic or project-level Story with parallel checks,
+  auto-apply of check fixes when safe, then one copyedit pass.
 ---
 
 # Issue Tracker — Plan Polish
 
-Polish one **work root** already in the tracker: an **Epic**, a
-**project-level Story**, or an **append-target Story**. You are the
+Polish one **work root** already in the tracker: an **Epic** or a
+**project-level Story**. You are the
 **coordinator**: spawn read-only check agents, compose a full apply doc
 from their findings (keep it internal), and auto-apply check fixes when
 safe. After that re-check loop exits, run one copyedit pass on each
@@ -27,14 +26,8 @@ escalate only when unsafe) — do not restate that list here.
 
 ## Argument
 
-An **Epic** id (any `epicStatus` — not limited to `todo`), a
-**project-level Story** id (`partOf` the Project), or a **Story** id
-that is an **append target**. A Story is an append target when
-`issue list task --in <id>` includes a Task with `appended` true.
-That Story's container may be the Project or an Epic.
-
-A run pointed at an append-target Story reads that Story's other Tasks
-for context and edits the Tasks whose `appended` flag is set.
+An **Epic** id (any `epicStatus` — not limited to `todo`) or a
+**project-level Story** id (`partOf` the Project).
 
 A run that follows an outline change also carries an **outline diff**: the
 outline id, `<from>`, and `<to>` versions.
@@ -43,8 +36,7 @@ If none is given:
 
 1. **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-resolve-project.md`
    and follow it. Never bare `issue list`.
-2. Run `issue tree <projectId>` and ask which Epic, project-level Story,
-   or append-target Story.
+2. Run `issue tree <projectId>` and ask which Epic or project-level Story.
 
 ## Bootstrap
 

@@ -7,19 +7,14 @@ import { useIssuesQuery } from "../api/queries";
 import type { StartedChannelSession } from "../api/channel-sessions";
 import { issuePath } from "../lib/links";
 import { reconciliationNeededRows } from "../lib/outline-links";
-import {
-  AxisChips,
-  BEHIND_AXIS_CHIP,
-  PENDING_APPEND_AXIS_CHIP,
-} from "./axis-chips";
 import { DetailEyebrow } from "./detail-section";
 
 type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
 
 /**
- * Decomposition tab list of behind open roots and pending-append targets.
- * One Reconcile action starts reconcile at the latest version. Renders
- * nothing when that list is empty.
+ * Decomposition tab list of behind open linked roots. One Reconcile action
+ * starts reconcile at the latest version. Renders nothing when that list
+ * is empty.
  */
 export function OutlineReconciliationNeeded({
   outline,
@@ -37,11 +32,10 @@ export function OutlineReconciliationNeeded({
     () =>
       reconciliationNeededRows(
         outline.id,
-        outline.pendingAppends,
         issues.data?.issues ?? [],
         issues.data?.derived ?? {},
       ),
-    [issues.data, outline.id, outline.pendingAppends],
+    [issues.data, outline.id],
   );
 
   if (rows.length === 0) return null;
@@ -73,7 +67,7 @@ export function OutlineReconciliationNeeded({
           <li
             key={row.id}
             data-testid={`outline-reconciliation-row-${row.id}`}
-            className="flex min-w-0 items-center justify-between gap-3 py-1"
+            className="min-w-0 py-1"
           >
             <Link
               to={issuePath(outline.partOf, row.id)}
@@ -81,12 +75,6 @@ export function OutlineReconciliationNeeded({
             >
               {row.title}
             </Link>
-            <AxisChips
-              chips={[
-                ...(row.behind ? [BEHIND_AXIS_CHIP] : []),
-                ...(row.pendingAppend ? [PENDING_APPEND_AXIS_CHIP] : []),
-              ]}
-            />
           </li>
         ))}
       </ul>

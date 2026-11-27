@@ -1,6 +1,5 @@
 import type { AgentSessions, StartClaim } from "./agent-sessions.js";
 import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
-import { refuseOutlinePlannerLockPrompt } from "./outline-append-lock.js";
 import {
   deliverLivePrompt,
   readConversationMeta,
@@ -53,7 +52,6 @@ function refuseMessageOnArchivedIdea(conversationId: string): void {
 
 function refusePlanningConversationMessage(conversationId: string): void {
   refuseMessageOnArchivedIdea(conversationId);
-  refuseOutlinePlannerLockPrompt(conversationId);
 }
 
 /**

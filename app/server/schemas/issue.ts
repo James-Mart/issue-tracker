@@ -571,7 +571,6 @@ export const ideaSchema = z.object({
   mergeBase: nonEmpty.optional(),
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   codeApprovalRequired: z.boolean().optional(),
-  appendTo: z.string().optional(),
   stakeholder: stakeholderField,
   planQueuedAt: z.string().optional(),
   labels: assignmentLabelsSchema,
@@ -627,18 +626,6 @@ export const taskSchema = z.object({
   ...timestamps,
 });
 
-// An append Idea's concluded plan, waiting for reconcile to add its Tasks to
-// `targetStory` and apply its gates there.
-export const pendingAppendSchema = z
-  .object({
-    targetStory: nonEmpty,
-    sourceIdea: nonEmpty,
-    executionGate: executionGateSchema,
-    codeApprovalRequired: z.boolean(),
-  })
-  .strict();
-export type PendingAppend = z.infer<typeof pendingAppendSchema>;
-
 // A versioned feature description under a Project. `bodyVersion` is the latest
 // saved body. CLI `get version` reads it. Distinct from the content-hash
 // `version` on `read()`. `sourceIdea` names the Idea planning produced this from.
@@ -656,9 +643,6 @@ export const outlineSchema = z.object({
   outOfBand: z.boolean().optional(),
   // System-written when conclude archives the Idea. Patches are refused.
   concludedAt: nonEmpty.optional(),
-  // System-written: append conclude adds an entry, reconcile's apply removes
-  // it. Absent when none are pending. Patches are refused.
-  pendingAppends: z.array(pendingAppendSchema).min(1).optional(),
   ...archivableFields,
   ...orderField,
   ...timestamps,
@@ -918,15 +902,10 @@ export interface DerivedState {
    */
   readyToDecompose?: boolean;
   /**
-   * Outline only. True when a pending append is waiting, or an open linked
-   * root is behind. `behind` on that root stays derived from its `sourceOutline`.
+   * Outline only. True when an open linked root is behind. `behind` on that
+   * root stays derived from its `sourceOutline`.
    */
   reconciliationNeeded?: boolean;
-  /**
-   * Outline only. Append Idea whose planning session is forked from this
-   * outline's active planner. `list()` sets it; `derive()` does not.
-   */
-  appendLock?: { ideaId: string; ideaTitle: string };
   /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**

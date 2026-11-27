@@ -157,12 +157,6 @@ outline whose `sourceIdea` names that Idea, record that edge **after** `apply`
 - Epic: `issue epic set <id> sourceIdea <ideaId>`
 - Project-level root Story: `issue story set <id> sourceIdea <ideaId>`
 
-When a reconciliation carries a source Idea (the Idea's `appendTo` named the
-target Story), record provenance on each Task `issue story append` created on
-that target Story (imperative only — not in the YAML doc):
-
-- `issue task set <taskId> sourceIdea <ideaId>` for each created Task id
-
 `apply` and `issue story append` preserve `sourceIdea` and never read it from
 description prose or YAML. Only Idea-sourced migrations set this — replans
 from an Epic or Story record nothing. Rules:
@@ -258,8 +252,8 @@ Before done:
 - Non-trunk bases use imperative `mergeBase` on the root Story or Epic after
   `apply` (see [Merge-base override](#merge-base-override)) — never invent a
   base in YAML or Task prose for the git agent.
-- Idea-sourced migrations record `sourceIdea` imperatively after `apply` or
-  `issue story append` (see [Source idea (sourceIdea)](#source-idea-sourceidea))
+- Idea-sourced migrations record `sourceIdea` imperatively after `apply`
+  (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
 - Outline decompositions stamp `sourceOutline` on every created item after
   `apply`, reconciliations move open Epic and Story stamps and stamp appended

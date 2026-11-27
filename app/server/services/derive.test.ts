@@ -213,6 +213,17 @@ describe("derive - reconciliation needed", () => {
     expect(derived.nested.behind).toBe(true);
     expect(derived.o.reconciliationNeeded).toBe(false);
   });
+
+  it("is true when an open linked root is behind", () => {
+    const issues = [
+      project("p"),
+      outline("o", "p", 1, { bodyVersion: 3 }),
+      epic("open-epic", "p", 2, { sourceOutline: stamp(1) }),
+    ];
+    const derived = derive(issues).byId;
+    expect(derived["open-epic"].behind).toBe(true);
+    expect(derived.o.reconciliationNeeded).toBe(true);
+  });
 });
 
 describe("derive - idea generatedOutlines", () => {

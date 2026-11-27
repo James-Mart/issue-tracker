@@ -43,12 +43,10 @@ After all five return:
      `project: <projectId>` string + `story:` object. When
      `issue story get <rootId> partOf` is an Epic id, include
      `epic: <epicId>` as that existing-epic reference. When `partOf` is
-     `<projectId>`, omit the `epic:` key. When the work root is an
-     append-target Story, the changes in that YAML are the Tasks whose
-     `appended` flag is set.
+     `<projectId>`, omit the `epic:` key.
    - When there are **zero** `error` findings and you are not adopting
      warning fixes, the draft is that same full-state doc of the work root
-     as it stands (append-target: the appended Tasks). Warnings that remain
+     as it stands. Warnings that remain
      must still appear in the summary.
 4. **Auto-apply check fixes when safe.** When step 2 did not escalate and the
    draft differs from the live tree, apply the retained draft. When the

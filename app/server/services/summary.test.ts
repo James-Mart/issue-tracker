@@ -58,32 +58,6 @@ function withProjectWorkspace(issues: Issue[]): Issue[] {
   );
 }
 
-/** The Story tree plus an Idea under the Project; the Story is the append target. */
-const ideaIssues: Issue[] = [
-  ...storyIssues,
-  {
-    id: "idea-1",
-    kind: "idea",
-    title: "Capture",
-    partOf: "p",
-    archived: false,
-    decompositionGate: false,
-    executionGate: "auto",
-    outOfBand: false,
-    order: 0,
-    createdAt: AT,
-    updatedAt: AT,
-  },
-];
-
-function ideaChain(issues: Issue[]): Issue[] {
-  return issues.filter((i) => ["p", "e", "idea-1"].includes(i.id));
-}
-
-function issuesById(issues: Issue[]): Map<string, Issue> {
-  return new Map(issues.map((issue) => [issue.id, issue]));
-}
-
 describe("resolveSummaryWorkspace", () => {
   it("uses a Story worktree when the directory exists", () => {
     const worktree = mkdtempSync(join(tmpdir(), "story-wt-"));
@@ -112,24 +86,5 @@ describe("resolveSummaryWorkspace", () => {
     expect(resolveSummaryWorkspace(issues, projectWorkspace)).toBe(
       projectWorkspace,
     );
-  });
-
-  it("uses the append-target Story worktree for an Idea with appendTo", () => {
-    const worktree = mkdtempSync(join(tmpdir(), "idea-wt-"));
-    try {
-      const issues = withProjectWorkspace(
-        ideaIssues.map((issue) => {
-          if (issue.id === "idea-1") return { ...issue, appendTo: "s" };
-          if (issue.id === "s") return { ...issue, worktreePath: worktree };
-          return issue;
-        }),
-      );
-      const chain = ideaChain(issues);
-      expect(
-        resolveSummaryWorkspace(chain, projectWorkspace, issuesById(issues)),
-      ).toBe(worktree);
-    } finally {
-      rmSync(worktree, { recursive: true, force: true });
-    }
   });
 });

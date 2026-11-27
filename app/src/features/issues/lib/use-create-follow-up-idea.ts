@@ -1,27 +1,22 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useCreateIssue, useUpdateIssue } from "../api/mutations";
+import { useCreateIssue } from "../api/mutations";
 import {
   type IssueBackLocationState,
   issueBackNavigateState,
 } from "./issue-back";
 import { issuePath } from "./links";
 
-/** Create a blank Idea with `appendTo` set, then navigate to it with issue-back state. */
-export function useCreateAppendIdea(projectId: string) {
+/** Create an ordinary Idea in the Project, then navigate to it with issue-back state. */
+export function useCreateFollowUpIdea(projectId: string) {
   const navigate = useNavigate();
   const location = useLocation();
   const createIssue = useCreateIssue();
-  const updateIssue = useUpdateIssue();
 
-  const createAppendIdea = async (storyId: string, title: string) => {
+  const createFollowUpIdea = async (title: string) => {
     const created = await createIssue.mutateAsync({
       kind: "idea",
       title,
       partOf: projectId,
-    });
-    await updateIssue.mutateAsync({
-      id: created.id,
-      patch: { appendTo: storyId },
     });
     const navigateState = issueBackNavigateState(
       location.pathname,
@@ -35,7 +30,7 @@ export function useCreateAppendIdea(projectId: string) {
   };
 
   return {
-    createAppendIdea,
-    isPending: createIssue.isPending || updateIssue.isPending,
+    createFollowUpIdea,
+    isPending: createIssue.isPending,
   };
 }

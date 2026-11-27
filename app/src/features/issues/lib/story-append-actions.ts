@@ -19,10 +19,10 @@ export function hasOpenUpdateFromMergeBaseTask(
 }
 
 export const ADD_IDEA_HELPER =
-  "Creates an Idea whose plan appends tasks to this Story — for example PR feedback after review. Planning it adds tasks here instead of opening a new root Story.";
+  "Creates an Idea in this Story's Project. Planning it opens a new root.";
 
-export function appendIdeaTitle(storyTitle: string): string {
-  return `Append to ${storyTitle}`;
+export function followUpIdeaTitle(storyTitle: string): string {
+  return `Follow-up to ${storyTitle}`;
 }
 
 export function storyAppendActions(story: {
@@ -33,11 +33,8 @@ export function storyAppendActions(story: {
   if (story.merged) {
     return { addIdea: false, updateFromMergeBase: false };
   }
-  if (!story.branchName) {
-    return { addIdea: true, updateFromMergeBase: false };
-  }
-  if (story.hasOpenMergeBaseTask) {
-    return { addIdea: true, updateFromMergeBase: false };
-  }
-  return { addIdea: true, updateFromMergeBase: true };
+  return {
+    addIdea: true,
+    updateFromMergeBase: Boolean(story.branchName && !story.hasOpenMergeBaseTask),
+  };
 }

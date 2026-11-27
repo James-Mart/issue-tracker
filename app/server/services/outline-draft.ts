@@ -10,16 +10,12 @@ import { refuseIfChannelBusy } from "./conversations.js";
 import { errorAfterCommit, IssueError } from "./errors.js";
 import {
   commitIssueBatch,
-  readAll,
   readDescription,
-  readIdeaOrThrow,
   readIssueOrThrow,
   readOutlineOrThrow,
   serialize,
   type IssueWrite,
 } from "./issues.js";
-import { appendTargetOutlineId } from "./append-target.js";
-import { adoptAppendDraftBundles, unarchivedAppendIdeaIds } from "./outline-draft-bundles.js";
 import { captureOutlineDirections, type OutlineCapture } from "./outline-captures.js";
 import { liveReplayDirectionIds } from "./outline-attachments.js";
 import { readDraftPredatedDirectionIds } from "./outline-draft-predated.js";
@@ -92,7 +88,6 @@ export async function setOutlineDraft(id: string, body: string): Promise<void> {
   await serialize(() => {
     readOutlineOrThrow(id);
     writeOutlineDraft(id, body);
-    adoptAppendDraftBundles(id);
   });
 }
 
@@ -105,8 +100,7 @@ export async function discardOutlineDraft(id: string): Promise<void> {
   await withOutlineMockupsLock(id, () =>
     serialize(() => {
       readOutlineOrThrow(id);
-      const { issues } = readAll();
-      revertDraftMockups(id, unarchivedAppendIdeaIds(id, issues));
+      revertDraftMockups(id);
       removeOutlineDraft(id);
     }),
   );
@@ -118,7 +112,7 @@ export async function discardOutlineDraft(id: string): Promise<void> {
  * were no directions to capture; publish still drops backups. `fromPack`
  * restores the packed tree first, so a failed edit is not captured.
  */
-export async function prepareAppendDraftPublish(
+export async function prepareDraftPublish(
   outlineId: string,
 ): Promise<OutlineCapture[] | undefined> {
   if (readDraftPredatedDirectionIds(outlineId) === undefined) return undefined;
@@ -146,32 +140,11 @@ function withResolvedCaptures<T>(
   );
 }
 
-function withAppendDraftPublish<T>(
+function withDraftPublish<T>(
   outlineId: string,
   write: (captures: readonly OutlineCapture[] | undefined) => Promise<T>,
 ): Promise<T> {
-  return withResolvedCaptures(outlineId, prepareAppendDraftPublish(outlineId), write);
-}
-
-/** Same publish lock as a direct draft publish, after conclude's append checks. */
-export function withAppendConcludePublish<T>(
-  ideaId: string,
-  outlineId: string,
-  write: (captures: readonly OutlineCapture[] | undefined) => Promise<T>,
-): Promise<T> {
-  return withResolvedCaptures(outlineId, capturesForAppendConclude(ideaId, outlineId), write);
-}
-
-async function capturesForAppendConclude(
-  ideaId: string,
-  outlineId: string,
-): Promise<OutlineCapture[] | undefined> {
-  const idea = readIdeaOrThrow(ideaId);
-  if (idea.kind !== "idea" || idea.archived || !idea.appendTo) return undefined;
-  const { issues } = readAll();
-  if (appendTargetOutlineId(issues, idea.appendTo) !== outlineId) return undefined;
-  if (readOutlineDraft(outlineId) === undefined) return undefined;
-  return prepareAppendDraftPublish(outlineId);
+  return withResolvedCaptures(outlineId, prepareDraftPublish(outlineId), write);
 }
 
 /**
@@ -185,7 +158,7 @@ export async function publishOutlineDraft(
   input: OutlineDraftUpdate,
   sessions: ConversationMessageSessions,
 ): Promise<PublishedOutlineDraft> {
-  const prepared = await withAppendDraftPublish(id, (captures) =>
+  const prepared = await withDraftPublish(id, (captures) =>
     serialize(() => {
       const outline = readOutlineOrThrow(id);
       const draft = requireDraft(id);
@@ -225,7 +198,7 @@ export async function publishOutlineDraft(
  * Returns the new version.
  */
 export async function saveOutlineDraftVersion(id: string): Promise<number> {
-  return withAppendDraftPublish(id, (captures) =>
+  return withDraftPublish(id, (captures) =>
     serialize(() => saveDraftAsVersion(readOutlineOrThrow(id), requireDraft(id), captures)),
   );
 }
@@ -236,19 +209,6 @@ function requireDraft(id: string): string {
     throw new IssueError("validation", `outline "${id}" has no pending draft`);
   }
   return draft;
-}
-
-/**
- * The outline write that publishes the pending draft as the next version.
- * Caller holds issues `serialize()` and commits the write.
- */
-export function pendingDraftVersionWrite(id: string): {
-  write: IssueWrite & { issue: OutlineIssue };
-  draft: string;
-} {
-  const outline = readOutlineOrThrow(id);
-  const draft = requireDraft(id);
-  return { write: draftVersionWrite(outline, draft), draft };
 }
 
 function draftVersionWrite(

@@ -13,7 +13,6 @@ import {
 } from "./attachments.js";
 import { readOutlineOrThrow, serialize } from "./issues.js";
 import { mockupScratchDir, sandboxNpmCacheDir } from "./mockup-scratch.js";
-import { appendOutlineLock } from "./outline-append-lock.js";
 import {
   backupBundleName,
   liveBundleName,
@@ -154,8 +153,8 @@ export function restoreOutlineTree(outlineId: string): Promise<{ directionIds: s
 
 /**
  * Directions whose live bundles predated this unpublished draft, plus the
- * live ids already read. `predated` is null when this pack is not covering
- * an append draft. The set is recorded once, before this pack writes.
+ * live ids already read. `predated` is null when no draft is open. The set
+ * is recorded once, before this pack writes.
  */
 function predatedDirectionsForPack(outlineId: string): Promise<{
   predated: Set<string> | null;
@@ -163,9 +162,7 @@ function predatedDirectionsForPack(outlineId: string): Promise<{
 }> {
   return serialize(() => {
     const liveIds = liveReplayDirectionIds(outlineId);
-    const appending =
-      readOutlineDraft(outlineId) !== undefined || appendOutlineLock(outlineId) !== undefined;
-    if (!appending) return { predated: null, liveIds };
+    if (readOutlineDraft(outlineId) === undefined) return { predated: null, liveIds };
     return {
       predated: new Set(recordDraftPredatedDirectionIdsOnce(outlineId, liveIds)),
       liveIds,
@@ -214,11 +211,11 @@ async function keepPredatedBackups(
 
 /**
  * Overwrite live bundles from the replay tree. All bundles are built and
- * size-checked before the first one is written. While an append draft is
- * unpublished, or an append Idea holds the planner lock, every direction in
- * the tree is written too. The first replacement of a bundle that predated
- * the draft saves that bundle's previous bytes as its backup; a later pack
- * leaves the backup unchanged, and a direction the draft added has none.
+ * size-checked before the first one is written. While a draft is
+ * unpublished, every direction in the tree is written too. The first
+ * replacement of a bundle that predated the draft saves that bundle's
+ * previous bytes as its backup; a later pack leaves the backup unchanged,
+ * and a direction the draft added has none.
  */
 export function packOutlineTree(outlineId: string): Promise<{ directionIds: string[] }> {
   readOutlineOrThrow(outlineId);

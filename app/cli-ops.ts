@@ -273,11 +273,7 @@ async function printIssueView(id: string, opts: ViewOptions = {}): Promise<void>
   }
   if (detail.kind === "idea") {
     if (detail.stakeholder) lines.push(`stakeholder: ${detail.stakeholder}`);
-    // Append Ideas show the Story merge base on the planning tab; view hides the stored field.
-    if (detail.mergeBase && !detail.appendTo) {
-      lines.push(`mergeBase: ${detail.mergeBase}`);
-    }
-    if (detail.appendTo) lines.push(`appendTo: ${detail.appendTo}`);
+    if (detail.mergeBase) lines.push(`mergeBase: ${detail.mergeBase}`);
     if (detail.planQueuedAt) lines.push(`planQueuedAt: ${detail.planQueuedAt}`);
   }
   if (detail.kind === "review") {
@@ -351,9 +347,6 @@ async function printDeleteResult(id: string): Promise<void> {
   }
   for (const { id: bid } of result.droppedSourceIdea) {
     console.log(`  cleared ${bid}.sourceIdea`);
-  }
-  for (const { id: bid } of result.droppedAppendTo) {
-    console.log(`  cleared ${bid}.appendTo`);
   }
   for (const { id: bid } of result.droppedSourceOutline) {
     console.log(`  cleared ${bid}.sourceOutline`);
