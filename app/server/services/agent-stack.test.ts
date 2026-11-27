@@ -49,10 +49,10 @@ function realSpawn(
 import { spawn } from "node:child_process";
 import {
   killStrayGroups,
-  procStartTime,
   trackDetachedGroup,
   waitForPidFile,
 } from "./boot-process.test-helpers.js";
+import { procStartTime } from "../../test/proc-start-time.js";
 
 let root: string;
 let issuesDir: string;

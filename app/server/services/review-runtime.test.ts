@@ -15,11 +15,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   holdOpen,
   killStrayGroups,
-  procStartTime,
   trackDetachedGroup,
   waitForPidFile,
   waitForPids,
 } from "./boot-process.test-helpers.js";
+import { procStartTime } from "../../test/proc-start-time.js";
 import type { ReviewRuntimeStatus } from "../schemas/review.js";
 
 const STAMP = "2026-01-01T00:00:00.000Z";

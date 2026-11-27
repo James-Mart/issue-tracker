@@ -1,12 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,19 +9,12 @@ import {
   decidePortKillPermission,
   loadOwnedPorts,
 } from "./port-kill-guard.mjs";
+import { procStartTime } from "../test/proc-start-time.js";
 
 const scriptPath = join(
   dirname(fileURLToPath(import.meta.url)),
   "port-kill-guard.mjs",
 );
-
-function procStartTime(pid: number): string {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-  const startTime = fields[19];
-  if (!startTime) throw new Error(`unparseable /proc/${pid}/stat`);
-  return startTime;
-}
 
 function runHook(
   stdin: string,

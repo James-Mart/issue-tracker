@@ -1,3 +1,5 @@
+// First import. Must not evaluate `@cursor/sdk`; the node gate below has not run.
+import "./services/sdk-shell-host-binding-boot.js";
 import { assertSupportedNodeRuntime } from "./node-runtime.js";
 
 // Gate before any other server module loads — static imports would pull in

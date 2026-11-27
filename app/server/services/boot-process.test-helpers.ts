@@ -39,12 +39,6 @@ export function killPidsInFile(path: string): void {
   }
 }
 
-/** `/proc/<pid>/stat` start time. Boot records pin a pid with this token. */
-export function procStartTime(pid: number): string {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-  return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
-}
-
 /**
  * A detached shell that forks a sleeper of its own, mirroring how `tsx watch`
  * and Vite each hold children inside the group the service signals. The

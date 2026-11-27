@@ -15,10 +15,28 @@ import {
   type AgentCapabilities,
   type AgentStreamEvent,
 } from "./agent-sdk.js";
+import type { SessionShellExecutor } from "./host-shell-executor.js";
 import { parseModelKey } from "./model-selection.js";
 import { TASK_TOOL_CALL_ID } from "./agent-sdk.fake.js";
 import { isAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { isCachedCheckpointsStore } from "./cached-checkpoints-store.js";
+
+function sessionShell(local: AgentOptions["local"]): SessionShellExecutor {
+  const fields = local?.resourceProviderOptions;
+  const inherited = local?.subagentInherit?.resourceProviderOptions;
+  if (
+    fields === undefined ||
+    typeof fields === "function" ||
+    inherited === undefined ||
+    typeof inherited === "function"
+  ) {
+    throw new Error("expected installed host shell executor");
+  }
+  expect(fields.overrideShellExecutor).toBe(inherited.overrideShellExecutor);
+  const shell = fields.overrideShellExecutor as SessionShellExecutor;
+  expect(shell).toBeDefined();
+  return shell;
+}
 
 function expectCachedComposedStore(
   store: LocalAgentStore | undefined,
@@ -112,6 +130,9 @@ function makeFakeSdkAgent(script: Step[]): SDKAgent {
         runs: [],
       };
     },
+    async summarize() {
+      throw new Error("summarize is not used in tests");
+    },
   };
 }
 
@@ -143,6 +164,7 @@ describe("createAgent", () => {
     expect(options.local?.cwd).toBe("/repo");
     expect(options.local?.settingSources).toEqual([]);
     expect(options.local?.customTools).toBe(SAMPLE_CUSTOM_TOOLS);
+    expect(sessionShell(options.local).conversationId).toBe("agent-1");
     expectCachedComposedStore(options.local?.store);
     expect(options.apiKey).toBe("key-abc");
     expect(options.model).toEqual({
@@ -188,6 +210,9 @@ describe("resumeAgent", () => {
     const resumedLocal = resumeSdkAgent.mock.calls[0]![1]?.local;
     expect(resumedLocal?.cwd).toEqual(createdLocal?.cwd);
     expect(resumedLocal?.settingSources).toEqual(createdLocal?.settingSources);
+    expect(sessionShell(createdLocal).conversationId).toBe("agent-1");
+    expect(sessionShell(resumedLocal).conversationId).toBe("agent-1");
+    expect(sessionShell(createdLocal)).not.toBe(sessionShell(resumedLocal));
     expect(resumedLocal?.customTools).toBe(createdLocal?.customTools);
     expect(resumeSdkAgent.mock.calls[0]![1]?.tools).toEqual(
       createSdkAgent.mock.calls[0]![0].tools,
