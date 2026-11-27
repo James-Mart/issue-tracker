@@ -30,12 +30,16 @@ import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
  */
 export function OutlineLinkedWorkCard({
   issue,
+  bodyEditing,
 }: {
   issue: Extract<IssueDetail, { kind: "outline" }>;
+  /** True while the outline body card is editing the next version. */
+  bodyEditing: boolean;
 }) {
   const showArchived = useIssueUiStore((state) => state.showArchived);
   const query = useIssuesIncludingArchived(showArchived);
   const placementLive = query.data?.derived[issue.id]?.placementLive === true;
+  const reviewDraftOpen = issue.pendingDraft !== undefined;
   const place = usePlaceOnRoot(issue.id);
   const [, setSearchParams] = useSearchParams();
   const roots = useMemo(() => {
@@ -104,7 +108,13 @@ export function OutlineLinkedWorkCard({
                 latest={issue.bodyVersion}
                 projectId={issue.partOf}
                 linkState={linkState}
-                showActions={root.open && root.behind && !placementLive}
+                showActions={
+                  root.open &&
+                  root.behind &&
+                  !placementLive &&
+                  !reviewDraftOpen &&
+                  !bodyEditing
+                }
                 placePending={
                   place.isPending && place.variables?.rootId === root.id
                 }

@@ -36,7 +36,10 @@ import {
 import { runStoreMigrations } from "./store-migrations.js";
 import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
-import { recordOutlineBody } from "./outline-body.js";
+import {
+  assertOutlineBodySaveAllowed,
+  recordOutlineBody,
+} from "./outline-body.js";
 import { moveReplayBundlesFromIdea } from "./outline-attachments.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
@@ -577,6 +580,9 @@ export function update(
     const byId = new Map(issues.map((issue) => [issue.id, issue]));
 
     const { description, ...restPatch } = patch;
+    if (existing.kind === "outline" && description !== undefined) {
+      assertOutlineBodySaveAllowed(id);
+    }
     const jsonPatch = guardRootMergeSettingsPatch(
       existing,
       restPatch,
