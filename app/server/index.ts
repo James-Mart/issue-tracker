@@ -1,3 +1,5 @@
+// First import. Must not evaluate `@cursor/sdk`; the node gate below has not run.
+import "./services/sdk-shell-host-binding-boot.js";
 import { assertSupportedNodeRuntime } from "./node-runtime.js";
 
 // Gate before any other server module loads — static imports would pull in
@@ -30,9 +32,6 @@ const { listenPort } = await import("./config.js");
 const { agentSessions } = await import("./services/agent-sessions.js");
 const { disposeSessionsAndReleasePrewarm, prewarmProjectWorkspaces } =
   await import("./services/workspace-prewarm.js");
-const { validateHookRegistration } = await import(
-  "./services/hook-registration.js"
-);
 const { installHttp2Diagnostics } = await import(
   "./services/http2-diagnostics.js"
 );
@@ -42,7 +41,6 @@ const { validateRoleBodies } = await import("./services/role-bodies.js");
 await installHttp2Diagnostics();
 
 validateRoleBodies();
-validateHookRegistration();
 
 await refreshAgentModelSlugCatalog();
 

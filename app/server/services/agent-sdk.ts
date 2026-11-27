@@ -1,3 +1,4 @@
+import "./sdk-shell-host-binding-boot.js";
 import { mkdirSync } from "node:fs";
 import {
   Agent,
@@ -35,6 +36,12 @@ import {
 import { createAppendingRunEventsStore } from "./appending-run-events-store.js";
 import { createCachedCheckpointsStore } from "./cached-checkpoints-store.js";
 import { toModelSelection, type ModelKey } from "./model-selection.js";
+import {
+  bindSessionAgent,
+  hostShellExecutor,
+  type SessionShellExecutor,
+  type ShellConversationBinding,
+} from "./host-shell-executor.js";
 
 export { CursorAgentError };
 
@@ -248,8 +255,10 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       Partial<Pick<AgentCapabilities, "customTools">>;
     /** Create always passes `agentId`, even when omitted. Resume and prewarm do not. */
     includeAgentId: boolean;
+    binding: ShellConversationBinding;
   }): AgentOptions {
     const { settingSources, customTools, builtins, mcp } = input.capabilities;
+    const shell = hostShellExecutor(input.binding);
     return {
       apiKey: deps.apiKey,
       ...(input.model !== undefined
@@ -259,8 +268,14 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
       tools: [...builtins],
       mcpServers: mcp,
       local: input.storeDir !== undefined
-        ? localRuntime(input.cwd, input.storeDir, settingSources, customTools)
-        : localWorkspace(input.cwd, settingSources, customTools),
+        ? localRuntime(
+            input.cwd,
+            input.storeDir,
+            settingSources,
+            customTools,
+            shell,
+          )
+        : localWorkspace(input.cwd, settingSources, customTools, shell),
     };
   }
 
@@ -271,25 +286,33 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
 
     async createAgent(input) {
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_START_AGENT);
+      const binding: ShellConversationBinding = {
+        conversationId: input.agentId,
+      };
       const sdkAgent = await deps.createSdkAgent(
         sdkAgentOptions({
           ...input,
           includeAgentId: true,
+          binding,
         }),
       );
+      bindSessionAgent(binding, sdkAgent.agentId);
       return wrapAgent(sdkAgent);
     },
 
     async resumeAgent(agentId, storeDir, input) {
       assertGuestAllowsAgentLaunch(GUEST_REFUSED_RESUME_AGENT);
+      const binding: ShellConversationBinding = { conversationId: agentId };
       const sdkAgent = await deps.resumeSdkAgent(
         agentId,
         sdkAgentOptions({
           ...input,
           storeDir,
           includeAgentId: false,
+          binding,
         }),
       );
+      bindSessionAgent(binding, sdkAgent.agentId);
       return wrapAgent(sdkAgent);
     },
 
@@ -301,6 +324,7 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
           cwd,
           capabilities,
           includeAgentId: false,
+          binding: { conversationId: undefined },
         }),
       );
     },
@@ -314,16 +338,24 @@ export function createAgentSdk(overrides: Partial<AgentSdkDeps> = {}): AgentSdk 
  * agent persisted under one workspace is invisible from another, and resume
  * reports it as not found), and it is also the directory the agent's tools
  * run in.
+ *
+ * The host shell executor is one of those fields. Task children do not
+ * inherit `resourceProviderOptions`, so the same object is also what
+ * `subagentInherit` gives them.
  */
 function localWorkspace(
   cwd: string,
   settingSources: SettingSource[],
   customTools: Record<string, SDKCustomTool> | undefined,
+  shell: SessionShellExecutor,
 ): NonNullable<AgentOptions["local"]> {
+  const resourceProviderOptions = { overrideShellExecutor: shell };
   return {
     cwd,
     settingSources: [...settingSources],
     ...(customTools !== undefined ? { customTools } : {}),
+    resourceProviderOptions,
+    subagentInherit: { resourceProviderOptions },
   };
 }
 
@@ -332,10 +364,11 @@ function localRuntime(
   storeDir: string,
   settingSources: SettingSource[],
   customTools: Record<string, SDKCustomTool> | undefined,
+  shell: SessionShellExecutor,
 ): NonNullable<AgentOptions["local"]> {
   const jsonl = new JsonlLocalAgentStore(storeDir);
   return {
-    ...localWorkspace(cwd, settingSources, customTools),
+    ...localWorkspace(cwd, settingSources, customTools, shell),
     store: composeLocalAgentStore({
       agents: jsonl.agents,
       runs: jsonl.runs,
