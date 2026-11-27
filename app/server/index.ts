@@ -32,9 +32,6 @@ const { listenPort } = await import("./config.js");
 const { agentSessions } = await import("./services/agent-sessions.js");
 const { disposeSessionsAndReleasePrewarm, prewarmProjectWorkspaces } =
   await import("./services/workspace-prewarm.js");
-const { validateHookRegistration } = await import(
-  "./services/hook-registration.js"
-);
 const { installHttp2Diagnostics } = await import(
   "./services/http2-diagnostics.js"
 );
@@ -44,7 +41,6 @@ const { validateRoleBodies } = await import("./services/role-bodies.js");
 await installHttp2Diagnostics();
 
 validateRoleBodies();
-validateHookRegistration();
 
 await refreshAgentModelSlugCatalog();
 

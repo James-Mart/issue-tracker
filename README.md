@@ -123,11 +123,10 @@ commands and the trailing `Made with [Cursor](https://cursor.com)` footer from
 agent `gh pr create` `--body` / HEREDOC bodies so agent-driven commits and PRs
 stay clean. The kill-guard refuses kill-shaped commands aimed at ports this
 conversation does not currently own and redirects the agent to
-`agent_stack_start`. The server refuses to start until both hook basenames are
-registered and the registered script files exist (path need not match the
-checkout that is booting). Re-run from the primary checkout after moving it; the
-command is idempotent and preserves unrelated hooks. Feature worktrees do not
-need a separate install.
+`agent_stack_start`. Server boot does not check Shell hook registration; SDK
+sessions in the app use the host shell executor instead. Re-run from the
+primary checkout after moving it; the command is idempotent and preserves
+unrelated hooks. Feature worktrees do not need a separate install.
 
 ## How the pieces fit
 
