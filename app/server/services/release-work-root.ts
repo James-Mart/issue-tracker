@@ -14,10 +14,14 @@ import { implementingWorkRootFromIssue, type WorkRoot } from "./work-slots.js";
  * `releasedAt`, lower the root to `manual` when code approval is required,
  * and queue it when the execution gate starts it. A root its queue checks
  * refuse (blocked, already queued, holding a slot) stays unqueued. A root
- * that already carries `releasedAt` is left as it is. Resolves to the root's
- * `releasedAt`.
+ * that already carries `releasedAt` is left as it is unless `again` is set,
+ * which reapplies the outline's current gates and keeps the stored timestamp.
+ * Resolves to the root's `releasedAt`.
  */
-export function releaseWorkRoot(id: string): Promise<string> {
+export function releaseWorkRoot(
+  id: string,
+  options?: { again?: boolean },
+): Promise<string> {
   return serialize(() => {
     ensureMigrations();
     const current = readIssueOrThrow(id);
@@ -30,17 +34,18 @@ export function releaseWorkRoot(id: string): Promise<string> {
         `issue "${id}" is not an Epic or project-level Story`,
       );
     }
-    if (root.releasedAt) return root.releasedAt;
+    if (root.releasedAt && options?.again !== true) return root.releasedAt;
 
     const now = new Date().toISOString();
+    const releasedAt = root.releasedAt ?? now;
     commitWithPlanGates(
       byId,
-      [{ ...root, releasedAt: now, updatedAt: now }],
+      [{ ...root, releasedAt, updatedAt: now }],
       { lowerId: root.id, rootId: root.id },
       outlineGatesOf(root, byId),
       now,
     );
-    return now;
+    return releasedAt;
   });
 }
 

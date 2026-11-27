@@ -223,6 +223,7 @@ describe("derive - reconciliation needed", () => {
     const derived = derive(issues).byId;
     expect(derived["open-epic"].behind).toBe(true);
     expect(derived.o.reconciliationNeeded).toBe(true);
+    expect(derived.o.placementLive).toBe(false);
   });
 });
 

@@ -24,6 +24,8 @@ import {
   removeAttachment,
 } from "../services/attachments.js";
 import { IssueError } from "../services/errors.js";
+import { startRootPlacement } from "../services/placement-chain.js";
+import { PLACEMENT_ACTIONS } from "../schemas/placement-chain.js";
 import {
   findAgentRunsWorkRoot,
   listAgentRunEvents,
@@ -74,7 +76,7 @@ import {
 import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
   assertEmptyDecomposeBody,
-  assertEmptyReconcileBody,
+  assertEmptyPlacementBody,
   decomposerSessionFromOutline,
   parsePlanningSessionRequest,
   startOutlinePlanningSession,
@@ -213,27 +215,27 @@ export function createIssuesRouter(
     }),
   );
 
-  router.post(
-    "/:id/outline/reconcile",
-    asyncRoute(async (req, res) => {
-      const outline = readOutlineOrThrow(req.params.id);
-      assertEmptyReconcileBody(req.body);
-      requireProjectWorkspace(outline.partOf);
-      const meta = await startOutlinePlanningSession(
-        {
-          outlineId: outline.id,
-          role: "reconcile",
-          version: outline.bodyVersion,
-        },
-        sessions,
-      );
-      res.status(201).json({
-        id: meta.id,
-        title: meta.title,
-        model: meta.model,
-      });
-    }),
-  );
+  for (const action of PLACEMENT_ACTIONS) {
+    router.post(
+      `/:id/roots/:rootId/${action}`,
+      asyncRoute(async (req, res) => {
+        const outline = readOutlineOrThrow(req.params.id);
+        assertEmptyPlacementBody(req.body);
+        requireProjectWorkspace(outline.partOf);
+        const meta = await startRootPlacement(
+          outline.id,
+          req.params.rootId,
+          action,
+          sessions,
+        );
+        res.status(201).json({
+          id: meta.id,
+          title: meta.title,
+          model: meta.model,
+        });
+      }),
+    );
+  }
 
   router.post(
     "/:id/planning/sessions",

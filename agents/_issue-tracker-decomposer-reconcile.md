@@ -49,8 +49,8 @@ Absolute path for this file (Read this exact path):
    idea follow the authoring skill **Promoted mockup artifacts** for each
    mockup direction the diff names, copied from that Source idea, with the
    tweak wording the outline states for it.
-6. **Stamps.** Follow the authoring skill **Source outline (sourceOutline)**
-   reconciliation rule with Version.
+6. **Stamps.** Follow **Decomposer reconcile** in the authoring skill section
+   **Source outline (sourceOutline)** with Version.
 7. **Polish.** The root is touched when step 3, step 4, or step 5 wrote to
    it, or when its tree lists a Covered by Task. On a touched root, **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan-polish/SKILL.md`

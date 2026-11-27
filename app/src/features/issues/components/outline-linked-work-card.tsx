@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { ChevronRight } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import type { IssueDetail } from "@server/schemas";
 import { ShellInlineFault, ShellState } from "@/app/shell-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+import { usePlaceOnRoot } from "../api/mutations";
 import { useIssuesIncludingArchived } from "../hooks/use-issues-with-archived";
 import {
   type IssueBackLocationState,
@@ -16,13 +18,12 @@ import {
   linkedRootsForOutline,
   type LinkedRoot,
 } from "../lib/outline-links";
-import { outlineVersionLabel } from "../lib/project-outlines";
+import { writeIssueDetailTabParam } from "../lib/issue-detail-tabs";
+import type { PlacementAction } from "../lib/placement-actions";
+import { linkedRootVersionLabel } from "../lib/project-outlines";
 import { useIssueUiStore } from "../store/use-issue-ui-store";
 import { AxisChips, BEHIND_AXIS_CHIP } from "./axis-chips";
 import { DetailEyebrow, SETTINGS_HEADING_CLASS } from "./detail-section";
-const ROW_GRID =
-  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 shell:grid-cols-[5.5rem_minmax(0,1fr)_4.5rem_6.5rem] shell:gap-x-4";
-
 /**
  * Roots built from this outline: kind, title, stamped version, and `behind`.
  * Sits above the body card in every outline state.
@@ -34,6 +35,9 @@ export function OutlineLinkedWorkCard({
 }) {
   const showArchived = useIssueUiStore((state) => state.showArchived);
   const query = useIssuesIncludingArchived(showArchived);
+  const placementLive = query.data?.derived[issue.id]?.placementLive === true;
+  const place = usePlaceOnRoot(issue.id);
+  const [, setSearchParams] = useSearchParams();
   const roots = useMemo(() => {
     if (!query.data) return [];
     return linkedRootsForOutline(
@@ -75,12 +79,9 @@ export function OutlineLinkedWorkCard({
     );
   } else {
     body = (
-      <>
+      <div className="shell:grid shell:grid-cols-[5.5rem_minmax(0,1fr)_auto_auto] shell:gap-x-4">
         <div
-          className={cn(
-            ROW_GRID,
-            "mb-1 hidden border border-transparent border-b-border pb-1 shell:grid",
-          )}
+          className="mb-1 hidden border-b border-border pb-1 shell:col-span-4 shell:grid shell:grid-cols-subgrid shell:items-center"
           aria-hidden="true"
         >
           <span className={SETTINGS_HEADING_CLASS}>Kind</span>
@@ -92,18 +93,40 @@ export function OutlineLinkedWorkCard({
             Status
           </span>
         </div>
-        <ul className="flex list-none flex-col divide-y divide-border p-0">
+        <ul className="flex list-none flex-col p-0 shell:col-span-4 shell:grid shell:grid-cols-subgrid">
           {roots.map((root) => (
-            <li key={root.id}>
+            <li
+              key={root.id}
+              className="border-b border-border last:border-b-0 shell:col-span-4 shell:grid shell:grid-cols-subgrid shell:items-center"
+            >
               <LinkedRootRow
                 root={root}
+                latest={issue.bodyVersion}
                 projectId={issue.partOf}
                 linkState={linkState}
+                showActions={root.open && root.behind && !placementLive}
+                placePending={
+                  place.isPending && place.variables?.rootId === root.id
+                }
+                onPlace={(action) => {
+                  place.mutate(
+                    { rootId: root.id, action },
+                    {
+                      onSuccess: () => {
+                        setSearchParams(
+                          (prev) =>
+                            writeIssueDetailTabParam(prev, "decomposition"),
+                          { replace: true },
+                        );
+                      },
+                    },
+                  );
+                }}
               />
             </li>
           ))}
         </ul>
-      </>
+      </div>
     );
   }
 
@@ -122,48 +145,95 @@ export function OutlineLinkedWorkCard({
 
 function LinkedRootRow({
   root,
+  latest,
   projectId,
   linkState,
+  showActions,
+  placePending,
+  onPlace,
 }: {
   root: LinkedRoot;
+  latest: number;
   projectId: string;
   linkState: ReturnType<typeof issueBackNavigateState>;
+  showActions: boolean;
+  placePending: boolean;
+  onPlace: (action: PlacementAction) => void;
 }) {
-  const version = outlineVersionLabel(root.version);
+  const version = linkedRootVersionLabel(root.version, latest);
   return (
-    <Link
-      to={issuePath(projectId, root.id)}
-      state={linkState}
+    <div
       data-testid={`outline-linked-root-${root.id}`}
-      className={cn(
-        ROW_GRID,
-        "rounded-md border border-transparent py-2.5 text-foreground hover:border-[hsl(var(--rail-lit))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
+      className="flex flex-col gap-2 shell:contents"
     >
-      <Badge
-        variant="outline"
-        className="justify-self-start font-mono text-[10px] uppercase tracking-[0.08em]"
+      <Link
+        to={issuePath(projectId, root.id)}
+        state={linkState}
+        className={cn(
+          "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md border border-transparent py-2.5 text-foreground hover:border-[hsl(var(--rail-lit))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          showActions
+            ? "shell:col-span-3 shell:grid shell:grid-cols-subgrid shell:gap-x-4"
+            : "shell:col-span-4 shell:grid shell:grid-cols-subgrid shell:gap-x-4",
+        )}
       >
-        {KIND_LABEL[root.kind]}
-      </Badge>
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{root.title}</span>
-        <span className="mt-0.5 block font-mono text-xs tabular-nums text-muted-foreground shell:hidden">
+        <Badge
+          variant="outline"
+          className="justify-self-start font-mono text-[10px] uppercase tracking-[0.08em]"
+        >
+          {KIND_LABEL[root.kind]}
+        </Badge>
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{root.title}</span>
+          <span className="mt-0.5 block whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground shell:hidden">
+            {version}
+          </span>
+        </span>
+        <span
+          data-testid={`outline-linked-root-version-${root.id}`}
+          className="hidden whitespace-nowrap text-right font-mono text-xs tabular-nums text-muted-foreground shell:block"
+        >
           {version}
         </span>
-      </span>
-      <span className="hidden text-right font-mono text-xs tabular-nums text-muted-foreground shell:block">
-        {version}
-      </span>
-      <span className="flex items-center justify-end gap-2">
-        {root.behind ? (
-          <AxisChips chips={[BEHIND_AXIS_CHIP]} />
-        ) : null}
-        <ChevronRight
-          aria-hidden="true"
-          className="h-4 w-4 text-muted-foreground shell:hidden"
-        />
-      </span>
-    </Link>
+        <span
+          className={cn(
+            "flex items-center justify-end gap-2",
+            showActions && "shell:hidden",
+          )}
+        >
+          {root.behind && !showActions ? (
+            <AxisChips chips={[BEHIND_AXIS_CHIP]} />
+          ) : null}
+          <ChevronRight
+            aria-hidden="true"
+            className="h-4 w-4 text-muted-foreground shell:hidden"
+          />
+        </span>
+      </Link>
+      {showActions ? (
+        <span className="flex items-center justify-end gap-2 pb-2.5 shell:col-start-4 shell:pb-0">
+          {root.behind ? <AxisChips chips={[BEHIND_AXIS_CHIP]} /> : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid={`outline-root-reconcile-${root.id}`}
+            disabled={placePending}
+            onClick={() => onPlace("reconcile")}
+          >
+            Reconcile only
+          </Button>
+          <Button
+            type="button"
+            variant="current"
+            size="sm"
+            data-testid={`outline-root-update-${root.id}`}
+            disabled={placePending}
+            onClick={() => onPlace("update")}
+          >
+            Update
+          </Button>
+        </span>
+      ) : null}
+    </div>
   );
 }

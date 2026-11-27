@@ -346,6 +346,7 @@ export const OUTLINE_GET_FIELDS = {
   concludedAt: STORED,
   readyToDecompose: DERIVED,
   reconciliationNeeded: DERIVED,
+  placementLive: DERIVED,
   order: STORED,
   createdAt: STORED,
   updatedAt: STORED,

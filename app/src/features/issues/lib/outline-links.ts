@@ -37,26 +37,6 @@ export function linkedWorkCountLabel(epics: number, stories: number): string {
   return parts.length > 0 ? parts.join(" · ") : "0 roots";
 }
 
-/** One row of Reconciliation needed: a behind open linked root. */
-export type ReconciliationRow = {
-  id: string;
-  title: string;
-};
-
-/**
- * Behind open linked roots for this outline, in board order. Empty when
- * none are behind.
- */
-export function reconciliationNeededRows(
-  outlineId: string,
-  issues: IssueRecord[],
-  derived: Record<string, DerivedState>,
-): ReconciliationRow[] {
-  return linkedRootsForOutline(issues, derived, outlineId, false)
-    .filter((root) => root.open && root.behind)
-    .map(({ id, title }) => ({ id, title }));
-}
-
 export type OutlineCatalogLinks = {
   /** Archived roots included, matching Ready to decompose. */
   linkedRootIds: Set<string>;

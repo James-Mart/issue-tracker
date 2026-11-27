@@ -41,6 +41,7 @@ import {
 import { releaseCoalescedCustomTools } from "./custom-tool-coalesce.js";
 import { releasePreparedAppendPaths } from "./jsonl-append.js";
 import { ISSUES_TOPIC } from "./issue-events.js";
+import { classifyPlacementRun } from "./placement-chain.js";
 import {
   classifyReviewTaskingRun,
   failReviewTaskingClassification,
@@ -759,6 +760,21 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         }
         // Submit can resume the assessor as soon as this turn clears; that newer
         // run owns the outcome of the phase it started.
+        if (!classified && entry.turn === undefined) {
+          try {
+            classified = await classifyPlacementRun(conversationId, outcome, {
+              getActiveRun: (id) => sessions.get(id)?.turn?.run,
+              sendPrompt: (id, options) => sendPromptInternal(id, options, false),
+              isBusy,
+              claimStart,
+            });
+          } catch (err) {
+            console.error(
+              `placement classification failed for conversation ${conversationId}`,
+              err,
+            );
+          }
+        }
         if (!classified && entry.turn === undefined) {
           try {
             classified = classifyStandardsAssessmentRun(conversationId, outcome);

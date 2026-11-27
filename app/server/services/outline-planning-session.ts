@@ -2,10 +2,13 @@ import { z } from "zod";
 import {
   outlineCheckSessionMessage,
   outlineDecomposerSessionMessage,
+  outlineDecomposerUpdateSessionMessage,
   outlineNewPlanningSessionMessage,
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
+  outlinePolishSessionMessage,
   outlineReconcileSessionMessage,
+  outlineReconcilerSessionMessage,
   resolveExecutionGate,
   type OutlineExecutionGate,
   type OutlineReconcileScope,
@@ -42,11 +45,36 @@ export type StartOutlineDecomposerSession = {
   mergePolicy?: string;
 };
 
+/** Decomposer placing new outline work on one existing root, up to `version`. */
+export type StartOutlineDecomposerUpdateSession = {
+  outlineId: string;
+  role: "decomposer";
+  mode: "update";
+  version: number;
+  rootId: string;
+};
+
 export type StartOutlineReconcileSession = {
   outlineId: string;
   role: "reconcile";
   version: number;
 } & OutlineReconcileScope;
+
+export type StartOutlineReconcilerSession = {
+  outlineId: string;
+  role: "reconciler";
+  version: number;
+  rootId: string;
+  storyId?: string;
+};
+
+export type StartOutlinePolishSession = {
+  outlineId: string;
+  role: "polish";
+  version: number;
+  rootId: string;
+  from: number;
+};
 
 export type StartOutlineCheckSession = {
   outlineId: string;
@@ -60,7 +88,10 @@ export type StartOutlineCheckSession = {
 export type StartOutlinePlanningSessionInput =
   | StartOutlinePlannerSession
   | StartOutlineDecomposerSession
+  | StartOutlineDecomposerUpdateSession
   | StartOutlineReconcileSession
+  | StartOutlineReconcilerSession
+  | StartOutlinePolishSession
   | StartOutlineCheckSession;
 
 const decomposeRequestSchema = z.object({}).strict();
@@ -81,9 +112,23 @@ export function assertEmptyDecomposeBody(body: unknown): void {
   assertEmptyStartBody(body, "invalid decompose body");
 }
 
-/** Body of `POST /outline/reconcile`. Any field is refused. */
-export function assertEmptyReconcileBody(body: unknown): void {
-  assertEmptyStartBody(body, "invalid reconcile body");
+/** Body of `POST /roots/:rootId/update` and `/reconcile`. Any field is refused. */
+export function assertEmptyPlacementBody(body: unknown): void {
+  assertEmptyStartBody(body, "invalid placement body");
+}
+
+/**
+ * Refuse a decompose while a per-root placement is stored. The chain
+ * advances on any finished decomposer run on the outline, so its own
+ * decomposer step must be the only one.
+ */
+export function requireNoPlacement(outline: OutlineIssue): void {
+  if (outline.placementChain) {
+    throw new IssueError(
+      "conflict",
+      `outline "${outline.id}" has a placement in progress`,
+    );
+  }
 }
 
 /** Decomposer start for one outline, from its stored gate and merge policy. */
@@ -133,8 +178,8 @@ export function parsePlanningSessionRequest(body: unknown): PlanningSessionReque
 
 /**
  * Open a planner session on an outline's planning channel, or a decomposer,
- * reconcile, or check session on its decomposition channel, and start its
- * first turn.
+ * reconcile, reconciler, polish, or check session on its decomposition
+ * channel, and start its first turn.
  */
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
@@ -157,11 +202,19 @@ export async function createOutlinePlanningSession(
 ): Promise<{ meta: ConversationMeta; firstPrompt: FirstPrompt }> {
   const normalized = normalizePlanningSessionInput(input);
   const outline = readOutlineOrThrow(normalized.outlineId);
+  const update = isDecomposerUpdate(normalized);
+  if (normalized.role === "decomposer" && !update) {
+    requireNoPlacement(outline);
+  }
   const outlineIdea = outline.sourceIdea
     ? readSourceIdeaOrThrow(outline.sourceIdea)
     : undefined;
   const model = outlinePlanningSessionModel(outlineIdea?.stakeholder);
-  const title = outlinePlanningSessionTitle(normalized.role, outline.title);
+  const title = outlinePlanningSessionTitle(
+    normalized.role,
+    outline.title,
+    update ? "update" : undefined,
+  );
   const message = sessionMessage(normalized, outline);
   const { meta, firstPrompt } = await createIssueChannelSession(
     {
@@ -184,6 +237,12 @@ export async function createOutlinePlanningSession(
 /** The Idea a `sourceIdea` field names. Any other kind is refused. */
 export function readSourceIdeaOrThrow(id: string): IdeaIssue {
   return readIdeaOrThrow(id, "source idea");
+}
+
+function isDecomposerUpdate(
+  input: StartOutlinePlanningSessionInput,
+): input is StartOutlineDecomposerUpdateSession {
+  return input.role === "decomposer" && "mode" in input;
 }
 
 function normalizePlanningSessionInput(
@@ -217,6 +276,29 @@ function sessionMessage(
       targetStory: input.targetStory,
       coveredBy: input.coveredBy,
       sourceIdea: input.sourceIdea,
+    });
+  }
+  if (input.role === "reconciler") {
+    return outlineReconcilerSessionMessage({
+      outlineId: outline.id,
+      version: input.version,
+      rootId: input.rootId,
+      storyId: input.storyId,
+    });
+  }
+  if (input.role === "polish") {
+    return outlinePolishSessionMessage({
+      outlineId: outline.id,
+      rootId: input.rootId,
+      from: input.from,
+      version: input.version,
+    });
+  }
+  if (isDecomposerUpdate(input)) {
+    return outlineDecomposerUpdateSessionMessage({
+      outlineId: outline.id,
+      version: input.version,
+      rootId: input.rootId,
     });
   }
   return outlineDecomposerSessionMessage({

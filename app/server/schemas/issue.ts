@@ -17,6 +17,7 @@ import {
   reviewPrSourceSchema,
   reviewSubmissionSchema,
 } from "./review-state.js";
+import { placementChainSchema } from "./placement-chain.js";
 import { supportingDocRefSchema, type SupportingDocRef } from "./supporting-doc.js";
 import type {
   FileCommentAnchor,
@@ -643,6 +644,8 @@ export const outlineSchema = z.object({
   outOfBand: z.boolean().optional(),
   // System-written when conclude archives the Idea. Patches are refused.
   concludedAt: nonEmpty.optional(),
+  // System-written while a per-root Update or Reconcile only chain is in progress.
+  placementChain: placementChainSchema.optional(),
   ...archivableFields,
   ...orderField,
   ...timestamps,
@@ -906,6 +909,11 @@ export interface DerivedState {
    * root stays derived from its `sourceOutline`.
    */
   reconciliationNeeded?: boolean;
+  /**
+   * Outline only. True while a per-root placement chain is stored, or while
+   * a decomposer run is live. The live-run clause is applied by `list()`.
+   */
+  placementLive?: boolean;
   /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**
