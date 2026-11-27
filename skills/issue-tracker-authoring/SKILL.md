@@ -178,10 +178,32 @@ Stamp that version on every item `apply` created (each id on its stdout
 The stamp is metadata; prose never restates the version. Rules:
 [SPEC.md § Relationships](../../SPEC.md#relationships).
 
+An Epic is open while `issue epic get <id> epicStatus` is not `done`. A
+Story is open while `issue story get <id> merged` is `false`. A Task is
+open while `issue task get <id> status` is not `done`.
+
+### Reconciler
+
+The reconciler rewrites each open Epic and Story description in scope so
+it matches Version. Scope is the root and every Story under it, or that
+Story and its root when the prompt names a Story. It creates no Stories
+or Tasks. It skips any Story whose `needsAttention` is true.
+
+- Set each rewritten description with
+  `issue <kind> set <id> description --file <path>`, following the linking
+  rule above.
+- Stamp Version on each issue this run rewrote and on that issue's open
+  Tasks:
+  `issue <kind> set <id> sourceOutline '{"outline":"<outlineId>","version":<n>}'`
+  Stamp the root, and its open Tasks, only when every open Story under it
+  has `issue story get <id> behind` printing `false`. A Story this run
+  skipped stays behind until a later run stamps it. Stamp the prompt's
+  Version, including when the outline's latest body is newer.
+
+### Decomposer reconcile
+
 Reconciling a newer version `<n>` into an open root stamped with that
-outline edits the root in place. An Epic is open while
-`issue epic get <id> epicStatus` is not `done`; a Story is open while
-`issue story get <id> merged` is `false`.
+outline edits the root in place.
 
 - Set each rewritten open Epic or Story description with
   `issue <kind> set <id> description --file <path>`, following the linking
@@ -256,9 +278,9 @@ Before done:
   (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
 - Outline decompositions stamp `sourceOutline` on every created item after
-  `apply`, reconciliations move open Epic and Story stamps and stamp appended
-  Tasks, and each Epic and Story links to the outline sections it builds on
-  (see [Source outline (sourceOutline)](#source-outline-sourceoutline)).
+  `apply`. Reconciler and decomposer reconcile follow
+  [Source outline (sourceOutline)](#source-outline-sourceoutline). Each Epic
+  and Story links to the outline sections it builds on.
 - Every Task with no diff uses imperative `noDiff` after `apply` or
   `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the

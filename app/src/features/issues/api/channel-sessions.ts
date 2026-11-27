@@ -107,6 +107,8 @@ const OUTLINE_SESSION_ROLE_LABELS: Record<OutlineSessionRole, string> = {
   planner: "Planner",
   decomposer: "Decomposer",
   reconcile: "Reconcile",
+  reconciler: "Reconciler",
+  polish: "Plan polish",
   check: "Outline check",
   "mockup-author": "Mockup author",
 };

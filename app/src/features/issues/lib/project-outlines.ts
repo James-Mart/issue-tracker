@@ -94,6 +94,12 @@ export function outlineVersionLabel(bodyVersion: number): string {
   return `v${bodyVersion}`;
 }
 
+/** Linked-work version cell. A stamp at the outline's latest body reads `v4 · latest`. */
+export function linkedRootVersionLabel(version: number, latest: number): string {
+  const label = outlineVersionLabel(version);
+  return version === latest ? `${label} · latest` : label;
+}
+
 function byRecentVersion(a: OutlineRecord, b: OutlineRecord): number {
   const byTime = b.updatedAt.localeCompare(a.updatedAt);
   return byTime === 0 ? a.id.localeCompare(b.id) : byTime;

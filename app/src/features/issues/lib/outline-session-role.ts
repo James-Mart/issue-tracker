@@ -2,6 +2,8 @@ export const OUTLINE_SESSION_ROLES = [
   "planner",
   "decomposer",
   "reconcile",
+  "reconciler",
+  "polish",
   "check",
   "mockup-author",
 ] as const;
@@ -21,6 +23,8 @@ const OUTLINE_ROLE_CHANNELS = {
   planner: "planning",
   decomposer: "decomposition",
   reconcile: "decomposition",
+  reconciler: "decomposition",
+  polish: "decomposition",
   check: "decomposition",
   "mockup-author": "mockups",
 } as const satisfies Record<OutlineSessionRole, OutlineChannel>;

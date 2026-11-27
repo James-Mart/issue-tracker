@@ -32,7 +32,8 @@ export function outlinePlanningSessionTitle(
   outlineTitle: string,
 ): string {
   if (role === "planner") return planningSessionTitle(outlineTitle);
-  if (role === "reconcile") return `Reconcile ${outlineTitle}`;
+  if (role === "reconcile" || role === "reconciler") return `Reconcile ${outlineTitle}`;
+  if (role === "polish") return `Polish ${outlineTitle}`;
   if (role === "check") return `Check ${outlineTitle}`;
   if (role === "mockup-author") return `Mockups ${outlineTitle}`;
   return `Decompose ${outlineTitle}`;
@@ -127,6 +128,37 @@ export function outlineReconcileSessionMessage(
     ? ` Source idea: \`${input.sourceIdea}\`.`
     : "";
   return `${message}${target}${covered}${idea}`;
+}
+
+/** First prompt for the reconciler on one root. `storyId` limits the rewrite. */
+export function outlineReconcilerSessionMessage(input: {
+  outlineId: string;
+  version: number;
+  rootId: string;
+  storyId?: string;
+}): string {
+  const message =
+    `Reconcile ${input.outlineId} in the issue tracker. ` +
+    `Read ${agentBodyPath("_issue-tracker-reconciler")} and follow it. ` +
+    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`. ` +
+    `Root: \`${input.rootId}\`.`;
+  if (!input.storyId) return message;
+  return `${message} Story: \`${input.storyId}\`.`;
+}
+
+/** First prompt for plan polish on the root a placement chain is refreshing. */
+export function outlinePolishSessionMessage(input: {
+  outlineId: string;
+  rootId: string;
+  from: number;
+  version: number;
+}): string {
+  return (
+    `Polish ${input.rootId} for ${input.outlineId} in the issue tracker. ` +
+    `Read ${skillPath("issue-tracker-plan-polish")} and follow it. ` +
+    `Outline: \`${input.outlineId}\`. From: \`${input.from}\`. ` +
+    `Version: \`${input.version}\`. Root: \`${input.rootId}\`.`
+  );
 }
 
 /** First prompt for checking an outline against submitted review threads. */

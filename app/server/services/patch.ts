@@ -44,6 +44,9 @@ export function validateSystemWrittenPatch(patch: IssuePatch): void {
   if (patch.releasedAt !== undefined) {
     throw new IssueError("validation", "releasedAt is system-written");
   }
+  if (patch.placementChain !== undefined) {
+    throw new IssueError("validation", "placementChain is system-written");
+  }
 }
 
 export function validateSourceIdeaPatch(

@@ -5,7 +5,9 @@ import {
   outlineNewPlanningSessionMessage,
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
+  outlinePolishSessionMessage,
   outlineReconcileSessionMessage,
+  outlineReconcilerSessionMessage,
   resolveExecutionGate,
   type OutlineExecutionGate,
   type OutlineReconcileScope,
@@ -48,6 +50,22 @@ export type StartOutlineReconcileSession = {
   version: number;
 } & OutlineReconcileScope;
 
+export type StartOutlineReconcilerSession = {
+  outlineId: string;
+  role: "reconciler";
+  version: number;
+  rootId: string;
+  storyId?: string;
+};
+
+export type StartOutlinePolishSession = {
+  outlineId: string;
+  role: "polish";
+  version: number;
+  rootId: string;
+  from: number;
+};
+
 export type StartOutlineCheckSession = {
   outlineId: string;
   role: "check";
@@ -61,6 +79,8 @@ export type StartOutlinePlanningSessionInput =
   | StartOutlinePlannerSession
   | StartOutlineDecomposerSession
   | StartOutlineReconcileSession
+  | StartOutlineReconcilerSession
+  | StartOutlinePolishSession
   | StartOutlineCheckSession;
 
 const decomposeRequestSchema = z.object({}).strict();
@@ -133,8 +153,8 @@ export function parsePlanningSessionRequest(body: unknown): PlanningSessionReque
 
 /**
  * Open a planner session on an outline's planning channel, or a decomposer,
- * reconcile, or check session on its decomposition channel, and start its
- * first turn.
+ * reconcile, reconciler, polish, or check session on its decomposition
+ * channel, and start its first turn.
  */
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
@@ -217,6 +237,22 @@ function sessionMessage(
       targetStory: input.targetStory,
       coveredBy: input.coveredBy,
       sourceIdea: input.sourceIdea,
+    });
+  }
+  if (input.role === "reconciler") {
+    return outlineReconcilerSessionMessage({
+      outlineId: outline.id,
+      version: input.version,
+      rootId: input.rootId,
+      storyId: input.storyId,
+    });
+  }
+  if (input.role === "polish") {
+    return outlinePolishSessionMessage({
+      outlineId: outline.id,
+      rootId: input.rootId,
+      from: input.from,
+      version: input.version,
     });
   }
   return outlineDecomposerSessionMessage({

@@ -24,6 +24,7 @@ import {
   removeAttachment,
 } from "../services/attachments.js";
 import { IssueError } from "../services/errors.js";
+import { startRootReconcile } from "../services/placement-chain.js";
 import {
   findAgentRunsWorkRoot,
   listAgentRunEvents,
@@ -225,6 +226,25 @@ export function createIssuesRouter(
           role: "reconcile",
           version: outline.bodyVersion,
         },
+        sessions,
+      );
+      res.status(201).json({
+        id: meta.id,
+        title: meta.title,
+        model: meta.model,
+      });
+    }),
+  );
+
+  router.post(
+    "/:id/roots/:rootId/reconcile",
+    asyncRoute(async (req, res) => {
+      const outline = readOutlineOrThrow(req.params.id);
+      assertEmptyReconcileBody(req.body);
+      requireProjectWorkspace(outline.partOf);
+      const meta = await startRootReconcile(
+        outline.id,
+        req.params.rootId,
         sessions,
       );
       res.status(201).json({

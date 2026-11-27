@@ -675,6 +675,30 @@ export function useReconcileOutline(outlineId: string) {
   return useStartOutlineRoleSession(outlineId, "reconcile", "reconcile");
 }
 
+/** Start reconciler, then plan polish, on one behind open root. */
+export function useReconcileRoot(outlineId: string) {
+  const qc = useQueryClient();
+  return useMutation<StartedChannelSession, Error, string>({
+    mutationFn: (rootId) =>
+      request<StartedChannelSession>(
+        `/api/issues/${encodeURIComponent(outlineId)}/roots/${encodeURIComponent(rootId)}/reconcile`,
+        { method: "POST", body: {} },
+      ),
+    onError: (err) => toast.error(messageOf(err)),
+    onSuccess: (data) => {
+      rememberStartedChannelSession(qc, outlineId, "decomposition", {
+        ...data,
+        outlineRole: "reconciler",
+      });
+    },
+    onSettled: () => {
+      invalidateStartedChannelSession(qc, outlineId, "decomposition");
+      qc.invalidateQueries({ queryKey: issuesKeys.list() });
+      qc.invalidateQueries({ queryKey: issuesKeys.detail(outlineId) });
+    },
+  });
+}
+
 export type UpdateOutlineDraftResult = {
   id: string;
   title: string;
