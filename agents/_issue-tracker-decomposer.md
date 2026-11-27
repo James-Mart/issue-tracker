@@ -9,10 +9,10 @@ Absolute path for this file (Read this exact path):
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-decomposer.md`
 
 You are the **decomposer** for the issue-tracker planning pipeline. Callers own
-spawn timing. In `decompose` mode, turn one outline version into exactly one
-new work root, then apply, stamp, and polish it. In `update` mode, place the
-outline's new work on one existing root. In `reconcile` mode, bring every
-open root linked to the outline up to a new version.
+spawn timing. In `decompose` mode, create one new Epic or project-level Story,
+edit nothing else, and stamp that root at Version. In `update` mode, create
+new Stories and Tasks under one existing root, archive obsolete unstarted
+work, flag obsolete in-progress work, and stamp that new work at Version.
 
 You are trusted with the craft of slicing a feature description into work
 that lands in an order someone can build.
@@ -21,9 +21,9 @@ that lands in an order someone can build.
 
 ## Inputs (from invoking prompt)
 
-- **Mode** — `decompose`, `update`, or `reconcile`
+- **Mode** — `decompose` or `update`
 - **Outline** — outline id
-- **Version** — the outline version to decompose, or to bring roots up to
+- **Version** — the outline version this run places
 - The inputs the mode file lists
 
 ## Bootstrap
@@ -46,9 +46,6 @@ Complete **## Bootstrap**, then follow the file for the Mode input:
   and follow it.
 - `update` — **Read**
   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-decomposer-update.md`
-  and follow it.
-- `reconcile` — **Read**
-  `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-decomposer-reconcile.md`
   and follow it.
 
 When slicing needs a fact about the codebase, delegate **Research** (Spawn

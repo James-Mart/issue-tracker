@@ -57,7 +57,7 @@ function current(api: Api): ReviewSubmission {
 describe("review outline check", () => {
   useReviewTaskingStore("issue-tracker-outline-check-");
 
-  it("waits at the gate, and Yes tasks at the new version then reconciles with those Tasks", async () => {
+  it("waits at the gate, and Yes tasks at the new version then reconciles that Story", async () => {
     seedReviewTasking();
     seedOutlinedStory();
     const prompts: string[] = [];
@@ -109,9 +109,19 @@ describe("review outline check", () => {
     await api.classifyReviewTaskingRun(taskerConversation, { status: "finished" }, sessions);
 
     expect(current(api)).toMatchObject({ status: "done", taskIds: ["fix-name"] });
-    const reconcile = prompts.find((prompt) => prompt.includes("Mode: `reconcile`"));
-    expect(reconcile).toContain(`Outline: \`${OUTLINE_ID}\`. Version: \`2\`.`);
-    expect(reconcile).toContain("Target story: `s`.");
-    expect(reconcile).toContain("Covered by: `fix-name`.");
+    expect(current(api).coordinatorResumed).toBeUndefined();
+    const reconciler = prompts.find((prompt) => prompt.includes("_issue-tracker-reconciler"));
+    expect(reconciler).toContain(`Outline: \`${OUTLINE_ID}\`. Version: \`2\`.`);
+    expect(reconciler).toContain("Root: `e`.");
+    expect(reconciler).toContain("Story: `s`.");
+    expect(prompts.some((prompt) => prompt.includes("Covered by"))).toBe(false);
+    expect(prompts.some((prompt) => prompt.includes("Mode: `reconcile`"))).toBe(false);
+    expect(prompts.some((prompt) => prompt.includes("issue-tracker-plan-polish"))).toBe(false);
+
+    const reconcilerConversationId = current(api).reconcilerConversationId;
+    expect(reconcilerConversationId).toEqual(expect.any(String));
+    await api.resumeCoordinatorAfterReconciler(reconcilerConversationId!, sessions);
+    expect(current(api).coordinatorResumed).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes("issue-tracker-plan-polish"))).toBe(false);
   });
 });

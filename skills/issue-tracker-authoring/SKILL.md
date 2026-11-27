@@ -210,19 +210,6 @@ root and leaves every existing Epic and Story description as it is.
   Existing issues keep their stamps; the reconciler run that follows
   stamps the issues it rewrites.
 
-### Decomposer reconcile
-
-Reconciling a newer version `<n>` into an open root stamped with that
-outline edits the root in place.
-
-- Set each rewritten open Epic or Story description with
-  `issue <kind> set <id> description --file <path>`, following the linking
-  rule above.
-- Land new Tasks on an open Story with `issue story append`.
-- Stamp `<n>` on each Task `issue story append` created and on each open
-  Epic and Story in the root whose `sourceOutline` names this outline.
-  Existing Tasks and merged Stories keep their stamps.
-
 ## Tasks with no diff (noDiff)
 
 Some Tasks' work produces no source-controlled diff: tracker-state edits,
@@ -244,10 +231,6 @@ existing value. Rules:
 ## Promoted mockup artifacts
 
 Outline decompose attaches captures in its post-apply step.
-
-When the reconcile summary lists a held capture, reconcile follows
-**Held captures** in
-`/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`.
 
 When a procedure names this section, **Read**
 `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-plan/references/migrate.md`
@@ -288,12 +271,12 @@ Before done:
   (see [Source idea (sourceIdea)](#source-idea-sourceidea))
   — never put the field in the YAML doc or a `Source idea:` description line.
 - Outline decompositions stamp `sourceOutline` on every created item after
-  `apply`. Reconciler, decomposer update, and decomposer reconcile follow
+  `apply`. Reconciler and decomposer update follow
   [Source outline (sourceOutline)](#source-outline-sourceoutline). Each Epic
   and Story links to the outline sections it builds on.
 - Every Task with no diff uses imperative `noDiff` after `apply` or
   `issue story append` (see
   [Tasks with no diff (noDiff)](#tasks-with-no-diff-nodiff)) — never put the
   flag in the YAML doc.
-- Outside decompose and reconcile, chosen mockup directions follow
+- Outside decompose, chosen mockup directions follow
   **Promoted mockup artifacts** after `apply` — not in the YAML doc.

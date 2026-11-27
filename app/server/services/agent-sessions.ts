@@ -45,6 +45,7 @@ import { classifyPlacementRun } from "./placement-chain.js";
 import {
   classifyReviewTaskingRun,
   failReviewTaskingClassification,
+  resumeCoordinatorAfterReconciler,
 } from "./review-tasking.js";
 import {
   classifyStandardsAssessmentRun,
@@ -736,13 +737,19 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
           status: result.status,
           errorMessage: result.error?.message,
         };
+        const classifierSessions = {
+          getActiveRun: (id: string) => sessions.get(id)?.turn?.run,
+          sendPrompt: (id: string, options: { prompt: string }) =>
+            sendPromptInternal(id, options, false),
+          isBusy,
+          claimStart,
+        };
         try {
-          classified = await classifyReviewTaskingRun(conversationId, outcome, {
-            getActiveRun: (id) => sessions.get(id)?.turn?.run,
-            sendPrompt: (id, options) => sendPromptInternal(id, options, false),
-            isBusy,
-            claimStart,
-          });
+          classified = await classifyReviewTaskingRun(
+            conversationId,
+            outcome,
+            classifierSessions,
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(
@@ -762,12 +769,26 @@ export function createAgentSessions(sdk: AgentSdk = agentSdk): AgentSessions {
         // run owns the outcome of the phase it started.
         if (!classified && entry.turn === undefined) {
           try {
-            classified = await classifyPlacementRun(conversationId, outcome, {
-              getActiveRun: (id) => sessions.get(id)?.turn?.run,
-              sendPrompt: (id, options) => sendPromptInternal(id, options, false),
-              isBusy,
-              claimStart,
-            });
+            classified = await resumeCoordinatorAfterReconciler(
+              conversationId,
+              classifierSessions,
+            );
+          } catch (err) {
+            // Tasking is already recorded done. A failed coordinator resume
+            // must not abort run-end handling; placement may still own the run.
+            console.error(
+              `reconciler follow-up failed for conversation ${conversationId}`,
+              err,
+            );
+          }
+        }
+        if (!classified && entry.turn === undefined) {
+          try {
+            classified = await classifyPlacementRun(
+              conversationId,
+              outcome,
+              classifierSessions,
+            );
           } catch (err) {
             console.error(
               `placement classification failed for conversation ${conversationId}`,

@@ -11,8 +11,12 @@ export interface OnDiskIssue {
   issue: Issue;
 }
 
-/** Shared iterator for one-shot migrations that scan every issue.json. */
-export function* forEachOnDiskIssue(): Generator<OnDiskIssue> {
+/**
+ * Every issue directory whose `issue.json` parses as JSON. Invalid JSON is
+ * skipped: a caller cannot rewrite a file it cannot read. Schema-invalid
+ * files are included; use `forEachOnDiskIssue` when the issue must parse.
+ */
+export function* forEachRawIssueJson(): Generator<{ id: string; raw: unknown }> {
   if (!existsSync(issuesDir)) return;
   for (const id of readdirSync(issuesDir)) {
     const dir = join(issuesDir, id);
@@ -25,6 +29,13 @@ export function* forEachOnDiskIssue(): Generator<OnDiskIssue> {
     } catch {
       continue;
     }
+    yield { id, raw };
+  }
+}
+
+/** Shared iterator for one-shot migrations that scan every issue.json. */
+export function* forEachOnDiskIssue(): Generator<OnDiskIssue> {
+  for (const { id, raw } of forEachRawIssueJson()) {
     const parsed = parseIssue(raw);
     if (!parsed.ok) continue;
     yield { id, raw, issue: parsed.issue };

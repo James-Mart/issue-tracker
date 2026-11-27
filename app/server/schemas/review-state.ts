@@ -115,6 +115,8 @@ const reviewSubmissionIdentity = {
   threadIds: z.array(nonEmpty).min(1),
   // Set when bring-in accepts the resume prompt. Absent means it was not accepted.
   coordinatorResumed: z.literal(true).optional(),
+  // Reconciler run an amended submission started. The coordinator waits for it.
+  reconcilerConversationId: nonEmpty.optional(),
   standards: standardsAssessmentSchema.optional(),
   outlineCheck: outlineCheckSchema.optional(),
 };

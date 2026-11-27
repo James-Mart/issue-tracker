@@ -21,10 +21,7 @@ import {
   rewriteOutlineDraftBody,
   saveOutlineDraftVersion,
 } from "./outline-draft.js";
-import {
-  createOutlinePlanningSession,
-  startOutlinePlanningSession,
-} from "./outline-planning-session.js";
+import { createOutlinePlanningSession } from "./outline-planning-session.js";
 import { patchStoredSubmission, readReviewView } from "./reviews.js";
 
 export const OUTLINE_CHECK_VERDICTS = ["unchanged", "proposed", "yes", "not-now"] as const;
@@ -300,37 +297,4 @@ export async function settleOutlineDraft(
 
 function settledAtVersion(check: OutlineCheck, version: number): OutlineCheck {
   return { ...check, status: "settled", version };
-}
-
-/**
- * After a Yes at the outline gate, reconcile linked work to the version the
- * tasker wrote Tasks at, with those Tasks as covered.
- */
-export async function reconcileAmendedOutline(
-  review: Pick<ReviewRecordView, "id">,
-  storyId: string,
-  submission: Extract<ReviewSubmission, { status: "done" }>,
-  sessions: ConversationMessageSessions,
-): Promise<void> {
-  const check = submission.outlineCheck;
-  if (!check?.amended || check.version === undefined) return;
-  try {
-    await startOutlinePlanningSession(
-      {
-        outlineId: check.outline,
-        role: "reconcile",
-        version: check.version,
-        targetStory: storyId,
-        ...(submission.taskIds.length > 0 ? { coveredBy: submission.taskIds } : {}),
-      },
-      sessions,
-    );
-  } catch (err) {
-    // Tasking already recorded done. Linked roots stay `behind` the new
-    // version, which the outline page shows; the error is logged for follow-up.
-    console.error(
-      `outline "${check.outline}" was not reconciled after review ${review.id} on story ${storyId}`,
-      err,
-    );
-  }
 }
