@@ -118,35 +118,6 @@ export function outlineDecomposerUpdateSessionMessage(input: {
   );
 }
 
-/** Optional reconcile inputs a triggering flow passes along with the version. */
-export type OutlineReconcileScope = {
-  targetStory?: string;
-  coveredBy?: readonly string[];
-  sourceIdea?: string;
-};
-
-/** First prompt for reconciling linked roots to one new outline version. */
-export function outlineReconcileSessionMessage(
-  input: { outlineId: string; version: number } & OutlineReconcileScope,
-): string {
-  const message =
-    `Reconcile ${input.outlineId} in the issue tracker. ` +
-    `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
-    `Mode: \`reconcile\`. ` +
-    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`.`;
-  const target = input.targetStory
-    ? ` Target story: \`${input.targetStory}\`.`
-    : "";
-  const covered =
-    input.coveredBy && input.coveredBy.length > 0
-      ? ` Covered by: ${input.coveredBy.map((id) => `\`${id}\``).join(", ")}.`
-      : "";
-  const idea = input.sourceIdea
-    ? ` Source idea: \`${input.sourceIdea}\`.`
-    : "";
-  return `${message}${target}${covered}${idea}`;
-}
-
 /** First prompt for the reconciler on one root. `storyId` limits the rewrite. */
 export function outlineReconcilerSessionMessage(input: {
   outlineId: string;

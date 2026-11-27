@@ -132,7 +132,7 @@ it("drops one direction's bundle and stories and leaves the shared tree and the 
 it("keeps an unpublished draft's overwritten bundles reversible", async () => {
   const { getAttachment, putAttachment } = await import("./attachments.js");
   const { create } = await import("./issues.js");
-  const { setOutlineDraft } = await import("./outline-draft.js");
+  const { writeOutlineDraft } = await import("./outline-draft-store.js");
   const { packOutlineTree } = await import("./outline-replay-tree.js");
   const { replayTreeDir } = await import("./outline-mockup-store.js");
   const outline = await create({
@@ -155,7 +155,11 @@ it("keeps an unpublished draft's overwritten bundles reversible", async () => {
   await putAttachment(outline.id, "mockup-a.tar.gz", Buffer.from("old-a"));
   await putAttachment(outline.id, "mockup-c.tar.gz", Buffer.from("idea-c"));
 
-  await setOutlineDraft(outline.id, "draft\n");
+  writeOutlineDraft(outline.id, {
+    body: "draft\n",
+    review: "review",
+    submission: "submission",
+  });
 
   const bytes = async (id: string, name: string) => (await getAttachment(id, name)).bytes;
   expect(await bytes(outline.id, "mockup-c.tar.gz")).toEqual(Buffer.from("idea-c"));

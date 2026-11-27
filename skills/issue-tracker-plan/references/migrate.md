@@ -54,32 +54,6 @@ Once per Story, after that Story's captures are attached.
    The Story holds those PNGs. The outline keeps no copy of them.
    Follow **Capture prose** for that Story.
 
-#### Held captures
-
-Reconcile copies captures held on the outline onto the Stories the
-published version changes, then removes those PNGs from the outline.
-The summary the reconcile procedure ran before the root loop lists each
-attachment. A held capture is a listed attachment whose basename is the
-one **Direction and Story** names. The path on that summary line is the
-PNG path.
-
-For each Story **Direction and Story** assigns to a held capture on
-that summary, do the steps below when either holds:
-
-- This pass writes that Story's description.
-- This pass appends new Tasks to that Story.
-
-1. For each of that Story's held captures, when the Story already holds
-   that basename, `issue detach <storyId> <name>` first. Then:
-
-   `issue attach <storyId> <pngPath>`
-
-   `issue detach <outlineId> <name>`
-
-   The Story holds that PNG. The outline keeps no copy of it.
-
-2. Follow **Capture prose** for that Story.
-
 #### Chosen PNG archives
 
 This promotes the source Idea's chosen PNG archives.

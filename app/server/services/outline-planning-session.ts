@@ -7,11 +7,9 @@ import {
   outlinePlanningSessionModel,
   outlinePlanningSessionTitle,
   outlinePolishSessionMessage,
-  outlineReconcileSessionMessage,
   outlineReconcilerSessionMessage,
   resolveExecutionGate,
   type OutlineExecutionGate,
-  type OutlineReconcileScope,
 } from "../../src/features/issues/lib/outline-planning-launch.js";
 import {
   formatZodError,
@@ -54,12 +52,6 @@ export type StartOutlineDecomposerUpdateSession = {
   rootId: string;
 };
 
-export type StartOutlineReconcileSession = {
-  outlineId: string;
-  role: "reconcile";
-  version: number;
-} & OutlineReconcileScope;
-
 export type StartOutlineReconcilerSession = {
   outlineId: string;
   role: "reconciler";
@@ -89,7 +81,6 @@ export type StartOutlinePlanningSessionInput =
   | StartOutlinePlannerSession
   | StartOutlineDecomposerSession
   | StartOutlineDecomposerUpdateSession
-  | StartOutlineReconcileSession
   | StartOutlineReconcilerSession
   | StartOutlinePolishSession
   | StartOutlineCheckSession;
@@ -178,8 +169,8 @@ export function parsePlanningSessionRequest(body: unknown): PlanningSessionReque
 
 /**
  * Open a planner session on an outline's planning channel, or a decomposer,
- * reconcile, reconciler, polish, or check session on its decomposition
- * channel, and start its first turn.
+ * reconciler, polish, or check session on its decomposition channel, and
+ * start its first turn.
  */
 export async function startOutlinePlanningSession(
   input: StartOutlinePlanningSessionInput,
@@ -269,15 +260,6 @@ function sessionMessage(
     });
   }
   requireSavedVersion(input.version, outline);
-  if (input.role === "reconcile") {
-    return outlineReconcileSessionMessage({
-      outlineId: outline.id,
-      version: input.version,
-      targetStory: input.targetStory,
-      coveredBy: input.coveredBy,
-      sourceIdea: input.sourceIdea,
-    });
-  }
   if (input.role === "reconciler") {
     return outlineReconcilerSessionMessage({
       outlineId: outline.id,

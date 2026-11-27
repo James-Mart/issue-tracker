@@ -648,24 +648,20 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   this outline. It is open when it is an Epic whose `epicStatus` is not
   `done`, or a Story that is not `merged`.
 - **`draft set`** (outline) — `issue outline draft set <id> <file>`.
-  Replaces the outline's one pending draft with the file (`-` reads stdin).
-  Does not add a version. A non-outline id is an error.
+  The outline-check gate's write. The file (`-` reads stdin) is the body.
+  When a draft is already open, this replaces its text and keeps
+  `{ review, submission }`. When none is open, this opens one owned by the
+  single outline check in `checking` for this outline, stored as
+  `{ body, review, submission }`. It does not add a version. A non-outline
+  id, no open draft and no such check, or more than one such check, is an
+  error.
+- **`draft approve`** (outline) — `issue outline draft approve <id>`.
+  Settles that draft's outline-check gate as `yes`, the same path as
+  `issue review outline-check yes`. Prints `settled <version>`.
 - **`draft discard`** (outline) — `issue outline draft discard <id>`.
-  Deletes the pending draft. An outline with no pending draft is an error.
-- **`draft update`** (outline) — `issue outline draft update <id>
-  [--target-story <id>] [--covered-by <taskIds...>] [--source-idea <id>]`.
-  When the draft text differs from the saved body, saves it as the next
-  version, drops the draft, and starts reconciliation on the outline's
-  decomposition channel at that version. Prints the new version.
-  `--target-story` is the Story that receives new Tasks. `--covered-by` is
-  one or more Task ids the triggering flow already created, separated by
-  spaces or commas. `--source-idea` is the Idea recorded as `sourceIdea` on
-  the Tasks appended to the target Story; reconciliation archives it after
-  polish. A missing draft, a draft that matches the saved body, a target
-  that is not a Story, a covered-by id that is not a Task, a duplicate
-  covered-by id, a source idea that is not an Idea, a source idea without a
-  target Story, a Project with no workspace, or a busy planning session is
-  an error. Every refusal happens before the version is saved.
+  Settles that draft's outline-check gate as `not-now`, the same path as
+  `issue review outline-check not-now`. Prints `settled <version>`. An
+  outline with no pending draft is an error.
 - **HTTP** (outline body) — `GET /api/issues/:id/outline/body?version=<n>`
   returns `{ version, body }`. `<n>` is a positive integer through
   `bodyVersion`. The latest body is `description.md`; an older body is
@@ -674,18 +670,19 @@ issue <kind> add|get|set|view|delete|comment|attach|attachments|detach|merge
   `issue outline diff` (empty when the bodies match). A non-outline id, a
   missing or non-integer version, or a version past `bodyVersion` is an error.
 - **HTTP** (outline draft) — `PUT /api/issues/:id/outline-draft` with
-  `{ body }` replaces the pending draft and returns `{ body }`. It does not
-  add a version. `DELETE /api/issues/:id/outline-draft` drops it and returns
-  204. `POST /api/issues/:id/outline-draft/update` with optional
-  `{ targetStory?, coveredBy?, sourceIdea? }` saves a differing draft as the
-  next version and starts reconciliation. Unknown fields are refused. The
-  response is `201` `{ id, title, model, version }` for the planning
-  session. While a draft exists, `GET /api/issues/:id` includes
-  `pendingDraft`. A missing draft, a draft that matches the saved body, a
-  non-outline id, a `targetStory` that is not a Story, a `coveredBy` id that
-  is not a Task, a `sourceIdea` that is not an Idea or comes without
-  `targetStory`, a Project with no workspace, or a busy planning session is
-  an error. Every refusal happens before the version is saved.
+  `{ body }` rewrites the open draft's text and returns
+  `{ body, review, submission }`. It does not add a version and does not
+  open a draft. `POST /api/issues/:id/outline-draft/approve` with `{}`
+  settles the gate as `yes` and returns the settled outline check.
+  `DELETE /api/issues/:id/outline-draft` settles the gate as `not-now` and
+  returns 204. Unknown fields are refused. While a review-owned draft
+  exists, `GET /api/issues/:id` includes `pendingDraft`
+  `{ body, review, submission }`. A missing draft, a non-outline id, a gate
+  that is not `waiting`, or a draft that matches the saved body on approve
+  is an error. Approve's refusal happens before the version is saved. A
+  startup migration discards a pending draft that is not review-owned: a
+  legacy `draft.md`, or a `draft.json` that does not record `review` and
+  `submission`. A review-owned draft is left in place.
 - **`version`** (outline get) — `issue outline get <id> version` prints the
   latest integer (`bodyVersion`). Not settable. `issue outline set <id>
   description` (`--file <path|->` or a positional value) saves the next
@@ -1159,11 +1156,11 @@ it. Idle or archived sessions do not hold the lock.
 
 ### Outline channels
 
-An Outline offers three channels: `planning` for planner sessions, `decomposition` for decomposer, reconcile, reconciler, polish, and check sessions, and `mockups` for the mockup author the [planner handoff](#planner-handoff) forks. Each outline session stores its `outlineRole` (`planner`, `decomposer`, `reconcile`, `reconciler`, `polish`, `check`, or `mockup-author`) on its conversation meta. A `planner` session runs on `planning`, a `mockup-author` session runs on `mockups`, and every other role runs on `decomposition`. A `decomposition` or `mockups` session always has an `outlineRole`. Issue detail shows Overview by default; Planning (`tab=planning`) and Decomposition (`tab=decomposition`) are channel tabs. A link to the outline page opens Overview. Each tab lists only that channel's sessions. Each entry names its role: Planner, Decomposer, Reconcile, Reconciler, Plan polish, or Outline check; a mockup-author session is named Mockup author. A planning session with no stored role is shown as Planner. The roster has no Sessions heading. On Planning or Decomposition, while the other of those two channels has a live run, that reason is said once above the composer, and the run name links to the other tab. **New planning session** posts `{ brief }` to `POST /api/issues/:id/planning/sessions`. On a phone, that dialog keeps its title on screen. `POST /api/channel-sessions` includes `outlineRole` on an outline session and omits it otherwise.
+An Outline offers three channels: `planning` for planner sessions, `decomposition` for decomposer, reconcile, reconciler, polish, and check sessions, and `mockups` for the mockup author the [planner handoff](#planner-handoff) forks. Each outline session stores its `outlineRole` (`planner`, `decomposer`, `reconcile`, `reconciler`, `polish`, `check`, or `mockup-author`) on its conversation meta. A `planner` session runs on `planning`, a `mockup-author` session runs on `mockups`, and every other role runs on `decomposition`. A `decomposition` or `mockups` session always has an `outlineRole`. Issue detail shows Overview by default; Planning (`tab=planning`) and Decomposition (`tab=decomposition`) are channel tabs. A link to the outline page opens Overview. Each tab lists only that channel's sessions. Each entry names its role: Planner, Decomposer, Reconcile, Reconciler, Plan polish, or Outline check; a mockup-author session is named Mockup author. The server does not start `outlineRole` `reconcile`; a session that already stores that role still lists as Reconcile. A planning session with no stored role is shown as Planner. The roster has no Sessions heading. On Planning or Decomposition, while the other of those two channels has a live run, that reason is said once above the composer, and the run name links to the other tab. **New planning session** posts `{ brief }` to `POST /api/issues/:id/planning/sessions`. On a phone, that dialog keeps its title on screen. `POST /api/channel-sessions` includes `outlineRole` on an outline session and omits it otherwise.
 
 An outline allows one live run across its three channels. A start on any of them while a session on another is busy is refused with the same `409` `conflict` as a busy predecessor. Its `error` names the busy channel, and the body carries `holderIssueId` and `holderIssueTitle`. A prompt that would start a turn on an idle outline session is refused the same way. That check and the start claim happen in one write step, so a start on another channel sees this turn as busy. A prompt to a session with a live run steers it as usual.
 
-`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner, decomposer, reconcile, reconciler, polish, or check ([Outline check](#outline-check)) session through `createIssueChannelSession` on the channel for its role, with that `outlineRole` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea.
+`startOutlinePlanningSession` (`app/server/services/outline-planning-session.ts`) starts a planner, decomposer, reconciler, polish, or check ([Outline check](#outline-check)) session through `createIssueChannelSession` on the channel for its role, with that `outlineRole` and a first prompt, then `startFirstPrompt`, the same way the launcher above starts an Idea.
 
 A one-time migration moves outline sessions from `planning` to `decomposition` when they were started as decomposer, reconcile, or check, and sets that `outlineRole`. Archived sessions move too. The migration reads the role from the opening of each session's first prompt. Other outline sessions stay on `planning`. The session model is `claude-opus-5-5-thinking-high` when the outline's source Idea has a stakeholder whose id contains `opus`, and `cursor-grok-4.7` otherwise. An outline with no source Idea uses `cursor-grok-4.7`.
 
@@ -1177,9 +1174,9 @@ The Decomposition tab starts a decomposer from **Decompose** when the outline is
 
 A decomposer in `update` mode takes `Mode` (`update`), `Outline`, `Version`, and `Root`. It reads the root's whole subtree and diffs the outline from each issue's own stamp through `Version`. It places new Stories and Tasks where they belong, stamps them at `Version`, and leaves existing Epic and Story descriptions unchanged. Open work whose scope the diff removes or changes is archived when unstarted (a `todo` Task, or a Story with no `branchName`), and changed scope gets a replacement placed at `Version`. Other such work gets `needsAttention` with a reason naming the outline version and the removed or changed `##` section (`agents/_issue-tracker-decomposer-update.md`).
 
-A decomposer in `reconcile` mode serves the review-driven draft publish below. It takes `Mode` (`reconcile`), `Outline`, `Version`, an optional `Target story`, an optional `Covered by` list of Task ids the triggering flow already created, and an optional `Source idea`. It brings each root `issue outline open-roots` lists with a stamp older than `Version` up to `Version`, then runs plan-polish on each touched root with that root's outline diff (`agents/_issue-tracker-decomposer-reconcile.md`). With a `Source idea`, the Idea is archived once every touched root is polished.
+**Roles.** The review tasker creates review-driven Tasks with thread links and stamps those Tasks at the settled outline version; it edits nothing. A decomposer in `decompose` mode creates one new Epic or project-level Story and stamps that root at its Version; it edits nothing. A decomposer in `update` mode creates new Stories and Tasks under an existing root, archives obsolete unstarted work, flags obsolete in-progress work, and stamps that new work at its Version. The reconciler creates nothing; it edits open Epic and Story descriptions and stamps the issues it refreshes at its Version. An issue already stamped at a run's Version covers its part of the outline diff. No run hands another a list of Tasks it already created.
 
-`issue outline draft update` and `POST /api/issues/:id/outline-draft/update` save the pending draft as the next version, then call `startOutlinePlanningSession` for role `reconcile` on that outline's `decomposition` channel at the new `bodyVersion`. The session title is `Reconcile <outline title>`. The first prompt names `_issue-tracker-decomposer.md` and states `Mode` (`reconcile`), `Outline`, and `Version`. A target Story, when given, is appended as `Target story`. Covered-by Task ids, when given, are appended as `Covered by`. A source Idea, when given, is appended as `Source idea`. No execution gate and no merge policy are sent. A busy session on any outline channel is `409` before the version is saved. The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. Its editor writes the draft, not a version. **Update** publishes and opens the Decomposition tab with that reconcile session selected. **Discard** drops the draft after a confirmation. Edits do not add a version until Update.
+The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. The heading sits beside a **from review** link to the review that owns the draft. The editor rewrites the open draft's text and is refused when none is open; edits do not add a version. **Discard** and **Approve** sit over that text. **Discard** asks for confirmation, then settles the outline-check gate as `not-now`. **Approve** settles it as `yes`. Both are the same server path as `issue review outline-check`.
 
 <a id="conclude"></a>
 
@@ -1195,7 +1192,7 @@ A zero exit prints `concludedAt`, then the decomposer session id when one starte
 
 **Ready to decompose** is derived. `issue outline get <outlineId> readyToDecompose` prints `true` or `false`. It is true when `concludedAt` is set, `outOfBand` is not true, no root Epic or project-level Story stores `sourceOutline` for this outline, and no decomposition session on the outline has a live run. It stays true after a failed auto-start and becomes false when a decomposer session's run is live. The Decomposition tab's empty state reads **Ready to decompose** when it is true. The cockpit lists each such outline in a **Ready to decompose** group, using that page's section, project grouping, and row pattern. An outline with `outOfBand` true is absent from the group. Each row opens the outline at `tab=decomposition`. The cockpit group of epics and stories that can start implementation is labeled **Ready for implementation**.
 
-**Reconciliation needed** is derived. `issue outline get <outlineId> reconciliationNeeded` prints `true` or `false`. It is true when any open linked root is behind the current version. Otherwise it is false. Behind stays derived from each root's `sourceOutline`. A planner revision saves the next version with `issue outline set <id> description` and does not start reconciliation. Review-driven draft publish starts reconcile on the outline's `decomposition` channel when an amended submission becomes `done`.
+**Reconciliation needed** is derived. `issue outline get <outlineId> reconciliationNeeded` prints `true` or `false`. It is true when any open linked root is behind the current version. Otherwise it is false. Behind stays derived from each root's `sourceOutline`. A planner revision saves the next version with `issue outline set <id> description` and does not start reconciliation. When an amended submission becomes `done`, review-driven draft publish starts the reconciler on the outline's `decomposition` channel at the settled version with that review's Story. Plan polish does not run, and the coordinator continues when the reconciler run ends.
 
 <a id="planner-handoff"></a>
 
@@ -1852,6 +1849,12 @@ threads that change what the outline states, and reports with
 - `not-now` discards the pending draft and moves `waiting` to `settled` at
   the latest version.
 
+`issue outline draft approve <outlineId>` and
+`POST /api/issues/:id/outline-draft/approve` record `yes` for the review and
+submission stored on the pending draft. `issue outline draft discard
+<outlineId>` and `DELETE /api/issues/:id/outline-draft` record `not-now`.
+Both go through the same verdict write as `issue review outline-check`.
+
 When the check session's run ends with the check `settled`, the server
 starts the tasker. Its prompt adds `Outline` and `Version` (the settled
 version), and the tasker stamps each new Task's `sourceOutline` with them. A
@@ -1859,10 +1862,14 @@ run that ends while `waiting` holds for the human's answer. A run that ends
 while `checking`, or ends other than `finished`, fails the submission with
 that error. Retry resumes the recorded check conversation, or opens a new
 check session when that conversation is archived. When an amended
-submission becomes `done`, the server starts reconciliation on the outline's
-`decomposition` channel at the settled version with the review's Story as
-`Target story` and the submission's Tasks as `Covered by`; a start failure
-is logged and leaves linked roots `behind`. The review header shows `Checking outline` while checking, then
+submission becomes `done`, the server starts the reconciler on the outline's
+`decomposition` channel at the settled version with `Story` set to the
+review's Story and `Root` set to that Story's Epic, or to the Story itself
+when it is project-level. The reconciler refreshes that Story's description,
+stamps the Story and its open Tasks, and stamps the Epic when no other open
+Story under it is behind. Plan polish does not run. The review's coordinator
+continues when that run ends. A start failure is logged, leaves linked roots
+`behind`, and the coordinator continues immediately. The review header shows `Checking outline` while checking, then
 `Waiting on outline update` linking to the outline's Planning tab while
 waiting, then the tasking label.
 

@@ -82,12 +82,11 @@ import {
   startOutlinePlanningSession,
 } from "../services/outline-planning-session.js";
 import {
-  discardOutlineDraft,
+  assertEmptyOutlineDraftApprove,
   parseOutlineDraftBody,
-  parseOutlineDraftUpdate,
-  publishOutlineDraft,
-  setOutlineDraft,
+  replaceOutlineDraft,
 } from "../services/outline-draft.js";
+import { settleOutlineDraft } from "../services/review-outline-check.js";
 import { reorderBoardChild } from "../services/reorder-board.js";
 import {
   applyArchivedListQuery,
@@ -277,33 +276,24 @@ export function createIssuesRouter(
     "/:id/outline-draft",
     asyncRoute(async (req, res) => {
       const body = parseOutlineDraftBody(req.body);
-      await setOutlineDraft(req.params.id, body);
-      res.json({ body });
+      const draft = await replaceOutlineDraft(req.params.id, body);
+      res.json(draft);
     }),
   );
 
   router.post(
-    "/:id/outline-draft/update",
+    "/:id/outline-draft/approve",
     asyncRoute(async (req, res) => {
-      const input = parseOutlineDraftUpdate(req.body);
-      const published = await publishOutlineDraft(
-        req.params.id,
-        input,
-        sessions,
-      );
-      res.status(201).json({
-        id: published.meta.id,
-        title: published.meta.title,
-        model: published.meta.model,
-        version: published.version,
-      });
+      assertEmptyOutlineDraftApprove(req.body);
+      const check = await settleOutlineDraft(req.params.id, "yes");
+      res.json(check);
     }),
   );
 
   router.delete(
     "/:id/outline-draft",
     asyncRoute(async (req, res) => {
-      await discardOutlineDraft(req.params.id);
+      await settleOutlineDraft(req.params.id, "not-now");
       res.status(204).end();
     }),
   );

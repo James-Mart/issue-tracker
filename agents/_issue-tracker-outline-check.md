@@ -50,9 +50,11 @@ the product owner has decided.
    changed it. Ask **one** question whose answer list carries each
    consequence, then end the turn. The product owner answers it in this
    session.
-   - **Yes** — the draft becomes the outline's next version, the review
-     tasker writes Tasks at that version, and reconciliation then brings
-     the outline's linked work up to it.
+   - **Yes** — the draft becomes the outline's next version. The review
+     tasker writes Tasks on this Story at that version and links each
+     thread. The reconciler then refreshes this Story's description and
+     stamps it, and stamps the Epic when no other open Story under it is
+     behind. Plan polish does not run.
    - **Not now** — the draft is discarded and the review tasker writes
      Tasks at the current version.
    - **Amend** — the reply is feedback on the draft. Revise it, run

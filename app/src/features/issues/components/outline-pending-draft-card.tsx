@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { IssueDetail } from "@server/schemas";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,18 +11,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { reviewIssuePath } from "@/features/reviews/lib/links";
 import {
+  useApproveOutlineDraft,
   useDiscardOutlineDraft,
   useSetOutlineDraft,
-  useUpdateOutlineDraft,
 } from "../api/mutations";
-import { writeIssueDetailTabParam } from "../lib/issue-detail-tabs";
 import { DetailEyebrow } from "./detail-section";
 
 const DRAFT_PERSIST_DEBOUNCE_MS = 300;
 
 export type OutlineWithDraft = Extract<IssueDetail, { kind: "outline" }> & {
-  pendingDraft: string;
+  pendingDraft: NonNullable<IssueDetail["pendingDraft"]>;
 };
 
 /** Toast already reports a failed save; this only avoids an unhandled rejection. */
@@ -31,19 +31,18 @@ function forgetDraftSave(save: Promise<unknown>): void {
 }
 
 /**
- * The outline's one pending draft. Typing stays on the draft until Update
- * publishes the next version and opens Decomposition on that session.
+ * The outline's one pending draft, owned by a review's outline check.
+ * Typing rewrites that draft. Approve and Discard settle the gate.
  */
 export function OutlinePendingDraftCard({
   issue,
 }: {
   issue: OutlineWithDraft;
 }) {
-  const [, setSearchParams] = useSearchParams();
   const { mutateAsync, isPending: saving } = useSetOutlineDraft(issue.id);
-  const update = useUpdateOutlineDraft(issue.id);
+  const approve = useApproveOutlineDraft(issue.id);
   const discard = useDiscardOutlineDraft(issue.id);
-  const saved = issue.pendingDraft;
+  const saved = issue.pendingDraft.body;
   const [text, setText] = useState(saved);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const textRef = useRef(text);
@@ -89,18 +88,11 @@ export function OutlinePendingDraftCard({
     await persist(textRef.current);
   }, [persist]);
 
-  const busy = update.isPending || discard.isPending;
-  const publish = () => {
+  const busy = approve.isPending || discard.isPending;
+  const approveDraft = () => {
     forgetDraftSave(
       flush().then(() => {
-        update.mutate(undefined, {
-          onSuccess: () => {
-            setSearchParams(
-              (prev) => writeIssueDetailTabParam(prev, "decomposition"),
-              { replace: true },
-            );
-          },
-        });
+        approve.mutate();
       }),
     );
   };
@@ -111,8 +103,17 @@ export function OutlinePendingDraftCard({
       data-testid="outline-pending-draft"
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <DetailEyebrow>Pending draft</DetailEyebrow>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <DetailEyebrow>Pending draft</DetailEyebrow>
+          <Link
+            to={reviewIssuePath(issue.partOf, issue.pendingDraft.review)}
+            className="text-sm text-primary hover:underline"
+            data-testid="outline-draft-from-review"
+          >
+            from review
+          </Link>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -127,11 +128,11 @@ export function OutlinePendingDraftCard({
             type="button"
             variant="current"
             size="sm"
-            data-testid="outline-draft-update"
+            data-testid="outline-draft-approve"
             disabled={busy || saving}
-            onClick={publish}
+            onClick={approveDraft}
           >
-            Update
+            Approve
           </Button>
         </div>
       </div>
@@ -162,7 +163,8 @@ export function OutlinePendingDraftCard({
           <DialogHeader>
             <DialogTitle>Discard draft?</DialogTitle>
             <DialogDescription>
-              The pending draft is dropped. The saved outline stays as it is.
+              The pending draft is dropped. The linked review records that you are
+              not adopting it now. The saved outline stays as it is.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

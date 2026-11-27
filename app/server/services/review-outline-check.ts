@@ -14,13 +14,14 @@ import {
   startFirstPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { readAll, readOutlineOrThrow, readReviewOrThrow } from "./issues.js";
-import { readOutlineDraft } from "./outline-draft-store.js";
-import { discardOutlineDraft, saveOutlineDraftVersion } from "./outline-draft.js";
+import { readAll, readOutlineOrThrow, readReviewOrThrow, serialize } from "./issues.js";
+import { readOutlineDraft, writeOutlineDraft } from "./outline-draft-store.js";
 import {
-  createOutlinePlanningSession,
-  startOutlinePlanningSession,
-} from "./outline-planning-session.js";
+  removePendingDraftForNotNow,
+  rewriteOutlineDraftBody,
+  saveOutlineDraftVersion,
+} from "./outline-draft.js";
+import { createOutlinePlanningSession } from "./outline-planning-session.js";
 import { patchStoredSubmission, readReviewView } from "./reviews.js";
 
 export const OUTLINE_CHECK_VERDICTS = ["unchanged", "proposed", "yes", "not-now"] as const;
@@ -101,7 +102,7 @@ export async function launchOutlineCheck(
   if (readOutlineDraft(check.outline) !== undefined) {
     throw new IssueError(
       "conflict",
-      `outline "${check.outline}" already has a pending draft — update or discard it, then retry`,
+      `outline "${check.outline}" already has a pending draft — approve or discard it, then retry`,
     );
   }
   const { meta, firstPrompt } = await createOutlinePlanningSession(
@@ -213,7 +214,7 @@ export async function recordOutlineCheckVerdict(
     next = { ...settledAtVersion(check, await saveOutlineDraftVersion(outlineId)), amended: true };
   } else {
     requirePhase(check, ["waiting"], verdict);
-    await discardOutlineDraft(outlineId);
+    await removePendingDraftForNotNow(outlineId);
     next = settledAtVersion(check, readOutlineOrThrow(outlineId).bodyVersion);
   }
   patchOutlineCheck(projectId, reviewId, submissionId, (current) => {
@@ -225,39 +226,75 @@ export async function recordOutlineCheckVerdict(
   return next;
 }
 
-function settledAtVersion(check: OutlineCheck, version: number): OutlineCheck {
-  return { ...check, status: "settled", version };
+/** Stdout line for an outline-check verdict (`settled <version>` once settled). */
+export function formatOutlineCheckVerdict(check: OutlineCheck): string {
+  return check.status === "settled" ? `settled ${check.version}` : check.status;
 }
 
 /**
- * After a Yes at the outline gate, reconcile linked work to the version the
- * tasker wrote Tasks at, with those Tasks as covered.
+ * The outline-check gate's write. Opens a draft owned by the single outline
+ * check in `checking` for this outline, or rewrites the open draft's text.
  */
-export async function reconcileAmendedOutline(
-  review: Pick<ReviewRecordView, "id">,
-  storyId: string,
-  submission: Extract<ReviewSubmission, { status: "done" }>,
-  sessions: ConversationMessageSessions,
-): Promise<void> {
-  const check = submission.outlineCheck;
-  if (!check?.amended || check.version === undefined) return;
-  try {
-    await startOutlinePlanningSession(
-      {
-        outlineId: check.outline,
-        role: "reconcile",
-        version: check.version,
-        targetStory: storyId,
-        ...(submission.taskIds.length > 0 ? { coveredBy: submission.taskIds } : {}),
-      },
-      sessions,
-    );
-  } catch (err) {
-    // Tasking already recorded done. Linked roots stay `behind` the new
-    // version, which the outline page shows; the error is logged for follow-up.
-    console.error(
-      `outline "${check.outline}" was not reconciled after review ${review.id} on story ${storyId}`,
-      err,
+export function setOutlineDraft(id: string, body: string): Promise<void> {
+  return serialize(() => {
+    readOutlineOrThrow(id);
+    if (readOutlineDraft(id)) {
+      rewriteOutlineDraftBody(id, body);
+      return;
+    }
+    const owner = soleCheckingOwner(id);
+    writeOutlineDraft(id, { body, review: owner.review, submission: owner.submission });
+  });
+}
+
+/** The one outline check in `checking` that may open this outline's draft. */
+function soleCheckingOwner(outlineId: string): { review: string; submission: string } {
+  let owner: { review: string; submission: string } | undefined;
+  for (const issue of readAll().issues) {
+    if (issue.kind !== "review") continue;
+    for (const submission of issue.submissions) {
+      const check = submission.outlineCheck;
+      if (
+        submission.status !== "tasking" ||
+        check?.outline !== outlineId ||
+        check.status !== "checking"
+      ) {
+        continue;
+      }
+      if (owner) {
+        throw new IssueError(
+          "conflict",
+          `outline "${outlineId}" has more than one outline check that can open a draft`,
+        );
+      }
+      owner = { review: issue.id, submission: submission.id };
+    }
+  }
+  if (!owner) {
+    throw new IssueError(
+      "validation",
+      `outline "${outlineId}" has no outline check that can open a draft`,
     );
   }
+  return owner;
+}
+
+/**
+ * Settle the pending draft's outline-check gate. `yes` and `not-now` are the
+ * same write as `issue review outline-check`.
+ */
+export async function settleOutlineDraft(
+  outlineId: string,
+  verdict: "yes" | "not-now",
+): Promise<OutlineCheck> {
+  readOutlineOrThrow(outlineId);
+  const draft = readOutlineDraft(outlineId);
+  if (!draft) {
+    throw new IssueError("validation", `outline "${outlineId}" has no pending draft`);
+  }
+  return recordOutlineCheckVerdict(draft.review, draft.submission, verdict);
+}
+
+function settledAtVersion(check: OutlineCheck, version: number): OutlineCheck {
+  return { ...check, status: "settled", version };
 }

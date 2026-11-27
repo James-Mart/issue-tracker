@@ -28,6 +28,7 @@ import {
 } from "./issues.js";
 import { submittableRootIds } from "../../src/features/reviews/lib/review-submittable.js";
 import { isRetryableSubmission } from "../review-submission-status.js";
+import { startOutlinePlanningSession } from "./outline-planning-session.js";
 import { ancestorChain, nearestImplementingWorkRootId } from "./subtree.js";
 import {
   presentSubmissions,
@@ -41,7 +42,6 @@ import {
   launchOutlineCheck,
   outlineCheckPending,
   outlineCheckTaskerLines,
-  reconcileAmendedOutline,
 } from "./review-outline-check.js";
 import { requireProject } from "./require-project.js";
 import { isRunLive } from "./run-live.js";
@@ -130,6 +130,9 @@ function submissionBase(
       ? { conversationId: submission.conversationId }
       : {}),
     ...(submission.coordinatorResumed ? { coordinatorResumed: true as const } : {}),
+    ...(submission.reconcilerConversationId
+      ? { reconcilerConversationId: submission.reconcilerConversationId }
+      : {}),
     ...(submission.standards ? { standards: submission.standards } : {}),
     ...(submission.outlineCheck ? { outlineCheck: submission.outlineCheck } : {}),
   };
@@ -368,15 +371,123 @@ function submissionNeedsCoordinator(
   );
 }
 
-/** A submission just became done: reconcile an amended outline, then bring in the coordinator. */
+/** The Story's Epic, or the Story when it is project-level. */
+function implementingWorkRootId(storyId: string): string {
+  const rootId = nearestImplementingWorkRootId(ancestorChain(storyId, readAll().issues));
+  if (rootId === undefined) {
+    throw new Error(`story "${storyId}" has no implementing work root`);
+  }
+  return rootId;
+}
+
+/**
+ * Start the reconciler on the reviewed Story at the version the tasker
+ * stamped. Returns that session id, or undefined when none was started.
+ */
+async function startReviewedStoryReconciler(
+  review: Pick<ReviewRecordView, "id">,
+  storyId: string,
+  submission: Extract<ReviewSubmission, { status: "done" }>,
+  sessions: ConversationMessageSessions,
+): Promise<string | undefined> {
+  const check = submission.outlineCheck;
+  if (!check?.amended || check.version === undefined) return undefined;
+  try {
+    const meta = await startOutlinePlanningSession(
+      {
+        outlineId: check.outline,
+        role: "reconciler",
+        version: check.version,
+        rootId: implementingWorkRootId(storyId),
+        storyId,
+      },
+      sessions,
+    );
+    return meta.id;
+  } catch (err) {
+    // Tasking already recorded done. Linked roots stay `behind` the new
+    // version, which the outline page shows; the error is logged for follow-up.
+    console.error(
+      `reconciler did not start for outline "${check.outline}" after review ${review.id} on story ${storyId}`,
+      err,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * A submission just became done. An amended outline starts the reconciler
+ * and the coordinator waits until that run ends. Any other done submission
+ * brings the coordinator in now.
+ */
 async function followUpDoneSubmission(
   projectId: string,
   review: Pick<ReviewRecordView, "id" | "story">,
   submission: Extract<ReviewSubmission, { status: "done" }>,
   sessions: ConversationMessageSessions,
 ): Promise<void> {
-  await reconcileAmendedOutline(review, requireReviewStory(review), submission, sessions);
+  const storyId = requireReviewStory(review);
+  const reconcilerConversationId = await startReviewedStoryReconciler(
+    review,
+    storyId,
+    submission,
+    sessions,
+  );
+  if (reconcilerConversationId) {
+    replaceSubmission(projectId, review.id, submission.id, {
+      ...submission,
+      reconcilerConversationId,
+    });
+    return;
+  }
   await bringCoordinatorForDone(projectId, review, submission, sessions);
+}
+
+/**
+ * The reconciler a review started has ended. Bring in that review's
+ * coordinator. Returning true keeps placement from treating the run as a
+ * chain step and starting plan polish.
+ */
+export async function resumeCoordinatorAfterReconciler(
+  conversationId: string,
+  sessions: ConversationMessageSessions,
+): Promise<boolean> {
+  const found = findReconcilerFollowUp(conversationId);
+  if (!found) return false;
+  await bringCoordinatorForDone(found.projectId, found.review, found.submission, sessions);
+  return true;
+}
+
+function findReconcilerFollowUp(conversationId: string):
+  | {
+      projectId: string;
+      review: ReviewRecordView;
+      submission: Extract<ReviewSubmission, { status: "done" }>;
+    }
+  | undefined {
+  let meta: ConversationMeta;
+  try {
+    meta = readConversationMeta(conversationId);
+  } catch (error) {
+    if (error instanceof IssueError && error.code === "not_found") return undefined;
+    throw error;
+  }
+  if (meta.outlineRole !== "reconciler") return undefined;
+  const issues = readAll().issues;
+  for (const issue of issues) {
+    if (issue.kind !== "review" || issue.partOf !== meta.projectId) continue;
+    const submission = issue.submissions.find(
+      (item): item is Extract<ReviewSubmission, { status: "done" }> =>
+        item.status === "done" && item.reconcilerConversationId === conversationId,
+    );
+    if (!submission) continue;
+    return {
+      projectId: issue.partOf,
+      review: readReviewView(issue.partOf, issue.id, issues),
+      submission,
+    };
+  }
+  return undefined;
 }
 
 async function bringCoordinatorForDone(
@@ -388,13 +499,7 @@ async function bringCoordinatorForDone(
   if (!submissionNeedsCoordinator(submission)) return;
   const storyId = requireReviewStory(review);
   try {
-    const workRootId = nearestImplementingWorkRootId(
-      ancestorChain(storyId, readAll().issues),
-    );
-    if (workRootId === undefined) {
-      throw new Error(`story "${storyId}" has no implementing work root`);
-    }
-    await resumeCoordinator(workRootId, sessions);
+    await resumeCoordinator(implementingWorkRootId(storyId), sessions);
   } catch (err) {
     // Tasking already recorded done. A coordinator delivery failure must
     // not roll that back; the error is logged for follow-up.

@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe("ensureAppendStateCleared", () => {
-  it("clears appendTo, appendLock, and outline pendingAppends, then no-ops", async () => {
+  it("clears append state and stored coveredBy, then no-ops", async () => {
     writeIssue("capture", {
       kind: "idea",
       title: "Capture",
@@ -56,6 +56,16 @@ describe("ensureAppendStateCleared", () => {
       createdAt: AT,
       updatedAt: AT,
     });
+    writeIssue("legacy", {
+      kind: "story",
+      title: "Legacy",
+      partOf: "p",
+      coveredBy: ["old-task"],
+      notes: [{ coveredBy: ["nested"] }],
+      order: 4,
+      createdAt: AT,
+      updatedAt: AT,
+    });
     writeIssue("later", {
       kind: "outline",
       title: "Later",
@@ -77,7 +87,9 @@ describe("ensureAppendStateCleared", () => {
 
     const { ensureAppendStateCleared } = await import("./append-state-migration.js");
     const first = ensureAppendStateCleared();
-    expect([...first.updated].sort()).toEqual(["capture", "later", "spec"]);
+    expect([...first.updated].sort()).toEqual(["capture", "later", "legacy", "spec"]);
+    expect(readIssue("legacy").coveredBy).toBeUndefined();
+    expect(readIssue("legacy").notes).toEqual([{}]);
     expect(readIssue("capture").appendTo).toBeUndefined();
     expect(readIssue("spec").appendLock).toBeUndefined();
     expect(readIssue("spec").pendingAppends).toBeUndefined();

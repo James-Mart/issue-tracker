@@ -741,11 +741,22 @@ export type CreateInput = Pick<IssueFields, "title"> &
 
 export type IssueRecord = Issue;
 
+/** A pending outline draft owned by one review submission's outline check. */
+export const outlinePendingDraftSchema = z
+  .object({
+    body: z.string(),
+    review: z.string().min(1),
+    submission: z.string().min(1),
+  })
+  .strict();
+
+export type OutlinePendingDraft = z.infer<typeof outlinePendingDraftSchema>;
+
 export type IssueDetail = IssueRecord & {
   description: string;
   version: string;
-  /** Set on an outline while `draft.md` holds a body that is not yet a version. */
-  pendingDraft?: string;
+  /** Set on an outline while a review-owned draft is not yet a version. */
+  pendingDraft?: OutlinePendingDraft;
 };
 
 /** `GET /api/issues/:id/outline/body?version=`. */
