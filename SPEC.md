@@ -770,7 +770,7 @@ Prefer `issue <kind> get <id> <field>` for scalar reads — do not parse
 | idea | `title`, `archived`, `decompositionGate`, `executionGate`, `outOfBand`, `mergeBase`, `mergePolicy`, `codeApprovalRequired`, `partOf`, `stakeholder`, `planQueuedAt`, `labels`, `description` |
 | story | `title`, `needsAttention`, `archived`, `partOf`, `branchName`, `stackedOn`, `sourceIdea`, `sourceOutline`, `mergeBase`, `mergePolicy`, `prUrl`, `merged`, `needsRebase`, `review`, `reviewedTasks`, `retro`, `labels`, `description` |
 | task | `title`, `assignee`, `needsAttention`, `archived`, `partOf`, `status`, `commits`, `noDiff`, `sourceIdea`, `sourceOutline`, `description` |
-| outline | `title`, `archived`, `partOf`, `sourceIdea`, `outOfBand`, `description` |
+| outline | `title`, `archived`, `partOf`, `sourceIdea`, `executionGate`, `codeApprovalRequired`, `outOfBand`, `description` |
 
 `issue task add-commit <taskId> <sha>` appends one full sha to Task `commits`
 and refuses a sha already present on that Task. Whole-series replace uses
@@ -1176,6 +1176,8 @@ A decomposer in `update` mode takes `Mode` (`update`), `Outline`, `Version`, and
 
 **Roles.** The review tasker creates review-driven Tasks with thread links and stamps those Tasks at the settled outline version; it edits nothing. A decomposer in `decompose` mode creates one new Epic or project-level Story and stamps that root at its Version; it edits nothing. A decomposer in `update` mode creates new Stories and Tasks under an existing root, archives obsolete unstarted work, flags obsolete in-progress work, and stamps that new work at its Version. The reconciler creates nothing; it edits open Epic and Story descriptions and stamps the issues it refreshes at its Version. An issue already stamped at a run's Version covers its part of the outline diff. No run hands another a list of Tasks it already created.
 
+The Outline Overview property panel leads with three editable rows: execution gate, code approval required, and out of band. Each row is a control, and a change is saved immediately. The rows stay writable while a placement chain is in progress and while the outline is archived. The Decomposition tab's empty state keeps its own execution-gate and out-of-band controls. A placement chain's release reads `executionGate` and `codeApprovalRequired` from the outline when polish finishes, so changing these rows before **Update** is what that release applies.
+
 The outline detail page shows the pending draft between Linked work and Outline body, without moving those cards. The heading sits beside a **from review** link to the review that owns the draft. The editor rewrites the open draft's text and is refused when none is open; edits do not add a version. **Discard** and **Approve** sit over that text. **Discard** asks for confirmation, then settles the outline-check gate as `not-now`. **Approve** settles it as `yes`. Both are the same server path as `issue review outline-check`.
 
 <a id="conclude"></a>
@@ -1482,11 +1484,11 @@ Outline — the common-to-every-kind fields plus:
 | `archived` | boolean | defaults `false`; see [Archived visibility](#archived-visibility) |
 | `bodyVersion` | positive integer | latest saved body; starts at 1; system-written; CLI [`get`](#kind-scoped-get--set) name is `version` |
 | `sourceIdea` | string? | optional; names one Idea in the same Project this outline was planned from (see [Relationships](#relationships)) |
-| `executionGate` | `"auto"` \| boolean? | absent until [conclude](#conclude) copies the Idea's value; conclude's decomposer start reads it here |
-| `codeApprovalRequired` | boolean? | absent until conclude records the verdict; `true` exactly when that verdict is `gated` |
+| `executionGate` | `"auto"` \| boolean? | absent until [conclude](#conclude) copies the Idea's value; the Overview property panel and kind [`set`](#kind-scoped-get--set) write it at any time; a control treats absent as `auto`; decompose and release read the stored value |
+| `codeApprovalRequired` | boolean? | absent until conclude records the verdict or a human sets it; `true` when code approval is required; the Overview property panel and kind [`set`](#kind-scoped-get--set) write it at any time; `false` clears it; release reads it when it runs |
 | `mergeBase` | string? | absent until conclude copies the Idea's branch; absent when the Idea has none |
 | `mergePolicy` | `"merge"` \| `"pull-request"` \| `"manual"` \| `"fast-forward"`? | absent until conclude copies the Idea's policy; absent when the base is trunk |
-| `outOfBand` | boolean? | absent until conclude copies the Idea's value (`false` when the Idea's default applies); stays settable on the outline; `true` means implemented outside the tracker |
+| `outOfBand` | boolean? | absent until conclude copies the Idea's value (`false` when the Idea's default applies); the Overview property panel and kind [`set`](#kind-scoped-get--set) write it at any time; `true` means implemented outside the tracker |
 | `concludedAt` | ISO string? | set by conclude; system-written; `issue outline get <id> concludedAt` prints it; unset until then |
 | `placementChain` | object? | system-written while a per-root Update or Reconcile only chain is in progress; `{ root, action: "update" \| "reconcile", from, version, step: "decomposer" \| "reconciler" \| "polish" }`; `version` is the outline `bodyVersion` when the chain started; patches are refused |
 
@@ -2611,6 +2613,9 @@ preserves everything else from the existing same-kind issue.
 | `sourceIdea` (Epic / Story) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` preserves; `apply` never reads `sourceIdea` from YAML |
 | `sourceOutline` (Epic / Story / Task) | imperative only (kind [`set`](#kind-scoped-get--set)); `apply` and `issue story append` preserve it; neither reads it from YAML |
 | `sourceIdea` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set), or `sourceIdea` on create); names the Idea planning produced this outline from |
+| `executionGate` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; conclude copies the Idea's value; `apply` preserves |
+| `codeApprovalRequired` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; conclude records the verdict; `apply` preserves |
+| `outOfBand` (Outline) | imperative only (kind [`set`](#kind-scoped-get--set)); human writer; conclude copies the Idea's value; `apply` preserves |
 | `mergeBase` (Story) | derived on get only — never stored; resolver layers `mergeBaseOverride` / `trunk` / stack topology (see [stacked-PR merge model](#the-stacked-pr-merge-model)) |
 | `assignee` (Task) | imperative write (kind [`set`](#kind-scoped-get--set)); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |
 | `needsAttention`/`attentionReason` (Epic / Story / Task) | imperative write (kind [`set`](#kind-scoped-get--set); `attentionReason` only via `needsAttention` + `--reason`); read via kind [`get`](#kind-scoped-get--set); `apply` preserves |

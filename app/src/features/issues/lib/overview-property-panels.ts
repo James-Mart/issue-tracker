@@ -14,7 +14,9 @@ export type OverviewPropertyRowId =
   | "labels"
   | "stakeholder"
   | "generatedIssues"
+  | "executionGate"
   | "codeApprovalRequired"
+  | "outOfBand"
   | "needsAttention"
   | "attentionReason"
   | "mergeSettings"
@@ -35,6 +37,10 @@ export function overviewPropertyRows(
 ): { editable: OverviewPropertyRowId[]; fixed: OverviewPropertyRowId[] } {
   const editable: OverviewPropertyRowId[] = [];
   const fixed: OverviewPropertyRowId[] = [];
+
+  if (issue.kind === "outline") {
+    editable.push("executionGate", "codeApprovalRequired", "outOfBand");
+  }
 
   if (
     kindHas(issue.kind, "detailPartOf") &&

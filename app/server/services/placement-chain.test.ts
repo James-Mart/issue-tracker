@@ -114,4 +114,34 @@ describe("classifyPlacementRun", () => {
     expect(list().derived.root?.behind).toBe(true);
     expect(list().derived.spec?.placementLive).toBe(false);
   });
+
+  it("releases with the outline's gate settings as they stand when polish finishes", async () => {
+    const {
+      startRootPlacement,
+      classifyPlacementRun,
+      listConversations,
+      update,
+      sessions,
+    } = await load();
+    await update("p", { mergePolicy: "merge" });
+    const reconciler = await startRootPlacement("spec", "root", "reconcile", sessions);
+    await update("spec", { executionGate: true, codeApprovalRequired: true });
+
+    expect(
+      await classifyPlacementRun(reconciler.id, { status: "finished" }, sessions),
+    ).toBe(true);
+    const polish = listConversations().find((meta) => meta.outlineRole === "polish");
+    expect(polish).toBeDefined();
+    expect(await classifyPlacementRun(polish!.id, { status: "finished" }, sessions)).toBe(
+      true,
+    );
+
+    expect(readIssue("spec")).toMatchObject({
+      executionGate: true,
+      codeApprovalRequired: true,
+    });
+    expect(readIssue("root").releasedAt).toEqual(expect.any(String));
+    expect(readIssue("root").workQueuedAt).toBeUndefined();
+    expect(readIssue("root").mergePolicy).toBe("manual");
+  });
 });

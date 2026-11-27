@@ -37,6 +37,7 @@ import {
   rootMergeSettingsFor,
 } from "./issue-root-merge-settings";
 import { MetaRow } from "./meta-row";
+import { outlineGateRow } from "./outline-gate-settings";
 
 function isRenderableNode(
   node: ReactNode,
@@ -140,14 +141,22 @@ function renderOverviewPropertyRow(
           issue={issue as Extract<IssueDetail, { kind: "idea" }>}
         />
       );
+    case "executionGate":
     case "codeApprovalRequired":
-      return (
-        <MetaRow
-          key="codeApprovalRequired"
-          label={FIELD_LABELS.codeApprovalRequired}
-          value="Yes"
-        />
-      );
+    case "outOfBand":
+      if (issue.kind === "outline") {
+        return outlineGateRow(id, issue);
+      }
+      if (id === "codeApprovalRequired") {
+        return (
+          <MetaRow
+            key="codeApprovalRequired"
+            label={FIELD_LABELS.codeApprovalRequired}
+            value="Yes"
+          />
+        );
+      }
+      return null;
     case "needsAttention":
       return (
         <MetaRow
