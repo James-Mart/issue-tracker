@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Play } from "lucide-react";
-import {
-  APPEND_PLANNING_CANNOT_START_MERGED,
-  appendPlanningMergeBaseHint,
-  appendPlanningMergeBaseLabel,
-  appendPlanningResearchSentence,
-} from "@server/append-planning-context";
-import { CHIP_UNSET, FIELD_LABELS } from "@server/fields";
+import { FIELD_LABELS } from "@server/fields";
 import type { ConversationChannel, IssueRecord } from "@server/schemas";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
@@ -26,14 +20,8 @@ import {
 } from "../api/mutations";
 import { useConfirmChannelLiveRun } from "../hooks/use-confirm-channel-live-run";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
-import {
-  APPEND_TARGET_UNSAVED_PLANNING,
-  appendPlanningCalloutVisible,
-} from "../lib/append-target";
-import { useAppendPlanningContext } from "../lib/use-append-planning-context";
 import { issuesById } from "../lib/build-tree";
 import { useIssuesQuery } from "../api/queries";
-import { AppendPlanningCallout } from "./append-planning-callout";
 import { IdeaExecutionGateEffectLine } from "./idea-execution-gate-effect-line";
 import {
   IdeaPlanSettings,
@@ -47,7 +35,6 @@ import {
   planningSessionModel,
   planningSessionTitle,
 } from "../lib/planning-launch";
-import { useAppendTargetDraftStore } from "../store/use-append-target-draft-store";
 import { useCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { StakeholderSelect } from "./stakeholder-select";
 
@@ -352,31 +339,15 @@ function PlanningLaunchButton({
 
 /** Icon-only planning launch for Flow row steering. */
 export function PlanningFlowRowLaunch({ issue }: { issue: IdeaRecord }) {
-  const stakeholder = issue.stakeholder;
-  const planning = useAppendPlanningContext(issue);
-
   return (
-    <div className="flex flex-col items-start gap-1">
-      <div className="flex items-center gap-1">
-        <PlanningLaunchButton
-          issue={issue}
-          channel="planning"
-          stakeholder={stakeholder}
-          variant="icon"
-          optimistic
-          disabled={planning.launchBlocked}
-          onStarted={() => {}}
-        />
-      </div>
-      {planning.refusal ? (
-        <p
-          data-testid="cockpit-append-planning-blocked"
-          className="max-w-[16rem] text-left text-[11px] leading-snug text-muted-foreground"
-        >
-          {planning.refusal}
-        </p>
-      ) : null}
-    </div>
+    <PlanningLaunchButton
+      issue={issue}
+      channel="planning"
+      stakeholder={issue.stakeholder}
+      variant="icon"
+      optimistic
+      onStarted={() => {}}
+    />
   );
 }
 
@@ -388,73 +359,22 @@ export function PlanningOverviewLaunch({
   issue: IdeaRecord;
   showLaunch?: boolean;
 }) {
-  const stakeholder = issue.stakeholder;
-  const rejectedUnsaved = useAppendTargetDraftStore(
-    (s) => s.rejectedById[issue.id] === true,
-  );
-  const planning = useAppendPlanningContext(issue);
-  const append = planning.phase === "absent" ? undefined : planning;
-  const showAppendCallout =
-    append !== undefined &&
-    (append.phase === "loading" || append.context.status !== "merged") &&
-    appendPlanningCalloutVisible(issue.appendTo, planning.ideaDerived);
-
   return (
     <div className={showLaunch ? "flex flex-col gap-2" : undefined}>
-      {showLaunch && showAppendCallout && append ? (
-        <AppendPlanningCallout storyTitle={append.storyTitle} />
-      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <IdeaPlanSettings issue={issue} testIdPrefix="detail" />
         {showLaunch ? (
           <PlanningLaunchButton
             issue={issue}
             channel="planning"
-            stakeholder={stakeholder}
+            stakeholder={issue.stakeholder}
             variant="primary"
             optimistic
-            disabled={planning.launchBlocked}
             testId="planning-overview-start-session"
             onStarted={() => {}}
           />
         ) : null}
       </div>
-      {showLaunch && rejectedUnsaved ? (
-        <p
-          data-testid="planning-append-target-unsaved"
-          className="text-sm text-muted-foreground"
-        >
-          {APPEND_TARGET_UNSAVED_PLANNING}
-        </p>
-      ) : null}
-      {showLaunch && planning.refusal ? (
-        <p
-          data-testid={
-            append?.phase === "ready" && append.context.status === "merged"
-              ? "planning-append-target-merged-blocked"
-              : "planning-append-planning-closed"
-          }
-          className="text-sm text-muted-foreground"
-        >
-          {planning.refusal}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function PlanningMergeBaseReadout({ value }: { value: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        data-testid="planning-merge-base"
-        className="inline-flex h-7 min-w-16 items-center justify-center rounded-md border border-border px-2 font-mono text-[13px] tabular-nums text-foreground"
-      >
-        {value}
-      </span>
-      <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-        {FIELD_LABELS.mergeBase}
-      </p>
     </div>
   );
 }
@@ -474,15 +394,9 @@ export function PlanningChannelEmptyState({
   const defaultModel = defaultConversationModel(models);
   const { stakeholder, onChange, saving, error } = usePlanningStakeholder(issue);
   const mergeBaseControl = usePlanningMergeBase(issue);
-  const planning = useAppendPlanningContext(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
   const planSettings = useIdeaPlanSettings(issue);
   const copy = planningLaunchCopy(stakeholder, models);
-  const append = planning.phase === "absent" ? undefined : planning;
-  const ready = append?.phase === "ready" ? append : undefined;
-  const research = ready
-    ? appendPlanningResearchSentence(ready.context)
-    : undefined;
 
   useEffect(() => {
     if (defaultModel && selectedCatalogId === undefined) {
@@ -490,70 +404,14 @@ export function PlanningChannelEmptyState({
     }
   }, [defaultModel, selectedCatalogId]);
 
-  const shellClass = "border-0 bg-transparent px-4 py-8 shadow-none";
-
-  if (ready?.context.status === "merged") {
-    return (
-      <ShellState
-        className={shellClass}
-        eyebrow="Planning"
-        title={copy.title}
-        detail={
-          <>
-            <p>{APPEND_PLANNING_CANNOT_START_MERGED}</p>
-            <p
-              className="mt-2"
-              data-testid="planning-append-target-merged-blocked"
-            >
-              {planning.refusal}
-            </p>
-          </>
-        }
-      />
-    );
-  }
-
-  const showCallout =
-    append !== undefined &&
-    appendPlanningCalloutVisible(issue.appendTo, planning.ideaDerived);
-  const mergeBaseValue = ready
-    ? appendPlanningMergeBaseLabel(ready.context)
-    : append?.phase === "loading"
-      ? (append.mergeBase ?? CHIP_UNSET)
-      : CHIP_UNSET;
-  const mergeBaseHint = ready
-    ? appendPlanningMergeBaseHint(ready.context)
-    : undefined;
-  const launchButton = (
-    disabled: boolean,
-    beforeStart?: () => Promise<void>,
-  ) => (
-    <PlanningLaunchButton
-      issue={issue}
-      channel={channel}
-      stakeholder={stakeholder}
-      fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
-      variant="primary"
-      optimistic
-      disabled={disabled}
-      beforeStart={beforeStart}
-      onStarted={onStarted}
-    />
-  );
-
-  const launch = (
+  return (
     <ShellState
-      className={shellClass}
+      className="border-0 bg-transparent px-4 py-8 shadow-none"
       eyebrow="Planning"
       title={copy.title}
       detail={
         <>
-          {research ? `${copy.detail} ${research}` : copy.detail}
-          {planning.refusal ? (
-            <p className="mt-2" data-testid="planning-append-planning-closed">
-              {planning.refusal}
-            </p>
-          ) : null}
+          {copy.detail}
           {error ? (
             <p className="mt-2 text-sm text-destructive">{error}</p>
           ) : null}
@@ -579,39 +437,33 @@ export function PlanningChannelEmptyState({
                 onChange={setSelectedCatalogId}
               />
             ) : null}
-            {append ? (
-              <PlanningMergeBaseReadout value={mergeBaseValue} />
-            ) : (
-              <PlanningMergeBaseControl
-                issueId={issue.id}
-                value={mergeBaseControl.mergeBase}
-                disabled={saving}
-                onChange={mergeBaseControl.onChange}
-              />
-            )}
+            <PlanningMergeBaseControl
+              issueId={issue.id}
+              value={mergeBaseControl.mergeBase}
+              disabled={saving}
+              onChange={mergeBaseControl.onChange}
+            />
             <IdeaPlanSettingsControls
               issue={issue}
               testIdPrefix="detail"
               settings={planSettings}
             />
-            {append
-              ? null
-              : launchButton(
-                  saving ||
-                    mergeBaseControl.pending ||
-                    !mergeBaseControl.mergeBase.trim(),
-                  issue.appendTo ? undefined : mergeBaseControl.writeMergeBase,
-                )}
+            <PlanningLaunchButton
+              issue={issue}
+              channel={channel}
+              stakeholder={stakeholder}
+              fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
+              variant="primary"
+              optimistic
+              disabled={
+                saving ||
+                mergeBaseControl.pending ||
+                !mergeBaseControl.mergeBase.trim()
+              }
+              beforeStart={mergeBaseControl.writeMergeBase}
+              onStarted={onStarted}
+            />
           </div>
-          {append && mergeBaseHint ? (
-            <p
-              data-testid="planning-merge-base-hint"
-              className="text-center text-sm text-muted-foreground"
-            >
-              {mergeBaseHint}
-            </p>
-          ) : null}
-          {append ? launchButton(saving || planning.launchBlocked) : null}
           <IdeaExecutionGateEffectLine
             settings={planSettings}
             className="w-full px-2"
@@ -619,15 +471,6 @@ export function PlanningChannelEmptyState({
         </div>
       }
     />
-  );
-
-  if (!showCallout || !append) return launch;
-
-  return (
-    <div className="flex flex-col gap-4">
-      <AppendPlanningCallout storyTitle={append.storyTitle} />
-      {launch}
-    </div>
   );
 }
 
@@ -645,7 +488,6 @@ export function PlanningNewRunControl({
   const models = modelsData?.models ?? [];
   const defaultModel = defaultConversationModel(models);
   const { stakeholder } = usePlanningStakeholder(issue);
-  const planning = useAppendPlanningContext(issue);
   const planSettings = useIdeaPlanSettings(issue);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | undefined>();
 
@@ -681,7 +523,6 @@ export function PlanningNewRunControl({
           fallbackCatalogId={stakeholder ? undefined : selectedCatalogId}
           variant="secondary"
           optimistic
-          disabled={planning.launchBlocked}
           onStarted={onStarted}
         />
       </div>
@@ -689,14 +530,6 @@ export function PlanningNewRunControl({
         settings={planSettings}
         className="sm:text-right"
       />
-      {planning.refusal ? (
-        <p
-          data-testid="planning-new-run-blocked"
-          className="max-w-xs text-right text-[11px] leading-snug text-muted-foreground"
-        >
-          {planning.refusal}
-        </p>
-      ) : null}
     </div>
   );
 }

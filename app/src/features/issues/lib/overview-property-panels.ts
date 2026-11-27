@@ -12,7 +12,6 @@ export type OverviewPropertyRowId =
   | "sourceOutline"
   | "assignee"
   | "labels"
-  | "appendTo"
   | "stakeholder"
   | "generatedIssues"
   | "codeApprovalRequired"
@@ -61,7 +60,7 @@ export function overviewPropertyRows(
   }
 
   if (issue.kind === "idea") {
-    editable.push("appendTo", "stakeholder");
+    editable.push("stakeholder");
     fixed.push("generatedIssues");
     if (issue.codeApprovalRequired === true) {
       fixed.push("codeApprovalRequired");

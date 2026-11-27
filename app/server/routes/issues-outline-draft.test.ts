@@ -90,7 +90,6 @@ beforeEach(async () => {
     partOf: "p",
     order: 3,
     archived: false,
-    appendTo: "story-open",
     createdAt: AT,
     updatedAt: AT,
   });

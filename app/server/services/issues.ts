@@ -23,7 +23,6 @@ import { IssueError } from "./errors.js";
 import { nextSiblingOrder, siblingGroupKey } from "../order.js";
 import { derive } from "./derive.js";
 import { mergeImplementingOverlay } from "./implementing-status.js";
-import { applyAppendLocks } from "./outline-append-lock.js";
 import { clearReadyDuringLiveDecomposition } from "./ready-to-decompose.js";
 import { planningStatusById } from "./planning-status.js";
 import { checkIntegrity, problemsFor } from "./integrity.js";
@@ -38,12 +37,6 @@ import { archiveReviewsOfClosingStories } from "./review-lifecycle.js";
 import { ancestorIsArchived } from "./archived-visibility.js";
 import { recordOutlineBody } from "./outline-body.js";
 import { moveReplayBundlesFromIdea } from "./outline-attachments.js";
-import { appendTargetOutlineId } from "./append-target.js";
-import {
-  discardUnpublishedAppendDrafts,
-  unpublishedAppendOutlineIds,
-} from "./append-draft-discard.js";
-import { withOutlineMockupsLocks } from "./outline-mockup-store.js";
 import { planDeletion, type DeletionResult } from "./deletion.js";
 import {
   assertGuestAllowsOutwardEffect,
@@ -61,7 +54,6 @@ import {
 import { uniqueSlug } from "./slug.js";
 import { ancestorChain } from "./subtree.js";
 import {
-  validateAppendToPatch,
   validateNonClearablePatch,
   validateSourceIdeaPatch,
   validateSystemWrittenPatch,
@@ -187,7 +179,6 @@ export function list(): IssuesResponse {
   }
   mergeImplementingOverlay(issues, derived.byId);
   clearReadyDuringLiveDecomposition(derived.byId);
-  applyAppendLocks(issues, derived.byId);
   // Malformed comments.jsonl lines stay on the list. The snapshot revalidates
   // each file's stats and re-parses only files that changed, so an append from
   // any process shows up on the next list.
@@ -571,21 +562,13 @@ function sameCommitShas(left: readonly string[], right: readonly string[]): bool
   return left.length === right.length && left.every((sha, index) => sha === right[index]);
 }
 
-function outlineIdLockedByAppendArchive(id: string, patch: IssuePatch): string | undefined {
-  if (patch.archived !== true) return undefined;
-  const issue = readIssueOrThrow(id);
-  if (issue.kind !== "idea" || issue.archived || !issue.appendTo) return undefined;
-  return appendTargetOutlineId(readAll().issues, issue.appendTo);
-}
-
 export function update(
   id: string,
   patch: IssuePatch,
   options?: { refreshPrFacts?: boolean; rootMergeSettings?: RootMergeSettingsMode },
 ): Promise<IssueDetail> {
   const refreshPrFacts = options?.refreshPrFacts !== false;
-  const outlineId = outlineIdLockedByAppendArchive(id, patch);
-  const run = () => serialize(() => {
+  return serialize(() => {
     ensureMigrations();
     const existing = readIssueOrThrow(id);
     const { issues } = readAll();
@@ -608,7 +591,6 @@ export function update(
     validateNonClearablePatch(existing, jsonPatch);
     validateMergePolicyPatch(existing, jsonPatch, issues);
     validateSourceIdeaPatch(existing, jsonPatch, issues);
-    validateAppendToPatch(existing, jsonPatch, issues);
     if (
       existing.kind === "idea" &&
       "stakeholder" in jsonPatch &&
@@ -774,14 +756,6 @@ export function update(
       assertGuestAllowsOutwardEffect(GUEST_REFUSED_REVIEW_WORKTREE_CREATE);
     }
     commitIssueBatch(writes, []);
-    if (
-      existing.kind === "idea" &&
-      !existing.archived &&
-      parsed.issue.kind === "idea" &&
-      parsed.issue.archived
-    ) {
-      discardUnpublishedAppendDrafts(issues, [parsed.issue.id]);
-    }
     const jsonText = serializeIssue(parsed.issue);
     const finalDescription =
       description !== undefined ? description : readDescription(id);
@@ -816,10 +790,7 @@ export function update(
       reviewWorktrees,
       syncStoryId,
     };
-  });
-  const written =
-    outlineId === undefined ? run() : withOutlineMockupsLocks([outlineId], run);
-  return written.then(async ({ detail, archivedOutline, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
+  }).then(async ({ detail, archivedOutline, attemptIds, recordedPrProjectId, reviewWorktrees, syncStoryId }) => {
     if (archivedOutline) {
       const { removeOutlineReplayTree } = await import("./outline-storybook.js");
       await removeOutlineReplayTree(id);
@@ -875,7 +846,6 @@ export function linkableTaskStatuses(
 // `sourceOutline` is cleared on surviving Epics, Stories, and Tasks. The
 // prospective surviving set is validated before anything is written, so a
 // deletion that could not leave the graph valid is refused without side effects.
-// `appendTo` is cleared on surviving Ideas when the target Story is deleted.
 export async function remove(id: string): Promise<DeletionResult> {
   if (!existsSync(dirOf(id))) {
     throw new IssueError("not_found", `unknown issue "${id}"`);
@@ -883,7 +853,6 @@ export async function remove(id: string): Promise<DeletionResult> {
 
   const graph = readAll().issues;
   const preview = planDeletion(graph, id);
-  const discardOutlines = unpublishedAppendOutlineIds(graph, preview.deleteIds);
   const kinds = new Map(graph.map((issue) => [issue.id, issue.kind]));
   const retainedWorktrees: DeletionResult["retainedWorktrees"] = [];
   const { removeOutlineReplayTree } = await import("./outline-storybook.js");
@@ -927,11 +896,6 @@ export async function remove(id: string): Promise<DeletionResult> {
       patch.sourceIdea = null;
       patchOf.set(bid, patch);
     }
-    for (const { id: bid } of plan.dropAppendTo) {
-      const patch = patchOf.get(bid) ?? {};
-      patch.appendTo = null;
-      patchOf.set(bid, patch);
-    }
     for (const { id: bid } of plan.dropSourceOutline) {
       const patch = patchOf.get(bid) ?? {};
       patch.sourceOutline = null;
@@ -961,7 +925,6 @@ export async function remove(id: string): Promise<DeletionResult> {
     }
 
     for (const issue of toPersist) persist(issue, serializeIssue(issue));
-    discardUnpublishedAppendDrafts(issues, plan.deleteIds);
     for (const delId of plan.deleteIds) {
       rmSync(dirOf(delId), { recursive: true, force: true });
     }
@@ -971,10 +934,9 @@ export async function remove(id: string): Promise<DeletionResult> {
       repointed: plan.repoint,
       unblocked: plan.unblock,
       droppedSourceIdea: plan.dropSourceIdea,
-      droppedAppendTo: plan.dropAppendTo,
       droppedSourceOutline: plan.dropSourceOutline,
       retainedWorktrees,
     };
   });
-  return discardOutlines.length === 0 ? run() : withOutlineMockupsLocks(discardOutlines, run);
+  return run();
 }

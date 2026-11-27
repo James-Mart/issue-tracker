@@ -9,9 +9,8 @@ description: Grill an Idea or an outline session and save the outline.
 Turn a rough capture into an outline in the Project catalog. You grill the
 user, check which affected screens get a mockup round, run those rounds, save
 the outline, and conclude the Idea. Conclude records the code-gate verdict,
-archives the Idea, and starts a decomposer when the Idea's gates say so. An
-Idea with `appendTo` amends the target Story's outline as a pending draft,
-and conclude publishes that draft. A planner session on an outline answers
+archives the Idea, and starts a decomposer when the Idea's gates say so. A
+planner session on an outline answers
 a context question from the current version, or saves a revision as the next
 version without starting reconciliation. A new planning session on an outline
 grills from the brief in its opening message, saves each later version the
@@ -53,32 +52,8 @@ Before grilling:
 4. `issue view <id>` — load the full capture (`description.md`).
 5. `issue project get <projectId> trunk` — Project trunk (`<projectId>` from
    step 1).
-6. `issue idea get <id> appendTo` — when this prints a Story id, `issue
-   view` that Story and resolve **## Append planning context** for it. After
-   the grill (including the mock-or-skip check and its rounds), continue at
-   **## Append**. Empty output → step 7.
-7. `issue idea get <id> mergeBase` — printed branch → merge-base answer
+6. `issue idea get <id> mergeBase` — printed branch → merge-base answer
    for **Merge-base first**; empty output → settle in **Merge-base first**.
-
-## Append planning context
-
-For an Idea with `appendTo`, every **Focused codebase research** spawn in
-the session follows the target Story's context. `<storyId>` is the
-`appendTo` value; the first matching step applies:
-
-1. `issue story get <storyId> merged` prints `true` → tell the user
-   "Planning is blocked until you clear the append target or choose an open
-   Story. Post-landing follow-up belongs in a new root Story." and stop.
-2. `issue story get <storyId> worktree` reports `exists: true` → research
-   reads the bootstrap `Workspace:` (that Story worktree, including
-   uncommitted changes) and omits `Ref`.
-3. `issue story get <storyId> mergeBase` prints a ref → research passes
-   that ref as `Ref`, including when it is the Project trunk.
-4. Otherwise planning cannot start. When `issue story get <storyId>
-   stackedOn` prints a parent id, tell the user "The parent has no branch
-   yet. Start its work loop or resolve its merge base before planning."
-   Otherwise tell the user the Story's merge base is unresolved. Stop
-   either way.
 
 ## Outline session
 
@@ -148,10 +123,9 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
 
 **Rules (mandatory):**
 
-- **Merge-base first** — for an Idea without `appendTo`, settle which git
-  ref the plan is built on before any other grill question. An Idea with
-  `appendTo` follows **## Append planning context** instead. Bootstrap
-  step 7 — printed branch → that branch
+- **Merge-base first** — settle which git
+  ref the plan is built on before any other grill question. Bootstrap
+  step 6 — printed branch → that branch
   is the answer. Empty output → ask **one** question about which git ref
   the plan should be built on. That question recommends the Project
   **trunk** from Bootstrap step 5 via `(recommended)` in the answer list.
@@ -168,7 +142,7 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
   - **Non-trunk branch** — for every **Focused codebase research** spawn
     during the rest of the grill, pass the merge-base answer as `Ref` so
     research reads at that ref (see Spawn stubs).
-- After the merge-base answer (or the append planning context) and before
+- After the merge-base answer and before
   any other grill question, spawn one
   **Focused codebase research** (Spawn stubs; `role: issue-tracker-research`)
   whose `Research` surveys how the host repository already solves directory
@@ -213,8 +187,7 @@ Keep asking one question at a time — do **not** show the outline mid-grill.
     it as **Start** on the amended list, without asking the check again. A
     screen the reply does not name stays as the check proposed it.
 - **Do not enact** the plan (no tracker writes that materialize work)
-  until **## Conclude** runs `issue idea conclude`, **## Append** concludes
-  and publishes the draft, or a **New planning session** saves the next
+  until **## Conclude** runs `issue idea conclude`, or a **New planning session** saves the next
   outline version.
 - Do **not** ask a separate pre-outline “shared understanding?” confirm.
   When the grill is ready, an Idea goes to **## Conclude** and a **New
@@ -278,8 +251,6 @@ doc.
 
 ## Conclude
 
-When Bootstrap printed a Story id for `appendTo`, continue at **## Append**.
-
 When the grill is ready (no extra pre-outline confirm):
 
 1. **Write the outline.** **Read**
@@ -304,7 +275,7 @@ When the grill is ready (no extra pre-outline confirm):
    section only.
 4. **Record the grill's merge settings on the Idea.** When the merge base
    is trunk, run `issue idea set <ideaId> mergePolicy --clear`. When it is
-   not trunk and Bootstrap step 7 did not print a branch, run
+   not trunk and Bootstrap step 6 did not print a branch, run
    `issue idea set <ideaId> mergeBase <branch>`. When it is not trunk, run
    `issue idea set <ideaId> mergePolicy <policy>` with the policy the grill
    settled (`pull-request`, `merge`, `manual`, or `fast-forward`).
@@ -315,43 +286,6 @@ When the grill is ready (no extra pre-outline confirm):
    landed and the decomposer did not start; the final message is stderr.
    Stop. The final message reports `<outlineId>`, the verdict, and
    whether a decomposer started.
-
-## Append
-
-When Bootstrap printed a Story id for `appendTo` (`<storyId>`), the
-amendment goes to that Story's outline as its pending draft. This session
-may already be a fork of that outline's planner; write the draft either
-way. The draft is not a version until conclude publishes it:
-
-1. **Read the outline.** `issue story get <storyId> sourceOutline` prints
-   `{"outline":"<outlineId>","version":<n>}`. `issue outline view
-   <outlineId>` prints the latest body.
-2. **Write the draft.** **Read**
-   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-publishing-voice.md`
-   and follow it. Revise the latest body so it describes the feature with
-   this Idea's change folded into the `##` sections it belongs to, keeping
-   the outline shape from **## Conclude** step 1. The section covering
-   each screen whose round accepted a direction names that direction id
-   and states its held tweak wording. Save it with
-   `issue outline draft set <outlineId> <path>`; the draft is not a version.
-3. **Ask.** Post the draft body in chat and name the target Story. Then ask
-   **one** question whose answer list carries each consequence:
-   - **Yes** — conclude publishes the draft as the outline's next version,
-     records a pending append that reconcile applies to the target Story,
-     and archives this Idea.
-   - **Not now** — the draft is discarded and the current version stays.
-   - **Amend** — the reply is feedback on the draft. Revise it, save it
-     again (step 2), and ask this gate again.
-4. On **Yes** → judge the code-gate verdict the way **## Conclude** step 3
-   does, then run
-   `issue idea conclude <ideaId> --outline <outlineId> --code-gate-verdict <gated|start>`.
-   A zero exit prints `concludedAt`, then the published version. When
-   reconcile started, the next line is that session id. A non-zero exit
-   means the conclude write landed and reconcile did not start; the final
-   message is stderr. Report `<storyId>` on the first line, then the
-   outline id, the published version, the verdict, and whether reconcile
-   started. On **Not now** → run
-   `issue outline draft discard <outlineId>` and report `<outlineId>`.
 
 ## Spawn stubs
 
@@ -369,7 +303,7 @@ workflow instructions here.
 
 ## Rules
 
-- Tracker writes that create work happen when conclude starts a decomposer or reconcile. An append Idea's conclude publishes the draft, records its pending append, and archives the Idea. An outline session's revision, and each save a new planning session lands, is the description save in **## Outline session** and does not start reconciliation.
+- Tracker writes that create work happen when conclude starts a decomposer. An outline session's revision, and each save a new planning session lands, is the description save in **## Outline session** and does not start reconciliation.
 - Do not edit workspace product source as part of planning (plan artifact /
   grill research reads only).
 - Do not start `issue-tracker-work` yourself.

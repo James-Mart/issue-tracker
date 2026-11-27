@@ -17,10 +17,6 @@ export interface DropSourceIdea {
   id: string;
 }
 
-export interface DropAppendTo {
-  id: string;
-}
-
 export interface DropSourceOutline {
   id: string;
 }
@@ -36,8 +32,6 @@ export interface DeletionPlan {
   unblock: Unblock[];
   // Surviving Epics, root Stories, Tasks, and Outlines whose `sourceIdea` pointed into the delete set.
   dropSourceIdea: DropSourceIdea[];
-  // Surviving Ideas whose `appendTo` pointed at a deleted Story.
-  dropAppendTo: DropAppendTo[];
   // Surviving Epics, Stories, and Tasks whose `sourceOutline` named a deleted outline.
   dropSourceOutline: DropSourceOutline[];
 }
@@ -53,7 +47,6 @@ export interface DeletionResult {
   repointed: Repoint[];
   unblocked: Unblock[];
   droppedSourceIdea: DropSourceIdea[];
-  droppedAppendTo: DropAppendTo[];
   droppedSourceOutline: DropSourceOutline[];
   // Worktrees that refused automatic removal (no `--discard`) and remain on disk.
   retainedWorktrees: RetainedWorktree[];
@@ -82,7 +75,6 @@ export function addReviewsOfDeletedStories(
 //     dropped, no inheritance.
 //   - Epic / root Story / Task / Outline `sourceIdea`: the field is cleared when
 //     the Idea is deleted, no inheritance.
-//   - Idea `appendTo`: the field is cleared when the target Story is deleted.
 //   - Epic / Story / Task `sourceOutline`: the field is cleared when the outline
 //     is deleted.
 // `partOf` never needs repair: anything that points into the delete set via
@@ -127,7 +119,6 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
   const repoint: Repoint[] = [];
   const unblock: Unblock[] = [];
   const dropSourceIdea: DropSourceIdea[] = [];
-  const dropAppendTo: DropAppendTo[] = [];
   const dropSourceOutline: DropSourceOutline[] = [];
   for (const issue of issues) {
     if (deleteSet.has(issue.id)) continue;
@@ -155,13 +146,6 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
       dropSourceIdea.push({ id: issue.id });
     }
     if (
-      issue.kind === "idea" &&
-      issue.appendTo &&
-      deleteSet.has(issue.appendTo)
-    ) {
-      dropAppendTo.push({ id: issue.id });
-    }
-    if (
       (issue.kind === "epic" || issue.kind === "story" || issue.kind === "task") &&
       issue.sourceOutline &&
       deleteSet.has(issue.sourceOutline.outline)
@@ -175,7 +159,6 @@ export function planDeletion(issues: Issue[], id: string): DeletionPlan {
     repoint,
     unblock,
     dropSourceIdea,
-    dropAppendTo,
     dropSourceOutline,
   };
 }

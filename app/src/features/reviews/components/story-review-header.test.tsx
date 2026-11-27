@@ -228,7 +228,7 @@ describe("StoryReviewHeader submit", () => {
     expect(container.querySelector('[data-testid="submit-review"]')).not.toBeNull();
   });
 
-  it("creates a blank append Idea from the follow-up control", async () => {
+  it("creates an ordinary Idea from the follow-up control", async () => {
     mount(
       <StoryReviewHeader
         projectId="proj"
@@ -253,10 +253,7 @@ describe("StoryReviewHeader submit", () => {
       title: "Grill the outline change",
       partOf: "proj",
     });
-    expect(state.updateIssue).toHaveBeenCalledWith({
-      id: "idea-new",
-      patch: { appendTo: "story-1" },
-    });
+    expect(state.updateIssue).not.toHaveBeenCalled();
     expect(state.navigate).toHaveBeenCalled();
   });
 

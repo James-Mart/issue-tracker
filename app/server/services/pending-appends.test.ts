@@ -38,7 +38,6 @@ beforeEach(() => {
     kind: "idea",
     title: "Amend",
     partOf: "p",
-    appendTo: "target",
     archived: true,
     order: 1,
     createdAt: AT,

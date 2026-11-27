@@ -49,21 +49,10 @@ function workspaceFromStory(
 export function resolveSummaryWorkspace(
   chain: Issue[],
   projectWorkspace: string | undefined,
-  issuesById?: Map<string, Issue>,
 ): string | undefined {
   const target = chain[chain.length - 1];
   if (target.kind === "review") return liveReviewWorktreePath(target);
-  if (target.kind === "idea") {
-    if (!target.appendTo) return projectWorkspace;
-    const appendStory = issuesById?.get(target.appendTo);
-    if (!appendStory) {
-      throw new IssueError("not_found", `unknown issue "${target.appendTo}"`);
-    }
-    return workspaceFromStory(
-      appendStory.kind === "story" ? appendStory : undefined,
-      projectWorkspace,
-    );
-  }
+  if (target.kind === "idea") return projectWorkspace;
   return workspaceFromStory(storyForWorkspace(chain), projectWorkspace);
 }
 
@@ -138,8 +127,7 @@ export function buildSummary(
   const root = chain[0];
   const projectWorkspace =
     root?.kind === "project" ? root.workspace : undefined;
-  const issuesById = new Map(issues.map((issue) => [issue.id, issue]));
-  const workspace = resolveSummaryWorkspace(chain, projectWorkspace, issuesById);
+  const workspace = resolveSummaryWorkspace(chain, projectWorkspace);
   const mission =
     root?.kind === "project" && root.supportingDocs
       ? missionOf(root.id, projectWorkspace, root.supportingDocs)

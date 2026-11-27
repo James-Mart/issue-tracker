@@ -57,20 +57,10 @@ async function seedPackedDraft(): Promise<{ outlineId: string; tree: string }> {
     createdAt: AT,
     updatedAt: AT,
   });
-  writeIssue("append", {
-    kind: "idea",
-    title: "Append",
-    partOf: "p",
-    appendTo: "story",
-    archived: false,
-    order: 3,
-    createdAt: AT,
-    updatedAt: AT,
-  });
   const tree = replayTreeDir(outline.id);
   writeScratch(tree, ["a", "c"]);
   await putAttachment(outline.id, "mockup-a.tar.gz", Buffer.from("old-a"));
-  await putAttachment("append", "mockup-c.tar.gz", Buffer.from("idea-c"));
+  await putAttachment(outline.id, "mockup-c.tar.gz", Buffer.from("idea-c"));
   await setOutlineDraft(outline.id, "draft\n");
   await packOutlineTree(outline.id);
   return { outlineId: outline.id, tree };

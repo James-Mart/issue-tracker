@@ -15,7 +15,6 @@ import {
   serialize,
   type IssueWrite,
 } from "./issues.js";
-import { APPEND_TO_MERGED_ERROR } from "./patch.js";
 
 export interface AppendSummary {
   created: string[];
@@ -30,6 +29,9 @@ const STACKED_STORY_APPEND_ERROR =
   "append refuses kind: story children; a stacked Story is not an append";
 
 const STORY_FORM_REQUIRED_ERROR = "append requires a story-form apply doc";
+
+export const MERGED_STORY_APPEND_ERROR = (storyId: string) =>
+  `cannot append tasks to merged Story "${storyId}"`;
 
 function buildTask(
   desired: Extract<DesiredIssue, { kind: "task" }>,
@@ -110,7 +112,7 @@ export function appendTasks({
       );
     }
     if (target.merged) {
-      throw new IssueError("validation", APPEND_TO_MERGED_ERROR(storyId));
+      throw new IssueError("validation", MERGED_STORY_APPEND_ERROR(storyId));
     }
 
     const created: string[] = [];

@@ -9,9 +9,9 @@ import {
 } from "@server/services/implementing-launch";
 import { useUpdateFromMergeBase } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
-import { useCreateAppendIdea } from "../lib/use-create-append-idea";
+import { useCreateFollowUpIdea } from "../lib/use-create-follow-up-idea";
 import {
-  appendIdeaTitle,
+  followUpIdeaTitle,
   hasOpenUpdateFromMergeBaseTask,
   storyAppendActions,
 } from "../lib/story-append-actions";
@@ -142,8 +142,8 @@ function StoryOverviewIconToolbar({
 }) {
   const { projectId = "" } = useParams();
   const { data } = useIssuesQuery();
-  const { createAppendIdea, isPending: appendIdeaPending } =
-    useCreateAppendIdea(projectId);
+  const { createFollowUpIdea, isPending: followUpPending } =
+    useCreateFollowUpIdea(projectId);
   const updateFromMergeBase = useUpdateFromMergeBase(issue.id);
 
   const append = storyAppendActions({
@@ -164,8 +164,8 @@ function StoryOverviewIconToolbar({
     queueCandidate || append.addIdea || append.updateFromMergeBase;
 
   const addIdea = () => {
-    if (!append.addIdea || appendIdeaPending || !projectId) return;
-    void createAppendIdea(issue.id, appendIdeaTitle(issue.title));
+    if (!append.addIdea || followUpPending || !projectId) return;
+    void createFollowUpIdea(followUpIdeaTitle(issue.title));
   };
 
   const openMergeBaseConfirm = () => {
@@ -189,9 +189,9 @@ function StoryOverviewIconToolbar({
     return null;
   }
 
-  const addIdeaButtonLabel = appendIdeaPending
+  const addIdeaButtonLabel = followUpPending
     ? "Adding idea…"
-    : "Add idea to append";
+    : "Follow-up idea";
   const mergeBaseButtonLabel = updateFromMergeBase.isPending
     ? "Updating…"
     : "Update from merge base";
@@ -208,13 +208,13 @@ function StoryOverviewIconToolbar({
           size="icon-sm"
           title={addIdeaButtonLabel}
           aria-label={addIdeaButtonLabel}
-          aria-busy={appendIdeaPending || undefined}
+          aria-busy={followUpPending || undefined}
           data-testid={
-            appendIdeaPending
+            followUpPending
               ? "overview-icon-toolbar-add-idea-pending"
               : "overview-icon-toolbar-add-idea"
           }
-          disabled={appendIdeaPending}
+          disabled={followUpPending}
           onClick={addIdea}
         >
           <MessageSquarePlus className="h-3.5 w-3.5" />

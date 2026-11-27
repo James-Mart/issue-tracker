@@ -571,7 +571,6 @@ export const ideaSchema = z.object({
   mergeBase: nonEmpty.optional(),
   mergePolicy: z.enum(MERGE_POLICIES).optional(),
   codeApprovalRequired: z.boolean().optional(),
-  appendTo: z.string().optional(),
   stakeholder: stakeholderField,
   planQueuedAt: z.string().optional(),
   labels: assignmentLabelsSchema,
@@ -627,8 +626,8 @@ export const taskSchema = z.object({
   ...timestamps,
 });
 
-// An append Idea's concluded plan, waiting for reconcile to add its Tasks to
-// `targetStory` and apply its gates there.
+// A concluded plan waiting for reconcile to add its Tasks to `targetStory`
+// and apply its gates there.
 export const pendingAppendSchema = z
   .object({
     targetStory: nonEmpty,
@@ -656,8 +655,8 @@ export const outlineSchema = z.object({
   outOfBand: z.boolean().optional(),
   // System-written when conclude archives the Idea. Patches are refused.
   concludedAt: nonEmpty.optional(),
-  // System-written: append conclude adds an entry, reconcile's apply removes
-  // it. Absent when none are pending. Patches are refused.
+  // System-written. Reconcile's apply removes an entry. Absent when none
+  // are pending. Patches are refused.
   pendingAppends: z.array(pendingAppendSchema).min(1).optional(),
   ...archivableFields,
   ...orderField,
@@ -922,11 +921,6 @@ export interface DerivedState {
    * root is behind. `behind` on that root stays derived from its `sourceOutline`.
    */
   reconciliationNeeded?: boolean;
-  /**
-   * Outline only. Append Idea whose planning session is forked from this
-   * outline's active planner. `list()` sets it; `derive()` does not.
-   */
-  appendLock?: { ideaId: string; ideaTitle: string };
   /** True when sourceIdea names an Idea present in the set and the root has no `releasedAt`. */
   planNotFinal?: boolean;
   /**

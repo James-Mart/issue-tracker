@@ -14,19 +14,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateAppendIdea } from "@/features/issues/lib/use-create-append-idea";
+import { useCreateFollowUpIdea } from "@/features/issues/lib/use-create-follow-up-idea";
 import { ADD_IDEA_HELPER } from "@/features/issues/lib/story-append-actions";
 
 export function ReviewFollowUpIdeaButton({
   projectId,
-  storyId,
   disabled,
 }: {
   projectId: string;
-  storyId: string;
   disabled?: boolean;
 }) {
-  const { createAppendIdea, isPending: pending } = useCreateAppendIdea(projectId);
+  const { createFollowUpIdea, isPending: pending } = useCreateFollowUpIdea(projectId);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
 
@@ -37,9 +35,9 @@ export function ReviewFollowUpIdeaButton({
     setTitle("");
   };
 
-  const createFollowUpIdea = async () => {
+  const submitFollowUpIdea = async () => {
     if (pending) return;
-    await createAppendIdea(storyId, trimmedTitle);
+    await createFollowUpIdea(trimmedTitle);
     close();
   };
 
@@ -82,15 +80,11 @@ export function ReviewFollowUpIdeaButton({
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && trimmedTitle && !pending) {
                     event.preventDefault();
-                    void createFollowUpIdea();
+                    void submitFollowUpIdea();
                   }
                 }}
               />
             </DialogField>
-            <p className="text-xs text-muted-foreground">
-              {FIELD_LABELS.appendTo}{" "}
-              <span className="font-mono">{storyId}</span>
-            </p>
           </DialogFields>
           <DialogFooter>
             <Button type="button" onClick={close}>
@@ -101,7 +95,7 @@ export function ReviewFollowUpIdeaButton({
               variant="primary"
               data-testid="review-follow-up-idea-confirm"
               disabled={!trimmedTitle || pending}
-              onClick={() => void createFollowUpIdea()}
+              onClick={() => void submitFollowUpIdea()}
             >
               Create idea
             </Button>

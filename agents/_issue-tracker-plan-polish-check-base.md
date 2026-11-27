@@ -33,9 +33,7 @@ Load issue specs via `issue view <id>` (and `get` for scalars).
    coordinator and check agents both apply this block):
    - **Epic** — set `<rootKind>` = `epic`; proceed.
    - **Story** — set `<rootKind>` = `story` and proceed when
-     `issue story get <rootId> partOf` equals `<projectId>`, or when
-     `issue list task --in <rootId>` includes a Task with `appended`
-     true.
+     `issue story get <rootId> partOf` equals `<projectId>`.
    - Any other kind → refuse.
    On refuse: check agents return `[]` and stop; the coordinator stops and
    hands back to the user (does not delegate checks).
@@ -49,8 +47,7 @@ Load issue specs via `issue view <id>` (and `get` for scalars).
 
 ## Inputs (from invoking prompt)
 
-- **Work root** id (+ title) — Epic, project-level Story, or
-  append-target Story
+- **Work root** id (+ title) — Epic or project-level Story
 - **Outline diff** — optional; an `issue outline diff` command for the
   outline change this tree was reconciled to
 - Return findings **only** in this delegation result to the parent (never

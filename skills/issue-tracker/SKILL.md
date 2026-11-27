@@ -159,14 +159,14 @@ PRs. Agents themselves do **not** use this UI — they drive the CLI.
   project-level Story by spawning plugin subagents — do not implement yourself;
   use when implementing or working a tracker Epic/Story.
 - **`issue-tracker-plan`** — grill an Idea to an outline and conclude,
-  publish an append draft on conclude, amend an outline in place, or grill
+  amend an outline in place, or grill
   a new planning session from a brief; use when planning an Idea, amending
   an outline, starting a new planning session, or running issue-tracker-plan.
 - **`issue-tracker-auto-plan`** — autonomously plan a single Idea as a
   hands-off stakeholder on opus 5.5; use when the user runs auto-plan or auto
   plan or wants hands-off planning of an Idea id.
-- **`issue-tracker-plan-polish`** — polish an existing Epic, project-level
-  Story, or append-target Story plan with parallel check agents, auto-apply
+- **`issue-tracker-plan-polish`** — polish an existing Epic or project-level
+  Story plan with parallel check agents, auto-apply
   of check fixes when safe, then one copyedit pass on every description; use
   when polishing a plan, cleaning up a tracker tree, or running plan-polish.
 - **`issue-tracker-mockup`** — run one mockup round for one UI surface. The

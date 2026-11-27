@@ -57,12 +57,6 @@ export type PlannerHandoff = {
   mode: "fork" | "promote";
   /** The Idea's Planning root conversation. */
   sourceConversationId: string;
-  /**
-   * Set for an append whose session forked the outline's planner: that
-   * planner and the seq it was forked at, recorded as the new planner's
-   * `forkedFrom` in place of the Idea's conversation.
-   */
-  forkOrigin?: { conversationId: string; seq: number };
 };
 
 /** How an outline session gets the context of the agent it continues. */
@@ -99,14 +93,10 @@ export function concludedPlannerHandoff(
   if (idea?.kind !== "idea" || !idea.archived) return undefined;
   const outlineId = concludedOutlineId(issues, idea);
   if (!outlineId) return undefined;
-  const { forkedFrom, forkedAtSeq } = meta;
   return {
     outlineId,
     mode: idea.stakeholder ? "promote" : "fork",
     sourceConversationId: meta.id,
-    ...(idea.appendTo && forkedFrom !== undefined && forkedAtSeq !== undefined
-      ? { forkOrigin: { conversationId: forkedFrom, seq: forkedAtSeq } }
-      : {}),
   };
 }
 
@@ -114,7 +104,7 @@ export function concludedPlannerHandoff(
  * Continue the planner as the outline's Planning root, from the source
  * conversation through its last transcript event, and archive the source.
  * Earlier planner sessions on the outline are archived. `forkedFrom` is the
- * source, or the handoff's `forkOrigin` when it has one. When the source ran
+ * source. When the source ran
  * a mockup author, that author continues as the outline's mockups session,
  * bound to the outline's Storybook; earlier mockups sessions are archived.
  */
@@ -173,8 +163,8 @@ function handOffOutlineSessions(
     outline,
     outlineRole: "planner",
     projectId: source.projectId,
-    forkedFrom: handoff.forkOrigin?.conversationId ?? source.id,
-    forkedAtSeq: handoff.forkOrigin?.seq ?? forkedAtSeq,
+    forkedFrom: source.id,
+    forkedAtSeq,
   });
   const mockupAuthor =
     authorContinuation &&

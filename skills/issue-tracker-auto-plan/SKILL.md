@@ -15,19 +15,11 @@ afterward. You are the **stakeholder**: you answer the vanilla planner's grill
 from product intent (never from what code already does) and hold the grill
 open until every implied seam is opened. The planner concludes the Idea onto
 its outline, which archives the Idea and starts decomposition when the
-Idea's gates say so. For an Idea with `appendTo`, the planner puts an
-outline gate to you instead, which you route to the human unless the Idea's
-decomposition-gate flag is unset and the Project's gate rubric exempts the
-outline. You are a fresh stakeholder on that Idea: when the target outline
-has an active planner, this session is seeded with that planner's fork and
-the transcript holds its planning context; when it has none, the session
-starts cold. Either way the session is this Idea's stakeholder, and the
+Idea's gates say so. You are a fresh stakeholder on that Idea, and the
 planner you delegate is a new one for this Idea. You resolve polish
 escalations and finalize with an audit report on the source Idea. When your
 run ends on a concluded Idea, the planner continues on the outline's
-Planning tab, where the human talks to it directly. On an Idea with
-`appendTo`, conclude has published the draft and recorded its pending
-append, and the append transcript stays on the Idea.
+Planning tab, where the human talks to it directly.
 Provenance (`sourceIdea`) lands on the resulting root from the decomposer's
 post-apply step — not from finalize.
 You do **not** author the outline or the plan tree yourself — the planner's
@@ -43,8 +35,7 @@ the spawned discriminator / planner.
 
 **Read** `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-ikigai.md`.
 
-**Allowed writes:** `issue comment <storyId> --role human` on the target
-Story after a human Yes (**## Flow** step 3), plus finalize `attach` +
+**Allowed writes:** finalize `attach` +
 `comment` — `issue idea attach` and `issue idea comment` on the archived
 source Idea. Standout-decisions comments use
 `--role stakeholder`. The only other writes are those owned by skills this
@@ -250,12 +241,8 @@ specifics and stop; otherwise proceed to Flow.
    re-enter it with that same `resumeId` to continue. Repeat until the planner
    returns its final message, then classify it:
 
-   - **Concluded** — an Idea with no `appendTo`. The message reports the
+   - **Concluded** — the message reports the
      outline id, the code-gate verdict, and whether a decomposer started.
-   - **Not now** — an Idea with `appendTo`. The message is the outline id.
-   - **Yes** — an Idea with `appendTo`. The first line is the target Story
-     id. Conclude published the draft; the message names the outline id,
-     the published version, the verdict, and whether reconcile started.
 
    The final message ends the relay loop; go to **## Finalize** without
    re-entering the planner.
@@ -264,54 +251,16 @@ specifics and stop; otherwise proceed to Flow.
    (the returned `delegations` array) rather than starting a second planner.
 
    **Coverage check.** The mock-or-skip check, a mockup-round question
-   (conformant or escalated presentation), any "shared understanding
-   reached" / ready-for-outline judgment, and the append outline gate are
+   (conformant or escalated presentation) and any "shared understanding
+   reached" / ready-for-outline judgment are
    the coverage-check triggers.
    Consult the implied-seam inventory (**## Bootstrap** step 10) before
    answering each of them, and again at every later one. Any seam still
    unopened → **push**: withhold that beat's answer, name the still-unopened
    seams, and re-enter the planner with that as your reply. On the
    mock-or-skip check, the push is your **Keep grilling** answer. A push is
-   the **Terse grill answers** exception for context the griller lacks. Never
-   answer the gate Not now to mean keep grilling. With no seam left unopened,
+   the **Terse grill answers** exception for context the griller lacks. With no seam left unopened,
    answer the beat as you otherwise would.
-
-   **Append outline gate.** For an Idea with `appendTo`, the planner puts
-   this gate to you after each saved pending draft of the target Story's
-   outline, with three answers: **Yes**, **Not now**, and **Amend** with
-   feedback. Run the **Coverage check** first; a push goes back to the
-   planner and leaves the routing below unrun. Then route the gate by the
-   first row that matches:
-
-   - Decomposition-gate flag `true` (**## Bootstrap** step 6) → the human's.
-   - The outline clearly meets a clause under the gate rubric's
-     `## Outline does not need approval when` → yours.
-   - Otherwise → the human's.
-
-   When the gate is yours, answer it from the stakeholder decision
-   heuristics.
-
-   When the gate is the human's, end your turn
-   with one message in this order — the planner's outline exactly as it
-   was returned, a `---` rule, then a `## Stakeholder recommendation`
-   heading over the answer you would have given.
-
-   When the human replies, re-enter the same planner with its `resumeId`
-   from step 2, relaying the human's answer: Yes, Not now, or Amend with
-   the human's feedback. Amend comes back as the revised draft; post it the
-   same way as the first. After the planner returns on the Yes path,
-   comment on the target Story id the relay-loop classification names:
-   `issue comment <storyId> --role human --body <text>`. The body records that a
-   human approved the plan and names the Idea (`<issueId>`). This is your
-   write, not the planner's: the planner
-   cannot tell whether a human or an agent answered its gate, so you
-   are the only party that knows a human signed off. That is what
-   makes "was this plan human-approved, or self-approved?" answerable
-   from the tracker once the planning conversation is archived.
-
-   **Abandon** is the human saying to stop rather than answering the
-   gate. Leave the planner un-resumed, write nothing to the tree, and end
-   the run. The outline's current version stays as it is.
 
    **Terse grill answers.** When the griller's recommendation is acceptable,
    reply with a bare acknowledgement only — e.g. "I agree" or "agreed with your
@@ -327,10 +276,7 @@ specifics and stop; otherwise proceed to Flow.
    entry per decision: the decision, the answer you chose, and the rationale
    (distilled, not the raw transcript). Do not defer this to the end; across
    many planner re-entries, reconstructing it later is lossy. This draft is the
-   decision-summary attached at **## Finalize**. Each append outline gate
-   answer adds its verdict (Yes, Not now, or Amend; yours or the human's)
-   and names the rubric clause it relied on, "no exempting clause", or, for
-   a gate routed by the flag, the decomposition-gate flag. A **Concluded**
+   decision-summary attached at **## Finalize**. A **Concluded**
    final message adds the planner's code-gate verdict.
 4. **Finalize** per **## Finalize**.
 

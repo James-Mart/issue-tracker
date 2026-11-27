@@ -62,7 +62,7 @@ import {
   UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR,
 } from "../services/merge-base-task.js";
 import { moveStory } from "../services/move-story.js";
-import { APPEND_TO_MERGED_ERROR } from "../services/patch.js";
+import { MERGED_STORY_APPEND_ERROR } from "../services/append.js";
 import { requireProjectWorkspace } from "../services/project-workspace.js";
 import { findPlanningWorkRoot } from "../services/planning-work-root.js";
 import { readIssueChange, readIssueChangeFile } from "../services/change.js";
@@ -627,7 +627,7 @@ export function createIssuesRouter(
         if (err instanceof IssueError && err.code === "validation") {
           const msg = err.message;
           if (
-            msg === APPEND_TO_MERGED_ERROR(storyId) ||
+            msg === MERGED_STORY_APPEND_ERROR(storyId) ||
             msg === UPDATE_FROM_MERGE_BASE_NO_BRANCH_ERROR(storyId) ||
             msg === UPDATE_FROM_MERGE_BASE_NO_MERGE_BASE_ERROR(storyId) ||
             msg === UPDATE_FROM_MERGE_BASE_OPEN_TASK_ERROR(storyId)

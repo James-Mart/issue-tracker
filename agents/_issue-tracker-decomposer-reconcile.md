@@ -48,8 +48,7 @@ Absolute path for this file (Read this exact path):
    Story for a Source idea's Tasks is its Target story when the tree lists
    it; otherwise it is the open Story in this root the change belongs with.
    Then follow the authoring skill **Tasks with no diff (noDiff)** on the
-   created Tasks. For each Source idea, follow the authoring skill **Source
-   idea (sourceIdea)** on the Tasks created on its Target story.
+   created Tasks.
 6. **Captures.** When the step 2 summary lists a held capture, follow
    **Held captures** for this root. When it lists none, for each Source
    idea follow the authoring skill **Promoted mockup artifacts** for each

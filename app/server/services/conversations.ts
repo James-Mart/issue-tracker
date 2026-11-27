@@ -69,10 +69,7 @@ import {
   GUEST_REFUSED_CONVERSATION_PROMPT,
 } from "./guest-agent-launch.js";
 import { list, readIssueOrThrow, update } from "./issues.js";
-import { forkAppendPlanningSession } from "./append-planner-fork.js";
-import { refuseAppendPlanningCreate } from "./refuse-append-planning.js";
 import { refuseArchivedIdeaPlanning } from "./archived-idea-planning.js";
-import { refuseOutlineAppendLockCreate } from "./outline-append-lock.js";
 import { queueDeparturePatch } from "./work-queue.js";
 import { uniqueSlug } from "./slug.js";
 import { refuseIfNoFreeSlot } from "./work-slots.js";
@@ -500,30 +497,23 @@ export async function createIssueChannelSession(
     if (input.channel === "implementing") {
       refuseIfNoFreeSlot(projectId, issueId, list());
     }
-    refuseAppendPlanningCreate(issueId, input.channel);
-    refuseOutlineAppendLockCreate(issueId, input.channel, input.outlineRole);
     refuseArchivedIdeaPlanning(issueId, input.channel);
 
     for (const existing of channelPredecessors(issueId, input.channel)) {
       archiveIdleConversation(existing, sessions);
     }
 
-    const meta =
-      forkAppendPlanningSession(
-        { issueId, channel: input.channel, projectId, title, initialPrompt },
-        { persist: persistForkedConversation },
-      ) ??
-      persistNewConversation(
-        {
-          title,
-          projectId,
-          model,
-          issueId,
-          channel: input.channel,
-          ...(input.outlineRole ? { outlineRole: input.outlineRole } : {}),
-        },
-        initialPrompt ? { initialPrompt } : undefined,
-      );
+    const meta = persistNewConversation(
+      {
+        title,
+        projectId,
+        model,
+        issueId,
+        channel: input.channel,
+        ...(input.outlineRole ? { outlineRole: input.outlineRole } : {}),
+      },
+      initialPrompt ? { initialPrompt } : undefined,
+    );
     if (!initialPrompt) return { meta };
     return {
       meta,
