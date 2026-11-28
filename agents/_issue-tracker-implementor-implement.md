@@ -33,8 +33,8 @@ Absolute path for this file (Read this exact path):
    wrong, and run them. Preserve check failures through output pipelines
    (`set -o pipefail` in Bash). Require a successful exit and no reported
    failures. Unit-suite runs follow `codingStandards` § Unit
-   suite. Self-check may write whatever automated tests validation needs
-   (unit, e2e, and lint-script). For build,
+   suite. Self-check may write and run whatever automated tests confirming
+   this change needs (unit, e2e, and lint-script). For build,
    runtime, and browser checks, **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-consult-supporting-doc.md`
    and consult `verification` per that file using the bootstrap summary
@@ -65,43 +65,47 @@ Absolute path for this file (Read this exact path):
    judgment. A warning already present stays allowed.
    The self-check is done when every check you chose passes, no warning
    judged introduced remains, and, on a UI-related Task, the look passed.
-4. **Intentional no-op.** If correctly satisfying the spec means there are **no
+4. **Committed tests.** **Read**
+   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
+   and follow it. Then re-run step 3's checks, except the UI look, on the
+   resulting tree. This step is done when the include's rule is done and
+   each of those checks passes.
+5. **Intentional no-op.** If correctly satisfying the spec means there are **no
    source-controlled file changes**, signal it explicitly with
-   `issue task set <id> noDiff true`, then go to step 8.
+   `issue task set <id> noDiff true`, then go to step 9.
    A real edit that only touches non-source-controlled files (e.g. a Project
    attachment under the gitignored `issues/` store) still warrants `noDiff true`.
-   That structured flag plus the step 8 summary comment is what Story review
+   That structured flag plus the step 9 summary comment is what Story review
    reads — an empty tree on its own is **not** a completion signal, so never
    rely on it alone.
-5. If blocked, or the work shows a premise the Task rests on is false,
+6. If blocked, or the work shows a premise the Task rests on is false,
    raise `issue task set <id> needsAttention true --reason "..."` naming
    what blocks or what is false, and stop. This role's status writes are Bootstrap's entry `in-progress`
-   and step 10's terminal `done`.
-6. **Review.** Reviewers read the uncommitted change and return a JSON array
+   and step 11's terminal `done`.
+7. **Review.** Reviewers read the uncommitted change and return a JSON array
    of findings. You have final authority over your code.
    1. Delegate the **Review** stub in parallel, one delegation per reviewer
       role. Include `issue-tracker-review-design-system` only when the Task
       is UI-related (the bootstrap `designSystem` judgment). Keep each returned agent id.
    2. For each finding, fix it or decline it with a reason.
    3. Re-enter each reviewer with at least one finding you fixed, using the
-      **Review (recheck)** stub. Handle each reply as in step 6.2. Repeat
+      **Review (recheck)** stub. Handle each reply as in step 7.2. Repeat
       until a round fixes nothing.
    4. Re-run step 3's checks. Re-run its UI look only when the Task
       is UI-related and the review fixes changed at least one of the paths
-      that made it so; that look's three evidence fields go in the step 8
+      that made it so; that look's three evidence fields go in the step 9
       comment.
-7. **Committed tests, then record commit.** **Read**
-   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
-   and follow it. Then **Read**
+8. **Committed tests, then record commit.** Repeat step 4 on the reviewed
+   tree. Then **Read**
    `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-record-commit-beat.md`
    and follow it.
-8. Post one summary comment:
+9. Post one summary comment:
    `issue task comment <id> --role implementor --body "..."`. It lists each
    finding you fixed (reviewer, finding) and each finding you declined
    (reviewer, finding, reason). Report the final verification commands and
    their results. For a `noDiff` Task, it says what was done,
    what was found, and why no source-controlled change is the right outcome.
-9. **Resolve linked threads.** Run `issue task get <id> openLinkedThreadRoots`.
+10. **Resolve linked threads.** Run `issue task get <id> openLinkedThreadRoots`.
    Each stdout line is the root id of a review thread that is open and linked
    to this Task. Empty stdout means there are none. Otherwise run
    `issue story get <storyId> reviewId` (`<storyId>` is the parent Story from
@@ -110,4 +114,4 @@ Absolute path for this file (Read this exact path):
    changed and where. A thread this get omits stays as it is. A resolved
    thread linked to this Task stays resolved; a human unresolve is what opens
    it again.
-10. `issue task set <id> status done`.
+11. `issue task set <id> status done`.

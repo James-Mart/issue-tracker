@@ -1,31 +1,33 @@
 # Implementor — Committed tests
 
-Not a spawnable agent (no frontmatter). Keep rule for automated tests an
-implementor may commit after validating a Task. Callers **Read** this file
-from disk — a markdown link alone is not enough.
+Not a spawnable agent (no frontmatter). Rule for which automated tests an
+implementor's change carries. Callers **Read** this file from disk — a
+markdown link alone is not enough.
 
 Absolute path for this file (Read this exact path):
 
 `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
 
-- **N.** A test is one behavior asserted: one setup or input and the outcome
-  checked for it. Count the tests you added this Task by behavior, however
-  many assertions check it and however the code groups them into cases or
-  files. Revising an existing test because asserted behavior changed does not
-  add to N.
-- **Cap.** Commit at most max(1, floor(N/10)) of those tests (stays 1 while
-  N < 20, then 2 while N < 30, and so on), each meeting the keep bar below.
-- **Keep bar.** A kept test guards a critical seam.
-- **Less valuable to keep (illustrations, not rules).** Examples of what
-  makes a test less valuable to keep:
-  - it is extremely unlikely to ever fail
-  - it guards a non-critical seam
-  - it asserts on implementation rather than behavior
-  - it does not help readers understand how a feature works
-- **Honor system.** Do not report N, add lint, or add review checks for this
-  cap.
-- **Project `codingStandards`.** May narrow or clarify which tests are
-  written or kept; it cannot widen the cap.
+A new test is committed only when tests have been asked for.
 
-Before **Record commit**, remove unkept tests from the working tree so the
-staged tree matches this rule.
+- **Asked for.** You judge whether tests have been asked for. A Task
+  description that says nothing about tests has not asked. A review comment
+  or review finding that says to add tests has asked. Every test that was
+  asked for may be committed.
+- **New test.** A behavior the existing tests do not already assert is a new
+  test, including when its assertion is added to a file that already holds
+  tests.
+- **Updated test.** An existing test may be updated so its asserted outcome
+  matches the product behavior this Task changes, and that update may be
+  committed.
+- **Kinds.** The rule covers unit, integration, end-to-end, and live tests.
+- **Support files.** A helper, fixture, or snapshot used only by a test this
+  rule removes is removed with that test. One that an existing test or an asked-for
+  test still uses may be committed.
+- **Project `codingStandards`.** May narrow or clarify which tests are
+  written or kept, including forbidding committed tests. It cannot authorize
+  a new test that has not been asked for.
+
+Remove every new test that has not been asked for from the working tree,
+together with the support files only it uses. This rule is done when no
+such test remains in the working tree.
