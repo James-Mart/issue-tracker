@@ -1,21 +1,6 @@
-import type { DerivedState, Issue } from "../schemas.js";
+import type { DerivedState } from "../schemas.js";
 import { listConversations } from "./conversations.js";
 import { isRunLive } from "./run-live.js";
-
-type OutlineIssue = Extract<Issue, { kind: "outline" }>;
-
-/**
- * Structural half of Ready to decompose: concluded, in band, and no linked
- * root. A live decomposition run is cleared later by `list()`.
- */
-export function outlineReadyToDecompose(
-  outline: OutlineIssue,
-  linkedRootOutlineIds: ReadonlySet<string>,
-): boolean {
-  if (!outline.concludedAt) return false;
-  if (outline.outOfBand === true) return false;
-  return !linkedRootOutlineIds.has(outline.id);
-}
 
 /** Clear Ready to decompose while a decomposition session on the outline has a live run. */
 export function clearReadyDuringLiveDecomposition(

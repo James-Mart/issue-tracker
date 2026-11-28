@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IssueDetail, IssueRecord } from "@server/schemas";
+import type { DerivedState, IssueDetail, IssueRecord } from "@server/schemas";
 import { OutlineDecompositionEmptyState } from "./outline-decomposition-empty";
 
 const mutateAsync = vi.fn();
@@ -12,9 +12,9 @@ const fixtures = vi.hoisted(() => ({
   issues: {
     data: {
       issues: [] as IssueRecord[],
-      derived: {} as Record<string, { blocked: boolean }>,
+      derived: {} as Record<string, DerivedState>,
     } as
-      | { issues: IssueRecord[]; derived: Record<string, { blocked: boolean }> }
+      | { issues: IssueRecord[]; derived: Record<string, DerivedState> }
       | undefined,
     isLoading: false,
   },
@@ -100,6 +100,7 @@ describe("Outline decomposition empty state", () => {
     await click(container, "outline-execution-gate-off");
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(container.textContent).toContain("starts roots when decompose finishes");
+    expect(container.textContent).not.toContain("from v");
 
     await click(container, "outline-decompose");
     expect(order).toEqual(["patch", "decompose"]);
@@ -107,6 +108,6 @@ describe("Outline decomposition empty state", () => {
       id: "spec",
       patch: { executionGate: false },
     });
-    expect(decomposeAsync).toHaveBeenCalledWith();
+    expect(decomposeAsync).toHaveBeenCalledWith(undefined);
   });
 });

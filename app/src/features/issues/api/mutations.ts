@@ -647,14 +647,18 @@ export function useStartOutlinePlanningSession(outlineId: string) {
   });
 }
 
-/** Start a decomposer on the outline's decomposition channel at its latest version. */
+/**
+ * Start a decomposer on the outline's decomposition channel at its latest
+ * version. Optional `from` is the saved version the new root's diff begins
+ * at, through that latest body.
+ */
 export function useDecomposeOutline(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<StartedChannelSession, Error, void>({
-    mutationFn: () =>
+  return useMutation<StartedChannelSession, Error, number | undefined>({
+    mutationFn: (from) =>
       request<StartedChannelSession>(
         `/api/issues/${encodeURIComponent(outlineId)}/outline/decompose`,
-        { method: "POST", body: {} },
+        { method: "POST", body: from === undefined ? {} : { from } },
       ),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {

@@ -31,21 +31,21 @@ afterEach(() => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
-describe("assertEmptyDecomposeBody", () => {
-  it("accepts an empty body and refuses executionGate or mergePolicy", async () => {
-    const { assertEmptyDecomposeBody } = await import(
+describe("parseDecomposeRequest", () => {
+  it("accepts an empty body or from, and refuses gate fields", async () => {
+    const { parseDecomposeRequest } = await import(
       "./outline-planning-session.js"
     );
     const { IssueError } = await import("./errors.js");
-    expect(() => assertEmptyDecomposeBody({})).not.toThrow();
-    expect(() => assertEmptyDecomposeBody(undefined)).not.toThrow();
-    expect(() => assertEmptyDecomposeBody({ executionGate: "off" })).toThrow(
+    expect(parseDecomposeRequest({})).toEqual({});
+    expect(parseDecomposeRequest(undefined)).toEqual({});
+    expect(() => parseDecomposeRequest({ executionGate: "off" })).toThrow(
       IssueError,
     );
     expect(() =>
-      assertEmptyDecomposeBody({ mergePolicy: "pull-request" }),
+      parseDecomposeRequest({ mergePolicy: "pull-request" }),
     ).toThrow(IssueError);
-    expect(() => assertEmptyDecomposeBody({ outlineGate: "on" })).toThrow(
+    expect(() => parseDecomposeRequest({ outlineGate: "on" })).toThrow(
       IssueError,
     );
   });

@@ -92,12 +92,17 @@ export function outlineDecomposerSessionMessage(input: {
   version: number;
   executionGate: OutlineExecutionGate;
   mergePolicy?: string;
+  /** Saved version the new root covers through `version`. */
+  from?: number;
 }): string {
+  const from =
+    input.from === undefined ? "" : ` From: \`${input.from}\`.`;
   const message =
     `Decompose ${input.outlineId} in the issue tracker. ` +
     `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
     `Mode: \`decompose\`. ` +
-    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`. ` +
+    `Outline: \`${input.outlineId}\`. Version: \`${input.version}\`.` +
+    `${from} ` +
     `Execution gate: \`${input.executionGate}\`.`;
   if (!input.mergePolicy) return message;
   return `${message} Merge policy: \`${input.mergePolicy}\`.`;

@@ -1,11 +1,26 @@
 import type { DerivedState, IssueRecord } from "@server/schemas";
 import {
+  decomposeRootOf,
+  type DecomposeRoot,
+} from "@server/services/decompose-readiness";
+import {
   stampedBoardRoots,
   type StampedBoardRoot,
 } from "@server/services/linked-roots";
 
 /** A root Epic or project-level Story stamped with one outline. */
 export type LinkedRoot = Omit<StampedBoardRoot, "outlineId" | "archived">;
+
+function stampedRootsForOutline(
+  issues: readonly IssueRecord[],
+  derived: Record<string, DerivedState>,
+  outlineId: string,
+  showArchived: boolean,
+): StampedBoardRoot[] {
+  return stampedBoardRoots(issues, derived, showArchived).filter(
+    (root) => root.outlineId === outlineId,
+  );
+}
 
 /**
  * Root Epics and project-level Stories whose `sourceOutline` names this
@@ -19,9 +34,20 @@ export function linkedRootsForOutline(
   outlineId: string,
   showArchived: boolean,
 ): LinkedRoot[] {
-  return stampedBoardRoots(issues, derived, showArchived)
-    .filter((root) => root.outlineId === outlineId)
-    .map(({ outlineId: _outlineId, archived: _archived, ...root }) => root);
+  return stampedRootsForOutline(issues, derived, outlineId, showArchived).map(
+    ({ outlineId: _outlineId, archived: _archived, ...root }) => root,
+  );
+}
+
+/** Linked roots Ready to decompose reads, including archived roots. */
+export function decomposeRootsForOutline(
+  issues: readonly IssueRecord[],
+  derived: Record<string, DerivedState>,
+  outlineId: string,
+): DecomposeRoot[] {
+  return stampedRootsForOutline(issues, derived, outlineId, true).map(
+    decomposeRootOf,
+  );
 }
 
 /**

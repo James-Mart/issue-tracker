@@ -41,6 +41,8 @@ export type StartOutlineDecomposerSession = {
   version: number;
   executionGate: OutlineExecutionGate;
   mergePolicy?: string;
+  /** Saved version the new root covers through `version`. Omitted for a full outline. */
+  from?: number;
 };
 
 /** Decomposer placing new outline work on one existing root, up to `version`. */
@@ -85,22 +87,36 @@ export type StartOutlinePlanningSessionInput =
   | StartOutlinePolishSession
   | StartOutlineCheckSession;
 
-const decomposeRequestSchema = z.object({}).strict();
+const emptyStartSchema = z.object({}).strict();
+
+const decomposeRequestSchema = z
+  .object({
+    from: z.number().int().positive().optional(),
+  })
+  .strict();
 
 /** Refuse a start body that is not a strict empty object. */
 function assertEmptyStartBody(body: unknown, fallback: string): void {
-  const parsed = decomposeRequestSchema.safeParse(body ?? {});
+  const parsed = emptyStartSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new IssueError("validation", formatZodError(parsed.error, fallback));
   }
 }
 
 /**
- * Body of `POST /outline/decompose`. The outline stores `executionGate` and
- * `mergePolicy`; a body that carries either, or any other field, is refused.
+ * Body of `POST /outline/decompose`. Optional `from` is a saved version the
+ * new root starts after. The outline stores `executionGate` and `mergePolicy`,
+ * so a body that carries either is refused.
  */
-export function assertEmptyDecomposeBody(body: unknown): void {
-  assertEmptyStartBody(body, "invalid decompose body");
+export function parseDecomposeRequest(body: unknown): { from?: number } {
+  const parsed = decomposeRequestSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    throw new IssueError(
+      "validation",
+      formatZodError(parsed.error, "invalid decompose body"),
+    );
+  }
+  return parsed.data;
 }
 
 /** Body of `POST /roots/:rootId/update` and `/reconcile`. Any field is refused. */
@@ -122,10 +138,26 @@ export function requireNoPlacement(outline: OutlineIssue): void {
   }
 }
 
+/**
+ * `from` must name a saved version strictly before the outline's latest
+ * body. The diff from that version through the latest body is what the
+ * new root covers.
+ */
+function requireEarlierVersion(from: number, outline: OutlineIssue): void {
+  if (from >= outline.bodyVersion) {
+    throw new IssueError(
+      "validation",
+      `from ${from} is not before version ${outline.bodyVersion} of outline "${outline.id}"`,
+    );
+  }
+}
+
 /** Decomposer start for one outline, from its stored gate and merge policy. */
 export function decomposerSessionFromOutline(
   outline: OutlineIssue,
+  from?: number,
 ): StartOutlineDecomposerSession {
+  if (from !== undefined) requireEarlierVersion(from, outline);
   return {
     outlineId: outline.id,
     role: "decomposer",
@@ -135,6 +167,7 @@ export function decomposerSessionFromOutline(
       outline.codeApprovalRequired,
     ),
     mergePolicy: outline.mergePolicy,
+    ...(from !== undefined ? { from } : {}),
   };
 }
 
@@ -288,6 +321,7 @@ function sessionMessage(
     version: input.version,
     executionGate: input.executionGate,
     mergePolicy: requireMergePolicy(input.mergePolicy),
+    from: input.from,
   });
 }
 

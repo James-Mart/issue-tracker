@@ -75,9 +75,9 @@ import {
 } from "../services/outline-body.js";
 import { concludeIdea, parseConcludeRequest } from "../services/idea-conclude.js";
 import {
-  assertEmptyDecomposeBody,
   assertEmptyPlacementBody,
   decomposerSessionFromOutline,
+  parseDecomposeRequest,
   parsePlanningSessionRequest,
   startOutlinePlanningSession,
 } from "../services/outline-planning-session.js";
@@ -200,10 +200,10 @@ export function createIssuesRouter(
     "/:id/outline/decompose",
     asyncRoute(async (req, res) => {
       const outline = readOutlineOrThrow(req.params.id);
-      assertEmptyDecomposeBody(req.body);
+      const { from } = parseDecomposeRequest(req.body);
       requireProjectWorkspace(outline.partOf);
       const meta = await startOutlinePlanningSession(
-        decomposerSessionFromOutline(outline),
+        decomposerSessionFromOutline(outline, from),
         sessions,
       );
       res.status(201).json({

@@ -9,6 +9,8 @@ Absolute path for this file (Read this exact path):
 
 ## Inputs (from invoking prompt)
 
+- **From** — optional; a saved outline version. With it, the new root
+  covers the diff from that version through Version.
 - **Merge policy** — optional; the merge policy for a root built on a
   merge-base branch
 
@@ -22,8 +24,10 @@ Absolute path for this file (Read this exact path):
 
 ## Procedure
 
-1. **Author.** Write one epic-form or story-form apply doc that covers the
-   outline version, with a newly minted root id.
+1. **Author.** With **From**, `issue outline diff <outlineId> <from>
+   <version>` is what the new root covers. Without **From**, the outline
+   version from bootstrap is what it covers. Write one epic-form or
+   story-form apply doc for that coverage, with a newly minted root id.
 2. **Apply.** `issue apply <file>`. Show its stdout.
 3. **Post-apply.** Follow these authoring skill sections on what `apply`
    created: **Source outline (sourceOutline)** with this outline and version;
