@@ -95,7 +95,8 @@ Every issue has a `kind`, one of:
   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-implement.md`
   and follow the compiler-warning scan in its self-check.
 
-  When committing automated tests, **Read**
+  Before code review and again before the record commit, the implementor
+  applies the committed-tests rule: **Read**
   `/root/.cursor/plugins/local/issue-tracker/agents/_issue-tracker-implementor-committed-tests.md`
   and follow it.
 
