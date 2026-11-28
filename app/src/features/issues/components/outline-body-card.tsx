@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, GitCompare } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRight, GitCompare, Pencil } from "lucide-react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { IssueDetail } from "@server/schemas";
 import { ShellInlineFault } from "@/app/shell-state";
@@ -13,9 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useUpdateIssue } from "../api/mutations";
 import { useOutlineBodyQuery, useOutlineDiffQuery } from "../api/queries";
 import { CopyTextButton } from "./copy-text-button";
 import { Markdown } from "./markdown";
+import { OutlineOpenDraftSentence } from "./outline-review-draft-note";
+
+type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
 
 function versionChoices(latest: number): number[] {
   return Array.from({ length: latest }, (_, index) => index + 1);
@@ -173,17 +178,98 @@ function OutlineVersionDiff({
   );
 }
 
+function OutlineEditSession({
+  issue,
+  onDone,
+}: {
+  issue: OutlineDetail;
+  onDone: () => void;
+}) {
+  const nextVersion = issue.bodyVersion + 1;
+  const [draft, setDraft] = useState(issue.description);
+  const update = useUpdateIssue();
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    fieldRef.current?.focus();
+  }, []);
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({ id: issue.id, patch: { description: draft } });
+    } catch {
+      // The mutation toasts. Edit stays open so the draft is not dropped.
+      return;
+    }
+    onDone();
+  };
+  // Identical markdown does not advance the version.
+  const unchanged = draft === issue.description;
+
+  return (
+    <div className={READING_MEASURE_CLASS}>
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span
+          id="outline-new-version"
+          data-testid="outline-new-version"
+          className="font-mono text-xs tabular-nums"
+        >
+          New version v{nextVersion}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="outline-edit-cancel"
+            disabled={update.isPending}
+            onClick={onDone}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="current"
+            size="sm"
+            data-testid="outline-edit-save"
+            disabled={update.isPending || unchanged}
+            onClick={save}
+          >
+            Save as v{nextVersion}
+          </Button>
+        </div>
+      </div>
+      <Textarea
+        ref={fieldRef}
+        value={draft}
+        aria-labelledby="outline-new-version"
+        data-testid="outline-edit-body"
+        spellCheck={false}
+        disabled={update.isPending}
+        className="min-h-[16rem] font-mono text-sm"
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    </div>
+  );
+}
+
 export function OutlineBodyCard({
   issue,
+  onEditingChange,
 }: {
-  issue: Extract<IssueDetail, { kind: "outline" }>;
+  issue: OutlineDetail;
+  onEditingChange: (editing: boolean) => void;
 }) {
   const latest = issue.bodyVersion;
-  const [mode, setMode] = useState<"read" | "diff">("read");
+  const pendingDraft = issue.pendingDraft;
+  const reviewDraftOpen = pendingDraft !== undefined;
+  const [mode, setMode] = useState<"read" | "diff" | "edit">("read");
   const [readVersion, setReadVersion] = useState(latest);
   const [diffFrom, setDiffFrom] = useState(Math.max(1, latest - 1));
   const [diffTo, setDiffTo] = useState(latest);
   const latestRef = useRef(latest);
+  const onEditingChangeRef = useRef(onEditingChange);
+  onEditingChangeRef.current = onEditingChange;
 
   // A publish while this card is mounted moves the selection that was on the
   // previous latest forward. An older version the reader picked stays put.
@@ -196,6 +282,27 @@ export function OutlineBodyCard({
     latestRef.current = latest;
   }, [latest]);
 
+  const leaveEdit = useCallback(() => {
+    setMode("read");
+    onEditingChangeRef.current(false);
+  }, []);
+
+  const enterEdit = useCallback(() => {
+    setMode("edit");
+    onEditingChangeRef.current(true);
+  }, []);
+
+  // A review draft refuses the body save, so an edit already open cannot stay.
+  useEffect(() => {
+    if (!reviewDraftOpen || mode !== "edit") return;
+    leaveEdit();
+  }, [reviewDraftOpen, mode, leaveEdit]);
+
+  // Navigation unmounts the card without Cancel or Save.
+  useEffect(() => {
+    return () => onEditingChangeRef.current(false);
+  }, []);
+
   return (
     <section
       className="rounded-lg border border-border bg-card p-5"
@@ -204,72 +311,100 @@ export function OutlineBodyCard({
       <p className="mb-3 font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--current))]">
         Outline body
       </p>
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-          {mode === "read" ? "Version" : "Diff"}
-        </span>
-        {mode === "read" ? (
-          <>
-            <OutlineVersionSelect
-              label="Version"
-              value={readVersion}
-              latest={latest}
-              testId="outline-version"
-              onChange={setReadVersion}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              data-testid="outline-compare"
-              onClick={() => {
-                setDiffFrom(Math.max(1, latest - 1));
-                setDiffTo(latest);
-                setMode("diff");
-              }}
-            >
-              <GitCompare />
-              Compare versions
-            </Button>
-          </>
-        ) : (
-          <>
-            <OutlineVersionSelect
-              label="From version"
-              value={diffFrom}
-              latest={latest}
-              testId="outline-diff-from"
-              onChange={setDiffFrom}
-            />
-            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-            <OutlineVersionSelect
-              label="To version"
-              value={diffTo}
-              latest={latest}
-              testId="outline-diff-to"
-              onChange={setDiffTo}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              data-testid="outline-back-to-read"
-              onClick={() => setMode("read")}
-            >
-              Back to read
-            </Button>
-          </>
-        )}
-      </div>
-      {mode === "read" ? (
-        <OutlineReadBody
-          id={issue.id}
-          version={readVersion}
-          latest={latest}
-          latestBody={issue.description}
-        />
+      {mode === "edit" ? (
+        <OutlineEditSession issue={issue} onDone={leaveEdit} />
       ) : (
-        <OutlineVersionDiff id={issue.id} from={diffFrom} to={diffTo} />
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+              {mode === "read" ? "Version" : "Diff"}
+            </span>
+            {mode === "read" ? (
+              <>
+                <OutlineVersionSelect
+                  label="Version"
+                  value={readVersion}
+                  latest={latest}
+                  testId="outline-version"
+                  onChange={setReadVersion}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-testid="outline-compare"
+                  onClick={() => {
+                    setDiffFrom(Math.max(1, latest - 1));
+                    setDiffTo(latest);
+                    setMode("diff");
+                  }}
+                >
+                  <GitCompare />
+                  Compare versions
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-testid="outline-edit"
+                  disabled={reviewDraftOpen}
+                  aria-describedby={reviewDraftOpen ? "outline-edit-held" : undefined}
+                  onClick={enterEdit}
+                >
+                  <Pencil />
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <OutlineVersionSelect
+                  label="From version"
+                  value={diffFrom}
+                  latest={latest}
+                  testId="outline-diff-from"
+                  onChange={setDiffFrom}
+                />
+                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <OutlineVersionSelect
+                  label="To version"
+                  value={diffTo}
+                  latest={latest}
+                  testId="outline-diff-to"
+                  onChange={setDiffTo}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="outline-back-to-read"
+                  onClick={() => setMode("read")}
+                >
+                  Back to read
+                </Button>
+              </>
+            )}
+          </div>
+          {mode === "read" && pendingDraft ? (
+            <OutlineOpenDraftSentence
+              projectId={issue.partOf}
+              reviewId={pendingDraft.review}
+              lead="Edit is held for an open draft from"
+              testId="outline-edit-held"
+              id="outline-edit-held"
+              className="mb-4 text-sm text-muted-foreground"
+            />
+          ) : null}
+          {mode === "read" ? (
+            <OutlineReadBody
+              id={issue.id}
+              version={readVersion}
+              latest={latest}
+              latestBody={issue.description}
+            />
+          ) : (
+            <OutlineVersionDiff id={issue.id} from={diffFrom} to={diffTo} />
+          )}
+        </>
       )}
     </section>
   );

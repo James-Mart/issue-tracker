@@ -1,4 +1,4 @@
-import { writeFileSync } from "fs";
+import { rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runIssueCli } from "./cli-program.js";
@@ -68,6 +68,52 @@ describe("outline versions", () => {
     expect(diff.status).toBe(0);
     expect(diff.stdout).toContain("-alpha");
     expect(diff.stdout).toContain("+beta");
+  });
+
+  it("refuses a body save while a review draft is open and names that review", async () => {
+    const first = join(dir, "v1.md");
+    const second = join(dir, "v2.md");
+    writeFileSync(first, "alpha\n");
+    writeFileSync(second, "beta\n");
+    const created = await runIssueCli(
+      ["outline", "add", "--in", "p", "--title", "Catalog", "--description-file", first],
+      { env: env() },
+    );
+    const id = created.stdout.trim();
+    writeFileSync(
+      join(dir, id, "draft.json"),
+      JSON.stringify({
+        body: "draft\n",
+        review: "rev-owned",
+        submission: "sub-1",
+      }),
+    );
+
+    const refused = await runIssueCli(
+      ["outline", "set", id, "description", "--file", second],
+      { env: env() },
+    );
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain('review "rev-owned"');
+    expect(
+      (await runIssueCli(["outline", "get", id, "version"], { env: env() })).stdout,
+    ).toBe("1\n");
+
+    const titled = await runIssueCli(
+      ["outline", "set", id, "title", "Renamed"],
+      { env: env() },
+    );
+    expect(titled.status).toBe(0);
+
+    rmSync(join(dir, id, "draft.json"));
+    const saved = await runIssueCli(
+      ["outline", "set", id, "description", "--file", second],
+      { env: env() },
+    );
+    expect(saved.status).toBe(0);
+    expect(
+      (await runIssueCli(["outline", "get", id, "version"], { env: env() })).stdout,
+    ).toBe("2\n");
   });
 });
 

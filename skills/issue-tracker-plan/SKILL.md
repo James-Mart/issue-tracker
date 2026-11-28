@@ -104,9 +104,11 @@ message is context.
    `##` sections it belongs to, keeping the outline shape from **## Conclude**
    step 1.
 2. **Save it.** `issue outline set <outlineId> description --file <path>`.
-   That save is the next version and does not start reconciliation. The final
-   message reports `<outlineId>` and the version from `issue outline get
-   <outlineId> version`.
+   That save is the next version and does not start reconciliation. While a
+   review draft is open, the command is refused and names the owning review;
+   leave the saved body as it is and name that review in the final message.
+   With no review draft open, the final message reports `<outlineId>` and the
+   version from `issue outline get <outlineId> version`.
 
 ## Grill-me protocol (inline)
 

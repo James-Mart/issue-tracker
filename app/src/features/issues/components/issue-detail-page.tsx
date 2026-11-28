@@ -57,12 +57,7 @@ import { StoryTaskRail } from "./story-task-rail";
 import { EpicStoryRail } from "./epic-story-rail";
 import { IssueAttachmentsSection } from "./attachments-panel";
 import { IssueDescriptionField } from "./issue-description-field";
-import { OutlineBodyCard } from "./outline-body-card";
-import { OutlineLinkedWorkCard } from "./outline-linked-work-card";
-import {
-  OutlinePendingDraftCard,
-  type OutlineWithDraft,
-} from "./outline-pending-draft-card";
+import { OutlineOverview } from "./outline-overview";
 import { IssueCommentsSection } from "./comments/comments-section";
 import { DeletePartialPlanDetailAction } from "./delete-partial-plan-control";
 import { OverviewIconToolbar } from "./overview-icon-toolbar";
@@ -148,16 +143,7 @@ function IssueOverviewPanel({
       <OwnFlowSlot issue={issue} />
       <IssueAttachmentsSection issue={issue} upload={upload} />
       {issue.kind === "outline" ? (
-        <OutlineLinkedWorkCard key={`${issue.id}-linked`} issue={issue} />
-      ) : null}
-      {issue.kind === "outline" && issue.pendingDraft !== undefined ? (
-        <OutlinePendingDraftCard
-          key={`${issue.id}-draft`}
-          issue={issue as OutlineWithDraft}
-        />
-      ) : null}
-      {issue.kind === "outline" ? (
-        <OutlineBodyCard key={issue.id} issue={issue} />
+        <OutlineOverview issue={issue} />
       ) : (
         <IssueDescriptionField issue={issue} upload={upload} />
       )}

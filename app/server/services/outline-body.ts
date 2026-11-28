@@ -7,6 +7,7 @@ import type { Issue } from "../schemas.js";
 import { IssueError } from "./errors.js";
 import { descriptionPath, readDescription } from "./issues-detail.js";
 import { replaceFileAtomically } from "./issues-store-lock.js";
+import { readOutlineDraft } from "./outline-draft-store.js";
 
 type OutlineIssue = Extract<Issue, { kind: "outline" }>;
 
@@ -18,6 +19,21 @@ function writeSnapshot(id: string, version: number, body: string): void {
   const path = outlineVersionPath(id, version);
   mkdirSync(dirname(path), { recursive: true });
   replaceFileAtomically(path, body);
+}
+
+/**
+ * A review-owned draft is the body in progress. A saved-body write waits
+ * until that draft is approved or discarded. Publishing the draft does not
+ * come through here.
+ */
+export function assertOutlineBodySaveAllowed(id: string): void {
+  const draft = readOutlineDraft(id);
+  if (draft === undefined) return;
+  throw new IssueError(
+    "conflict",
+    `outline "${id}" body save refused: review "${draft.review}" has an open draft`,
+    { review: draft.review },
+  );
 }
 
 /**
