@@ -186,7 +186,7 @@ export type DepGraphModel = {
 export type FlowBuckets = {
   planning: FlowItem[];
   readyToLand: FlowItem[];
-  needsDecomposition: FlowItem[];
+  outlineWorkToPlace: FlowItem[];
   ready: FlowItem[];
   queue: FlowItem[];
   blocked: FlowItem[];
@@ -346,30 +346,31 @@ function recentlyMergedInstant(
   return found ? latestMs : undefined;
 }
 
-function isReadyToDecomposeOutline(
+function isOutlineWorkToPlace(
   issue: IssueRecord,
-  derived: Record<string, DerivedState>,
+  state: DerivedState | undefined,
 ): issue is Extract<IssueRecord, { kind: "outline" }> {
+  if (issue.kind !== "outline") return false;
+  if (state?.placementLive === true) return false;
   return (
-    issue.kind === "outline" &&
-    issue.outOfBand !== true &&
-    derived[issue.id]?.readyToDecompose === true
+    state?.readyToDecompose === true || state?.reconciliationNeeded === true
   );
 }
 
 /**
  * Bucket Stories, Epics, and Ideas into planning / readyToLand / ready /
- * queue / blocked / recentlyMerged, and ready in-band outlines into
- * `needsDecomposition`. Pure view-model — no I/O.
+ * queue / blocked / recentlyMerged, and outlines with work to place into
+ * `outlineWorkToPlace`. Pure view-model — no I/O.
  * `queue` is the Project work queue: parked, running, paused, and waiting roots,
  * including queued roots that are blocked. Planning Ideas come first in
  * `planning`, then captured Ideas. Ready-to-land Stories (including
  * epic-children) go to `readyToLand`. `recentlyMerged` keeps project-level
  * merged Stories and done Epics that have a merge instant, newest first;
  * equal instants tie-break on issue id, smaller id first.
- * `needsDecomposition` lists in-scope outlines whose `readyToDecompose` is
- * set and whose `outOfBand` is not true, in input order. Those outlines
- * are not placed in any other bucket.
+ * `outlineWorkToPlace` lists each in-scope outline once when
+ * `readyToDecompose` or `reconciliationNeeded` is set, and omits it while
+ * `placementLive` is set, in input order. Those outlines are not placed
+ * in any other bucket.
  */
 export function flowBuckets(
   issues: IssueRecord[],
@@ -395,15 +396,17 @@ export function flowBuckets(
 
   const planning: FlowItem[] = [];
   const readyToLand: FlowItem[] = [];
-  const needsDecomposition: FlowItem[] = [];
+  const outlineWorkToPlace: FlowItem[] = [];
   const ready: FlowItem[] = [];
   const queue: FlowItem[] = [];
   const blocked: FlowItem[] = [];
   const recentlyMergedRanked: { item: FlowItem; at: number }[] = [];
 
   for (const issue of issues) {
-    if (!inScope(issue) || !isReadyToDecomposeOutline(issue, derived)) continue;
-    needsDecomposition.push({ issue, state: derived[issue.id] });
+    if (!inScope(issue)) continue;
+    const state = derived[issue.id];
+    if (!isOutlineWorkToPlace(issue, state)) continue;
+    outlineWorkToPlace.push({ issue, state });
   }
 
   for (const issue of candidates) {
@@ -459,7 +462,7 @@ export function flowBuckets(
   return {
     planning,
     readyToLand,
-    needsDecomposition,
+    outlineWorkToPlace,
     ready,
     queue,
     blocked,
