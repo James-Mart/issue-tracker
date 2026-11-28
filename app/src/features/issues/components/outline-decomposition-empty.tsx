@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { FIELD_LABELS } from "@server/fields";
 import type { ExecutionGate, IssueDetail } from "@server/schemas";
+import { outlineDecomposeStart } from "@server/services/decompose-readiness";
 import { ShellState } from "@/app/shell-state";
 import { Button } from "@/components/ui/button";
 import { useDecomposeOutline, useUpdateIssue } from "../api/mutations";
 import { useIssuesQuery } from "../api/queries";
 import { useIssuePatchAction } from "../hooks/use-issue-patch-action";
 import { READY_TO_DECOMPOSE_LABEL } from "../lib/derived";
-import { linkedRootsForOutline } from "../lib/outline-links";
+import { decomposeRootsForOutline } from "../lib/outline-links";
+import { outlineVersionLabel } from "../lib/project-outlines";
 import { ExecutionGateControl } from "./execution-gate-control";
 import { ExecutionGateEffectLine } from "./execution-gate-effect-line";
 import { GateToggleButton } from "./gate-toggle-button";
@@ -16,8 +18,10 @@ type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
 
 const EMPTY_CLASS = "border-0 bg-transparent px-4 py-8 shadow-none";
 
-const READY_DETAIL =
-  "Launch a decomposer on the latest saved outline version. Execution gate follows the source Idea unless you override it here.";
+const GATE_SENTENCE =
+  "Execution gate follows the source Idea unless you override it here.";
+
+const READY_DETAIL = `Launch a decomposer on the latest saved outline version. ${GATE_SENTENCE}`;
 
 const OUT_OF_BAND_DETAIL =
   "Turning this off makes the outline ready to decompose.";
@@ -51,17 +55,27 @@ export function OutlineDecompositionEmptyState({
   // This state is only mounted with no session on the channel, so no live
   // decomposition run is clearing Ready. Readiness is that structural half
   // with the toggle's current value, including before the list refetch lands.
-  const ready = useMemo(() => {
-    if (outOfBand || !outline.concludedAt || !issues.data) return false;
-    return (
-      linkedRootsForOutline(
-        issues.data.issues,
-        issues.data.derived,
-        outline.id,
-        true,
-      ).length === 0
+  const roots = useMemo(() => {
+    if (!issues.data) return undefined;
+    return decomposeRootsForOutline(
+      issues.data.issues,
+      issues.data.derived,
+      outline.id,
     );
-  }, [issues.data, outOfBand, outline.concludedAt, outline.id]);
+  }, [issues.data, outline.id]);
+  const decomposeStart =
+    roots === undefined
+      ? undefined
+      : outlineDecomposeStart(
+          {
+            concludedAt: outline.concludedAt,
+            outOfBand,
+            bodyVersion: outline.bodyVersion,
+          },
+          roots,
+        );
+  const ready = decomposeStart?.ready === true;
+  const from = decomposeStart?.from;
 
   const toggleOutOfBand = () => {
     if (saving) return;
@@ -87,7 +101,7 @@ export function OutlineDecompositionEmptyState({
         id: outline.id,
         patch: { executionGate },
       });
-      await decompose.mutateAsync();
+      await decompose.mutateAsync(from);
     });
   };
 
@@ -144,7 +158,19 @@ export function OutlineDecompositionEmptyState({
         className={EMPTY_CLASS}
         eyebrow={label}
         title={READY_TO_DECOMPOSE_LABEL}
-        detail={READY_DETAIL}
+        detail={
+          from === undefined ? (
+            READY_DETAIL
+          ) : (
+            <>
+              Launch a decomposer from{" "}
+              <span className="font-mono tabular-nums">
+                {outlineVersionLabel(from)}
+              </span>{" "}
+              through the latest saved outline version. {GATE_SENTENCE}
+            </>
+          )
+        }
         action={
           <div className="flex w-full flex-col items-center gap-3">
             <div className="flex flex-wrap items-center justify-center gap-2">

@@ -1,5 +1,6 @@
 import { FIELD_LABELS } from "@server/fields";
 import type { ExecutionGate } from "@server/schemas";
+import { formControlSurface } from "@/components/ui/form-surfaces";
 import { cn } from "@/lib/utils/cn";
 import {
   IDEA_EXECUTION_GATE_OPTIONS,
@@ -31,20 +32,27 @@ function nextExecutionGate(
   };
 }
 
-/** Auto / On / Off for a stored `executionGate`. Opens on the value it is given. */
+/**
+ * Auto / On / Off for a stored `executionGate`. Opens on the value it is given.
+ * `chip` is the compact bar used beside Decompose and on Idea plan settings.
+ * `field` is the property-row control: body text, no embedded label.
+ */
 export function ExecutionGateControl({
   id,
   value,
   onChange,
   disabled,
   testId,
+  appearance = "chip",
 }: {
   id: string;
   value: ExecutionGate;
   onChange: (next: ExecutionGate) => void;
   disabled?: boolean;
   testId: string;
+  appearance?: "chip" | "field";
 }) {
+  const field = appearance === "field";
   return (
     <div
       id={id}
@@ -52,7 +60,12 @@ export function ExecutionGateControl({
       aria-label={FIELD_LABELS.executionGate}
       data-testid={testId}
       data-value={ideaExecutionGateOption(value).slug}
-      className="inline-flex h-7 w-fit items-center rounded-md border border-border bg-card px-2 font-mono text-[10px] tracking-[0.08em] touch:h-11"
+      className={cn(
+        "inline-flex h-7 w-fit items-center rounded-md touch:h-11",
+        field
+          ? cn(formControlSurface, "px-0.5 text-sm")
+          : "border border-border bg-card px-2 font-mono text-[10px] tracking-[0.08em]",
+      )}
       onKeyDown={(event) => {
         if (disabled) return;
         const next = nextExecutionGate(value, event.key);
@@ -65,9 +78,11 @@ export function ExecutionGateControl({
         radios[next.index]?.focus();
       }}
     >
-      <span aria-hidden className="text-muted-foreground">
-        {FIELD_LABELS.executionGate} ·
-      </span>
+      {field ? null : (
+        <span aria-hidden className="text-muted-foreground">
+          {FIELD_LABELS.executionGate} ·
+        </span>
+      )}
       {IDEA_EXECUTION_GATE_OPTIONS.map((option) => {
         const selected = value === option.value;
         return (
@@ -80,11 +95,16 @@ export function ExecutionGateControl({
             data-testid={`${testId}-${option.slug}`}
             disabled={disabled}
             className={cn(
-              "h-full rounded-sm px-1.5 touch:min-w-11",
+              "h-full rounded-sm touch:min-w-11",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              selected
-                ? "text-[hsl(var(--current))]"
-                : "text-muted-foreground hover:text-foreground",
+              field ? "px-2" : "px-1.5",
+              field
+                ? selected
+                  ? "bg-primary text-primary-foreground"
+                  : "text-foreground"
+                : selected
+                  ? "text-[hsl(var(--current))]"
+                  : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => onChange(option.value)}
           >

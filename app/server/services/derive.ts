@@ -11,8 +11,12 @@ import { resolveMergeBase } from "../resolve-merge-base.js";
 import { checkIntegrity } from "./integrity.js";
 import { effectiveMergePolicy } from "./merge-policy.js";
 import { mergeSettingsLockFor } from "./merge-settings-lock.js";
+import {
+  decomposeRootOf,
+  outlineReadyToDecompose,
+  type DecomposeRoot,
+} from "./decompose-readiness.js";
 import { stampedBoardRoots } from "./linked-roots.js";
-import { outlineReadyToDecompose } from "./ready-to-decompose.js";
 import { projectContaining, projectTrunk } from "./subtree.js";
 
 export interface DeriveResult {
@@ -262,10 +266,12 @@ export function derive(issues: Issue[]): DeriveResult {
     };
   }
 
-  const linkedRoots = new Set<string>();
+  const rootsByOutline = new Map<string, DecomposeRoot[]>();
   const openBehindOutlines = new Set<string>();
   for (const root of stampedBoardRoots(issues, state, true)) {
-    linkedRoots.add(root.outlineId);
+    const bucket = rootsByOutline.get(root.outlineId) ?? [];
+    bucket.push(decomposeRootOf(root));
+    rootsByOutline.set(root.outlineId, bucket);
     if (!root.archived && root.open && root.behind) {
       openBehindOutlines.add(root.outlineId);
     }
@@ -273,7 +279,10 @@ export function derive(issues: Issue[]): DeriveResult {
   for (const issue of issues) {
     if (issue.kind !== "outline") continue;
     const existing = state[issue.id] ?? { blocked: false };
-    existing.readyToDecompose = outlineReadyToDecompose(issue, linkedRoots);
+    existing.readyToDecompose = outlineReadyToDecompose(
+      issue,
+      rootsByOutline.get(issue.id) ?? [],
+    );
     existing.reconciliationNeeded = openBehindOutlines.has(issue.id);
     existing.placementLive = issue.placementChain !== undefined;
     state[issue.id] = existing;

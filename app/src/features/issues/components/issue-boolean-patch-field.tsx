@@ -10,11 +10,13 @@ export function IssueBooleanPatchField({
   checked,
   labels,
   patchFor,
+  testId,
 }: {
   issueId: string;
   checked: boolean;
   labels: { on: string; off: string };
   patchFor: (next: boolean) => IssuePatch;
+  testId?: string;
 }) {
   const update = useUpdateIssue();
   const { error, saving, run } = useIssuePatchAction();
@@ -26,6 +28,7 @@ export function IssueBooleanPatchField({
       <div className="flex h-7 items-center gap-2">
         <Switch
           id={id}
+          data-testid={testId}
           checked={checked}
           disabled={saving}
           onCheckedChange={(next) => {

@@ -7,7 +7,7 @@ const FLOW_BUCKET_KEYS = new Set<FlowBucketKey>([
   "needsAttention",
   "readyToLand",
   "queue",
-  "needsDecomposition",
+  "outlineWorkToPlace",
   "ready",
   "planning",
   "recentlyMerged",
@@ -20,6 +20,7 @@ function isFlowBucketKey(value: unknown): value is FlowBucketKey {
 function storedSectionKey(value: unknown): FlowBucketKey | undefined {
   if (value === "inFlight") return "queue";
   if (value === "awaitingPlanning") return "planning";
+  if (value === "needsDecomposition") return "outlineWorkToPlace";
   return isFlowBucketKey(value) ? value : undefined;
 }
 

@@ -159,6 +159,7 @@ export const OUTLINE_SET_FIELDS = {
   partOf: { type: "string" },
   sourceIdea: { type: "string" },
   executionGate: { type: "executionGate" },
+  codeApprovalRequired: { type: "boolean" },
   outOfBand: { type: "boolean" },
   description: { type: "description" },
 } as const satisfies Record<string, SetFieldSpec>;

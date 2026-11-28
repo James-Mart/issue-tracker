@@ -19,6 +19,9 @@ import {
 /** Outline is concluded, in band, and waiting on a human to decompose. */
 export const READY_TO_DECOMPOSE_LABEL = "Ready to decompose";
 
+/** Cockpit section for an outline that still has work to place. */
+export const OUTLINE_WORK_TO_PLACE_LABEL = "Outline work to place";
+
 export const READY_TO_DECOMPOSE_BADGE_VARIANT: NonNullable<
   BadgeProps["variant"]
 > = "todo";

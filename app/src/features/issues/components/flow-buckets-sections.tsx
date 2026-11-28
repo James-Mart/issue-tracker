@@ -17,7 +17,7 @@ import {
   buildTreeRowIndexes,
   type TreeRowIndexes,
 } from "../lib/tree-row-indexes";
-import { READY_TO_DECOMPOSE_LABEL } from "../lib/derived";
+import { OUTLINE_WORK_TO_PLACE_LABEL } from "../lib/derived";
 import {
   flowItemNeedsAttention,
   type FlowBuckets,
@@ -108,8 +108,8 @@ export const FLOW_BUCKET_DEFS: FlowBucketDef[] = [
     hideWhenEmpty: true,
   },
   {
-    key: "needsDecomposition",
-    label: READY_TO_DECOMPOSE_LABEL,
+    key: "outlineWorkToPlace",
+    label: OUTLINE_WORK_TO_PLACE_LABEL,
     hideWhenEmpty: true,
     compact: true,
   },
@@ -155,7 +155,7 @@ export function partitionCockpitBuckets(buckets: FlowBuckets): {
       planning: take(buckets.planning),
       readyToLand: take(buckets.readyToLand),
       // Outlines stay in this group; they are not attention rows.
-      needsDecomposition: buckets.needsDecomposition,
+      outlineWorkToPlace: buckets.outlineWorkToPlace,
       ready: take(buckets.ready),
       // A flagged root stays in the queue at its position.
       queue: buckets.queue,

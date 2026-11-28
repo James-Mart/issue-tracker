@@ -164,7 +164,9 @@ from an Epic or Story record nothing. Rules:
 
 ## Source outline (sourceOutline)
 
-A root decomposed from an outline version covers that version. Each Epic and
+A root decomposed from an outline version covers that version. When the
+decompose prompt names From, the root covers the diff from that version
+through Version, and the stamp below is still Version. Each Epic and
 Story describes the slice of the outline it implements and links to the
 outline sections it builds on instead of quoting them, naming the section in
 the link text: `[<section heading>](issue:<outlineId>)`.

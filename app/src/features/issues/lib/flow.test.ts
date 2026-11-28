@@ -39,6 +39,20 @@ function epic(id: string, partOf: string): EpicRecord {
   };
 }
 
+function outline(id: string): IssueRecord {
+  return {
+    id,
+    kind: "outline",
+    title: id,
+    partOf: "p",
+    bodyVersion: 1,
+    archived: false,
+    order: 0,
+    createdAt: t0,
+    updatedAt: t0,
+  };
+}
+
 function story(id: string, partOf: string): StoryRecord {
   return {
     id,
@@ -209,6 +223,44 @@ describe("flowBuckets", () => {
     expect(
       partitionCockpitBuckets(buckets).needsAttention.map((item) => item.issue.id),
     ).not.toContain("running");
+  });
+
+  it("lists an outline once when it is ready or a linked root is behind", () => {
+    const issues = [
+      project("p"),
+      outline("ready"),
+      outline("behind"),
+      outline("both"),
+      outline("live"),
+      outline("idle"),
+      epic("ready-epic", "p"),
+    ];
+    const derived: Record<string, DerivedState> = {
+      ready: { blocked: false, readyToDecompose: true },
+      behind: { blocked: false, reconciliationNeeded: true },
+      both: {
+        blocked: false,
+        readyToDecompose: true,
+        reconciliationNeeded: true,
+      },
+      live: {
+        blocked: false,
+        readyToDecompose: true,
+        reconciliationNeeded: true,
+        placementLive: true,
+      },
+      idle: { blocked: false },
+      "ready-epic": { blocked: false, epicStatus: "todo" },
+    };
+
+    const buckets = flowBuckets(issues, derived, { projectId: "p" });
+
+    expect(ids(buckets.outlineWorkToPlace)).toEqual([
+      "ready",
+      "behind",
+      "both",
+    ]);
+    expect(ids(buckets.ready)).toEqual(["ready-epic"]);
   });
 
   it("accepts a slotless in-progress Story in Ready", () => {

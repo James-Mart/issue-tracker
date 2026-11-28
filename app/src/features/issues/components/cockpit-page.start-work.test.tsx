@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ApiError } from "@/lib/api/errors";
 import type { DerivedState, IssueRecord } from "@server/schemas";
+import { OUTLINE_WORK_TO_PLACE_LABEL } from "../lib/derived";
 import { resetCockpitLaunchStore } from "../store/use-cockpit-launch-store";
 import { CockpitPage } from "./cockpit-page";
 import { TopBar } from "./top-bar";
@@ -291,12 +292,15 @@ describe("CockpitPage start work", () => {
   });
 });
 
-describe("CockpitPage needs decomposition", () => {
-  it("lists in-band ready outlines by project and opens the Decomposition tab", () => {
+describe("CockpitPage outline work to place", () => {
+  it("lists each outline once and opens Overview", () => {
     mockState.issues = [
       project("p-a"),
       project("p-b"),
       outline("gate", "p-a", "Gated plan"),
+      outline("behind", "p-a", "Behind plan"),
+      outline("both", "p-a", "Both signals"),
+      outline("live", "p-a", "Placement running"),
       outline("band", "p-a", "Out of band plan", true),
       outline("open", "p-a", "Still planning"),
       outline("other", "p-b", "Other project plan"),
@@ -304,31 +308,50 @@ describe("CockpitPage needs decomposition", () => {
     ];
     mockState.derived = {
       gate: { blocked: false, readyToDecompose: true },
-      band: { blocked: false, readyToDecompose: true },
+      behind: { blocked: false, reconciliationNeeded: true },
+      both: {
+        blocked: false,
+        readyToDecompose: true,
+        reconciliationNeeded: true,
+      },
+      live: {
+        blocked: false,
+        readyToDecompose: true,
+        reconciliationNeeded: true,
+        placementLive: true,
+      },
+      band: { blocked: false, reconciliationNeeded: true },
       open: { blocked: false, readyToDecompose: false },
       other: { blocked: false, readyToDecompose: true },
       "ready-epic": { blocked: false, epicStatus: "todo" },
     };
 
     const { container } = mountCockpit();
-    const group = section(container, "needsDecomposition");
+    const group = section(container, "outlineWorkToPlace");
     const ready = section(container, "ready");
 
-    expect(group?.textContent).toContain("Ready to decompose");
+    expect(group?.textContent).toContain(OUTLINE_WORK_TO_PLACE_LABEL);
+    expect(group?.textContent).not.toContain("Ready to decompose");
     expect(group?.textContent).toContain("Gated plan");
+    expect(group?.textContent).toContain("Behind plan");
+    expect(group?.textContent).toContain("Both signals");
+    expect(group?.textContent).toContain("Out of band plan");
     expect(group?.textContent).toContain("Other project plan");
     expect(group?.textContent).toContain("Project p-a");
     expect(group?.textContent).toContain("Project p-b");
-    expect(group?.textContent).not.toContain("Out of band plan");
+    expect(group?.textContent).not.toContain("Placement running");
     expect(group?.textContent).not.toContain("Still planning");
+    for (const id of ["gate", "behind", "both", "band"]) {
+      expect(
+        group?.querySelectorAll(`a[href="/projects/p-a/issues/${id}"]`),
+      ).toHaveLength(1);
+      expect(
+        group?.querySelector(`a[href="/projects/p-a/issues/${id}?tab=decomposition"]`),
+      ).toBeNull();
+    }
     expect(
-      group?.querySelector('a[href="/projects/p-a/issues/gate?tab=decomposition"]'),
-    ).not.toBeNull();
-    expect(
-      group?.querySelector(
-        'a[href="/projects/p-b/issues/other?tab=decomposition"]',
-      ),
-    ).not.toBeNull();
+      group?.querySelectorAll('a[href="/projects/p-b/issues/other"]'),
+    ).toHaveLength(1);
     expect(ready?.textContent).toContain("Ready for implementation");
     expect(ready?.textContent).toContain("Auth hardening");
     expect(ready?.textContent).not.toContain("Gated plan");
