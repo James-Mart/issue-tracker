@@ -13,6 +13,7 @@ export function StoryReviewHeader({
   review,
   commits,
   merged,
+  sourceOutline,
   onOpenThread,
 }: {
   projectId: string;
@@ -22,6 +23,7 @@ export function StoryReviewHeader({
   review?: ReviewView;
   commits?: ReviewCommits;
   merged: boolean;
+  sourceOutline?: { outline: string };
   onOpenThread?: (thread: CommentThread) => void;
 }) {
   return (
@@ -46,6 +48,7 @@ export function StoryReviewHeader({
         review={review}
         commits={commits}
         merged={merged}
+        sourceOutline={sourceOutline}
         onOpenThread={onOpenThread}
       />
     </header>

@@ -59,7 +59,8 @@ function planSettingPromptLabel(value: string | boolean | undefined): string {
 
 /**
  * First prompt for a new planner session. Plan settings come from the
- * outline; `brief` is the revision the grill starts from.
+ * outline; `brief` is the revision the grill starts from. `researchStory`
+ * names the Story whose worktree or merge base the planner reads.
  */
 export function outlineNewPlanningSessionMessage(
   outline: {
@@ -72,7 +73,10 @@ export function outlineNewPlanningSessionMessage(
     outOfBand?: boolean;
   },
   brief: string,
+  researchStory?: string,
 ): string {
+  const research =
+    researchStory === undefined ? "" : ` Research story: \`${researchStory}\`.`;
   return (
     `Start a new planning session on ${outline.id} in the issue tracker. ` +
     `Read ${skillPath("issue-tracker-plan")} and follow it. ` +
@@ -81,7 +85,7 @@ export function outlineNewPlanningSessionMessage(
     `Code approval required: \`${planSettingPromptLabel(outline.codeApprovalRequired)}\`. ` +
     `Merge base: \`${planSettingPromptLabel(outline.mergeBase)}\`. ` +
     `Merge policy: \`${planSettingPromptLabel(outline.mergePolicy)}\`. ` +
-    `Out of band: \`${planSettingPromptLabel(outline.outOfBand)}\`.\n` +
+    `Out of band: \`${planSettingPromptLabel(outline.outOfBand)}\`.${research}\n` +
     `Brief:\n${brief}`
   );
 }

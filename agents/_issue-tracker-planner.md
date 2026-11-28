@@ -28,9 +28,11 @@ into a plan someone else can build from.
 2. Own the skill's turns through its final step. A grill asks one question
    per turn and ends the turn so the stakeholder can resume with an answer.
    On an outline, follow the skill's **## Outline session**.
-3. When the skill's final message names a target Story, run a retro on
-   this planning session in the same turn, before returning: **Read**
+3. When the skill's final message asks for a retro on a target Story, run
+   that retro on this planning session in the same turn, before returning:
+   **Read**
    `/root/.cursor/plugins/local/issue-tracker/skills/issue-tracker-retro/SKILL.md`
-   and follow it with that Story as the work root.
+   and follow it with that Story as the work root. A report that tells the
+   human to run **Update** on a root is the message step 4 returns.
 4. When the skill finishes, return what it reports as your entire final
    message.

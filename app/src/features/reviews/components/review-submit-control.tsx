@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ReviewView } from "@server/schemas";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,11 @@ import {
   useSubmitReview,
 } from "../api/mutations";
 import type { ReviewSubmitHeader, ReviewTaskingStatus } from "../lib/review-submission-ui";
+import { AmendOutlineControl } from "@/features/issues/components/amend-outline-control";
+import {
+  AMEND_OUTLINE_HELPER,
+  storyAppendActions,
+} from "@/features/issues/lib/story-append-actions";
 import { ReviewFollowUpIdeaButton } from "./review-follow-up-idea-button";
 import { SubmitReviewDialog } from "./review-submit-dialog";
 
@@ -152,16 +157,19 @@ function SubmitAction({
 
 export function ReviewSubmitActions({
   projectId,
+  storyId,
   review,
   header,
   submissionThreads,
   storyOpen,
+  sourceOutline,
   onAcknowledge,
   onAcknowledgeEnd,
   onRetryStart,
   onRetryEnd,
 }: {
   projectId: string;
+  storyId: string;
   review: ReviewView;
   header: ReviewSubmitHeader;
   /** Included and held-back threads; undefined until comments load. */
@@ -170,6 +178,7 @@ export function ReviewSubmitActions({
     | undefined;
   /** False when the source Story is merged. */
   storyOpen: boolean;
+  sourceOutline?: { outline: string };
   onAcknowledge: () => void;
   onAcknowledgeEnd: () => void;
   onRetryStart: (submissionIds: readonly string[]) => void;
@@ -182,7 +191,11 @@ export function ReviewSubmitActions({
   const reason = header.submit?.reason ?? header.retry?.reason;
   const describedBy = reason ? "review-submit-merged-reason" : undefined;
   const retryAction = header.retry;
-  const showFollowUpIdea = Boolean(
+  const followUp = storyAppendActions({
+    merged: !storyOpen,
+    sourceOutline,
+  });
+  const showFollowUp = Boolean(
     review.story && storyOpen && review.status !== "archived",
   );
 
@@ -206,7 +219,33 @@ export function ReviewSubmitActions({
           />
         ) : null}
         {header.tasking ? <TaskingStatus projectId={projectId} status={header.tasking} /> : null}
-        {showFollowUpIdea ? (
+        {showFollowUp && followUp.amendOutline && sourceOutline ? (
+          <AmendOutlineControl
+            projectId={projectId}
+            storyId={storyId}
+            outlineId={sourceOutline.outline}
+            trigger={(openDialog) => (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  data-testid="review-amend-outline"
+                  aria-describedby="review-amend-outline-helper"
+                  onClick={openDialog}
+                >
+                  <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+                  Amend outline
+                </Button>
+                <p id="review-amend-outline-helper" className="sr-only">
+                  {AMEND_OUTLINE_HELPER}
+                </p>
+              </>
+            )}
+          />
+        ) : null}
+        {showFollowUp && followUp.addIdea ? (
           <ReviewFollowUpIdeaButton projectId={projectId} />
         ) : null}
         <SubmitAction

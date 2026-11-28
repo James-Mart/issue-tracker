@@ -21,20 +21,36 @@ export function hasOpenUpdateFromMergeBaseTask(
 export const ADD_IDEA_HELPER =
   "Creates an Idea in this Story's Project. Planning it opens a new root.";
 
+export const AMEND_OUTLINE_HELPER =
+  "Opens a planning session on this Story's outline.";
+
 export function followUpIdeaTitle(storyTitle: string): string {
   return `Follow-up to ${storyTitle}`;
+}
+
+/** Follow-up on an unmerged Story: amend its outline, or create an Idea. */
+export function storyFollowUpMode(story: {
+  merged: boolean;
+  sourceOutline?: { outline: string };
+}): "amend-outline" | "idea" | "none" {
+  if (story.merged) return "none";
+  if (story.sourceOutline) return "amend-outline";
+  return "idea";
 }
 
 export function storyAppendActions(story: {
   merged: boolean;
   branchName?: string;
   hasOpenMergeBaseTask?: boolean;
-}): { addIdea: boolean; updateFromMergeBase: boolean } {
-  if (story.merged) {
-    return { addIdea: false, updateFromMergeBase: false };
+  sourceOutline?: { outline: string };
+}): { addIdea: boolean; amendOutline: boolean; updateFromMergeBase: boolean } {
+  const followUp = storyFollowUpMode(story);
+  if (followUp === "none") {
+    return { addIdea: false, amendOutline: false, updateFromMergeBase: false };
   }
   return {
-    addIdea: true,
+    addIdea: followUp === "idea",
+    amendOutline: followUp === "amend-outline",
     updateFromMergeBase: Boolean(story.branchName && !story.hasOpenMergeBaseTask),
   };
 }
