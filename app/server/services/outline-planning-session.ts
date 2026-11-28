@@ -24,7 +24,7 @@ import {
   type FirstPrompt,
 } from "./conversations.js";
 import { IssueError } from "./errors.js";
-import { readIdeaOrThrow, readOutlineOrThrow } from "./issues.js";
+import { readIdeaOrThrow, readOutlineOrThrow, readStoryOrThrow } from "./issues.js";
 
 type OutlineIssue = Extract<Issue, { kind: "outline" }>;
 type IdeaIssue = Extract<Issue, { kind: "idea" }>;
@@ -33,6 +33,8 @@ export type StartOutlinePlannerSession = {
   outlineId: string;
   role: "planner";
   brief: string;
+  /** Story whose worktree or merge base the planner reads. */
+  researchStory?: string;
 };
 
 export type StartOutlineDecomposerSession = {
@@ -174,18 +176,39 @@ export function decomposerSessionFromOutline(
 const planningSessionRequestSchema = z
   .object({
     brief: z.string(),
+    researchStory: z.string().optional(),
   })
   .strict();
 
-export type PlanningSessionRequest = Pick<StartOutlinePlannerSession, "brief">;
+export type PlanningSessionRequest = Pick<
+  StartOutlinePlannerSession,
+  "brief" | "researchStory"
+>;
+
+/** Trimmed text, or a refusal when it is empty. */
+function nonBlank(value: string, emptyMessage: string): string {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    throw new IssueError("validation", emptyMessage);
+  }
+  return trimmed;
+}
+
+/**
+ * An optional string that must be non-blank when present. Absent stays
+ * absent.
+ */
+function optionalNonBlank(
+  value: string | undefined,
+  emptyMessage: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  return nonBlank(value, emptyMessage);
+}
 
 /** A non-empty brief for a direct planner start. Blank input is refused. */
 function requirePlanningBrief(raw: string): string {
-  const brief = raw.trim();
-  if (brief === "") {
-    throw new IssueError("validation", "brief is required");
-  }
-  return brief;
+  return nonBlank(raw, "brief is required");
 }
 
 /** Body of `POST /planning/sessions`. Unknown fields are refused. */
@@ -197,7 +220,12 @@ export function parsePlanningSessionRequest(body: unknown): PlanningSessionReque
       formatZodError(parsed.error, "invalid planning session body"),
     );
   }
-  return { brief: parsed.data.brief };
+  return {
+    brief: parsed.data.brief,
+    ...(parsed.data.researchStory !== undefined
+      ? { researchStory: parsed.data.researchStory }
+      : {}),
+  };
 }
 
 /**
@@ -273,7 +301,16 @@ function normalizePlanningSessionInput(
   input: StartOutlinePlanningSessionInput,
 ): StartOutlinePlanningSessionInput {
   if (input.role !== "planner") return input;
-  return { ...input, brief: requirePlanningBrief(input.brief) };
+  const researchStory = optionalNonBlank(
+    input.researchStory,
+    "researchStory is empty",
+  );
+  if (researchStory !== undefined) readStoryOrThrow(researchStory);
+  return {
+    ...input,
+    brief: requirePlanningBrief(input.brief),
+    ...(researchStory !== undefined ? { researchStory } : {}),
+  };
 }
 
 function sessionMessage(
@@ -281,7 +318,11 @@ function sessionMessage(
   outline: OutlineIssue,
 ): string {
   if (input.role === "planner") {
-    return outlineNewPlanningSessionMessage(outline, input.brief);
+    return outlineNewPlanningSessionMessage(
+      outline,
+      input.brief,
+      input.researchStory,
+    );
   }
   if (input.role === "check") {
     return outlineCheckSessionMessage({
@@ -326,12 +367,7 @@ function sessionMessage(
 }
 
 function requireMergePolicy(mergePolicy: string | undefined): string | undefined {
-  if (mergePolicy === undefined) return undefined;
-  const trimmed = mergePolicy.trim();
-  if (trimmed === "") {
-    throw new IssueError("validation", "merge policy is empty");
-  }
-  return trimmed;
+  return optionalNonBlank(mergePolicy, "merge policy is empty");
 }
 
 function requireSavedVersion(version: number, outline: OutlineIssue): void {

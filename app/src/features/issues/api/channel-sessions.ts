@@ -139,14 +139,17 @@ export type StartedChannelSession = {
   model: string;
 };
 
-/** Start a planner on an outline. `brief` is the only field the route accepts. */
+/**
+ * Start a planner on an outline. `brief` is required. `researchStory`, when
+ * set, is the Story the planner reads.
+ */
 export function startOutlinePlanningSession(
   outlineId: string,
-  brief: string,
+  body: { brief: string; researchStory?: string },
 ): Promise<StartedChannelSession> {
   return request<StartedChannelSession>(
     `/api/issues/${encodeURIComponent(outlineId)}/planning/sessions`,
-    { method: "POST", body: { brief } },
+    { method: "POST", body },
   );
 }
 

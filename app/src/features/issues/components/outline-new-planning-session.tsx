@@ -17,6 +17,117 @@ import { useStartOutlinePlanningSession } from "../api/mutations";
 type OutlineDetail = Extract<IssueDetail, { kind: "outline" }>;
 
 /**
+ * Brief dialog for a new planner session. `researchStory` is sent with the
+ * start so the opening message names that Story. Without `bodyVersion` the
+ * dialog shows `unavailable` instead of the brief.
+ */
+export function NewPlanningSessionDialog({
+  outlineId,
+  bodyVersion,
+  unavailable,
+  open,
+  onOpenChange,
+  onStarted,
+  researchStory,
+}: {
+  outlineId: string;
+  bodyVersion?: number;
+  /** Shown in place of the brief until the outline version is known. */
+  unavailable?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onStarted: (session: StartedChannelSession) => void;
+  researchStory?: string;
+}) {
+  const [brief, setBrief] = useState("");
+  const start = useStartOutlinePlanningSession(outlineId);
+  const trimmed = brief.trim();
+  const ready = bodyVersion !== undefined;
+
+  useEffect(() => {
+    if (open) setBrief("");
+  }, [open]);
+
+  const submit = () => {
+    if (!ready) return;
+    start.mutate(
+      { brief: trimmed, ...(researchStory ? { researchStory } : {}) },
+      {
+        onSuccess: (session) => {
+          onOpenChange(false);
+          onStarted(session);
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (start.isPending && !next) return;
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        data-testid="outline-new-planning-session-dialog"
+        className="flex max-h-[min(calc(100dvh-2rem),40rem)] flex-col overflow-hidden"
+      >
+        <DialogHeader className="shrink-0">
+          <DialogTitle>New planning session</DialogTitle>
+          <DialogDescription>
+            {ready
+              ? `Archives the current planner conversation (it stays in the session picker as read-only). The revision brief is seeded from outline v${bodyVersion}.`
+              : unavailable}
+          </DialogDescription>
+        </DialogHeader>
+        {ready ? (
+          <div
+            data-testid="outline-new-planning-session-body"
+            className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-y-contain"
+          >
+            <label
+              htmlFor={`outline-new-planning-brief-${outlineId}`}
+              className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
+            >
+              Revision brief
+            </label>
+            <Textarea
+              id={`outline-new-planning-brief-${outlineId}`}
+              data-testid="outline-new-planning-brief"
+              value={brief}
+              disabled={start.isPending}
+              onChange={(event) => setBrief(event.target.value)}
+            />
+          </div>
+        ) : null}
+        <DialogFooter className="shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={start.isPending}
+          >
+            Cancel
+          </Button>
+          {ready ? (
+            <Button
+              type="button"
+              variant="current"
+              data-testid="outline-new-planning-session-start"
+              disabled={!trimmed || start.isPending}
+              onClick={submit}
+            >
+              Start session
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * New planning session on an outline. The title stays outside the scrolling
  * brief so a short phone viewport does not push it off screen.
  */
@@ -33,25 +144,6 @@ export function OutlineNewPlanningSessionControl({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [brief, setBrief] = useState("");
-  const start = useStartOutlinePlanningSession(outline.id);
-  const trimmed = brief.trim();
-
-  useEffect(() => {
-    if (open) setBrief("");
-  }, [open]);
-
-  const submit = () => {
-    start.mutate(
-      { brief: trimmed },
-      {
-        onSuccess: (session) => {
-          setOpen(false);
-          onStarted(session);
-        },
-      },
-    );
-  };
 
   return (
     <>
@@ -70,64 +162,13 @@ export function OutlineNewPlanningSessionControl({
       >
         New planning session
       </Button>
-      <Dialog
+      <NewPlanningSessionDialog
+        outlineId={outline.id}
+        bodyVersion={outline.bodyVersion}
         open={open}
-        onOpenChange={(next) => {
-          if (start.isPending && !next) return;
-          setOpen(next);
-        }}
-      >
-        <DialogContent
-          data-testid="outline-new-planning-session-dialog"
-          className="flex max-h-[min(calc(100dvh-2rem),40rem)] flex-col overflow-hidden"
-        >
-          <DialogHeader className="shrink-0">
-            <DialogTitle>New planning session</DialogTitle>
-            <DialogDescription>
-              Archives the current planner conversation (it stays in the
-              session picker as read-only). The revision brief is seeded from
-              outline v{outline.bodyVersion}.
-            </DialogDescription>
-          </DialogHeader>
-          <div
-            data-testid="outline-new-planning-session-body"
-            className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-y-contain"
-          >
-            <label
-              htmlFor={`outline-new-planning-brief-${outline.id}`}
-              className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
-            >
-              Revision brief
-            </label>
-            <Textarea
-              id={`outline-new-planning-brief-${outline.id}`}
-              data-testid="outline-new-planning-brief"
-              value={brief}
-              disabled={start.isPending}
-              onChange={(event) => setBrief(event.target.value)}
-            />
-          </div>
-          <DialogFooter className="shrink-0">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-              disabled={start.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="current"
-              data-testid="outline-new-planning-session-start"
-              disabled={!trimmed || start.isPending}
-              onClick={submit}
-            >
-              Start session
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setOpen}
+        onStarted={onStarted}
+      />
     </>
   );
 }

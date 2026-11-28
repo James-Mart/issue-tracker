@@ -265,9 +265,11 @@ describe("StoryReviewHeader submit", () => {
         storyTitle="Story review workbench"
         review={review()}
         merged={true}
+        sourceOutline={{ outline: "spec" }}
       />,
     );
     expect(document.body.querySelector('[data-testid="review-follow-up-idea"]')).toBeNull();
+    expect(document.body.querySelector('[data-testid="review-amend-outline"]')).toBeNull();
   });
 
   it("shows the failure under the branch line and retries every failed submission", () => {

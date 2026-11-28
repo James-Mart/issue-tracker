@@ -139,6 +139,7 @@ function StoryReviewWorkbench({
   review,
   commits,
   merged,
+  sourceOutline,
   phoneTranscript,
   runId,
   closeRun,
@@ -150,6 +151,7 @@ function StoryReviewWorkbench({
   review: ReviewView;
   commits: UseQueryResult<ReviewCommits, Error>;
   merged: boolean;
+  sourceOutline?: { outline: string };
   phoneTranscript: boolean;
   runId: string | null;
   closeRun: () => void;
@@ -229,6 +231,7 @@ function StoryReviewWorkbench({
         review={review}
         commits={commits.data}
         merged={merged}
+        sourceOutline={sourceOutline}
         onOpenThread={openThread}
       />
       <div
@@ -410,6 +413,7 @@ function StoryReviewBody({
           storyTitle: review.data.title,
           review: review.data,
           merged: false,
+          sourceOutline: undefined,
         }
       : review.data && story.data?.kind === "story"
         ? {
@@ -418,6 +422,7 @@ function StoryReviewBody({
             storyTitle: story.data.title,
             review: review.data,
             merged: story.data.merged,
+            sourceOutline: story.data.sourceOutline,
           }
         : null;
   if (!ready) return <ShellLoadingState label="Loading review…" />;
@@ -430,6 +435,7 @@ function StoryReviewBody({
       review={ready.review}
       commits={commits}
       merged={ready.merged}
+      sourceOutline={ready.sourceOutline}
       phoneTranscript={phoneTranscript}
       runId={runId}
       closeRun={closeRun}

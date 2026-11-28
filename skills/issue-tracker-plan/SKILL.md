@@ -74,18 +74,37 @@ Grill from that brief, then save the outline. This session does not run
    `Execution gate`, `Code approval required`, `Merge base`, `Merge policy`,
    and `Out of band` are the outline's plan settings. `unset` means that
    setting is not stored. Leave the settings as they are.
-2. Grill the brief against that body. Follow **## Grill-me protocol** for
-   the questions. The merge base is the opening message's value, so
-   **Merge-base first** is already settled: when it names a branch other
-   than the Project trunk, pass that branch as `Ref` on focused research;
-   when it is the trunk or `unset`, omit `Ref`. Read the trunk with
-   `issue project get <projectId> trunk` (`<projectId>` from Bootstrap
-   step 1). When the grill is ready, save the next version in step 3.
-3. Save the next version the way **Continued planner** saves a revision.
+2. Resolve the research target before any grill question.
+   - An opening message that carries `Research story:` names `<storyId>` and reads
+     that Story. `issue story get <storyId> worktree` prints JSON. When
+     `exists` is `true`, focused research uses `path` as Workspace and omits
+     `Ref`. When `exists` is `false`, `issue story get <storyId> mergeBase`
+     prints the branch that focused research passes as `Ref`, and Workspace
+     stays the Project workspace from Bootstrap step 1. When `exists` is
+     `false` and mergeBase prints nothing, the message says the Story has no
+     worktree and no merge base, and the session ends. The saved outline
+     stays the current version.
+   - An opening message with no `Research story` line uses its `Merge base`.
+     When that value names a branch other than the Project trunk, focused
+     research passes that branch as `Ref`. When it is the trunk or `unset`,
+     focused research omits `Ref`. Read the trunk with
+     `issue project get <projectId> trunk` (`<projectId>` from Bootstrap
+     step 1).
+3. Grill the brief against that body. Follow **## Grill-me protocol** for
+   the questions. Step 2 already settled the research target, so
+   **Merge-base first** asks nothing further: every **Focused codebase
+   research** spawn, including the directory-placement survey, uses that
+   Workspace and `Ref`. When the grill is ready, save the next version in
+   step 4.
+4. Save the next version the way **Continued planner** saves a revision.
    That save is this session's outline write. Stopping before it leaves
    the current version unchanged. The message that reports the save names
    `<outlineId>` and the version from `issue outline get <outlineId> version`.
-4. After that save, a later message follows **Continued planner**.
+   When step 2 read a `Research story`, that message also names the Story's
+   root and tells the human to run **Update** on it. The root is the id
+   token on the `Epic:` line of `issue summary <storyId>`. When that line
+   is absent, the root is `<storyId>`.
+5. After that save, a later message follows **Continued planner**.
 
 ### Continued planner
 

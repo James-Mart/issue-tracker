@@ -97,11 +97,12 @@ export function useProjectWorktreesQuery(
 
 export function useIssueDetailQuery(
   id: string,
+  options: { enabled?: boolean } = {},
 ): UseQueryResult<IssueDetail, Error> {
   return useQuery({
     queryKey: issuesKeys.detail(id),
     queryFn: () => request<IssueDetail>(`/api/issues/${id}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && (options.enabled ?? true),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 2,
   });

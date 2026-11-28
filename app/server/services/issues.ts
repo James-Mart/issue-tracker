@@ -256,6 +256,15 @@ function requireOutline(id: string, issue: Issue | undefined): OutlineIssue {
   return issue;
 }
 
+/** Read a Story. Any other kind is refused. */
+export function readStoryOrThrow(id: string): Extract<Issue, { kind: "story" }> {
+  const issue = readIssueOrThrow(id);
+  if (issue.kind !== "story") {
+    throw new IssueError("validation", `issue "${id}" is not a story`);
+  }
+  return issue;
+}
+
 /** Read an Idea. `as` is the noun in the refusal (`issue`, `source idea`). */
 export function readIdeaOrThrow(
   id: string,

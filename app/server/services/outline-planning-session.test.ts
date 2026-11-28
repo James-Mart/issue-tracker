@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { agentBodyPath } from "../../src/lib/plugin-paths.js";
+import { agentBodyPath, skillPath } from "../../src/lib/plugin-paths.js";
 import { fakeLauncherSessions } from "./queue-launcher.test-helpers.js";
 
 const AT = "2026-07-09T14:00:00.000Z";
@@ -108,6 +108,47 @@ describe("startOutlinePlanningSession", () => {
         `Read ${agentBodyPath("_issue-tracker-decomposer")} and follow it. ` +
         "Mode: `decompose`. Outline: `feature-outline`. Version: `2`. Execution gate: `off`. " +
         "Merge policy: `squash`.",
+    );
+  });
+
+  it("names the research story in the planner's opening message", async () => {
+    writeIssue("story-1", {
+      kind: "story",
+      title: "Story",
+      partOf: "p",
+      order: 2,
+      createdAt: AT,
+      updatedAt: AT,
+    });
+    const { sessions } = fakeLauncherSessions();
+    const { startOutlinePlanningSession } = await import(
+      "./outline-planning-session.js"
+    );
+    const { listConversations } = await import("./conversations.js");
+    const { transcriptPathOf } = await import(
+      "./conversation-transcript-seq.js"
+    );
+
+    await startOutlinePlanningSession(
+      {
+        outlineId: "feature-outline",
+        role: "planner",
+        brief: "  Ship the lock  ",
+        researchStory: "story-1",
+      },
+      sessions,
+    );
+
+    const [meta] = listConversations();
+    const line = readFileSync(transcriptPathOf(meta!.id), "utf8").trim();
+    expect(JSON.parse(line).text).toBe(
+      "Start a new planning session on feature-outline in the issue tracker. " +
+        `Read ${skillPath("issue-tracker-plan")} and follow it. ` +
+        "Outline: `feature-outline`. Version: `2`. " +
+        "Execution gate: `unset`. Code approval required: `unset`. " +
+        "Merge base: `unset`. Merge policy: `unset`. Out of band: `unset`. " +
+        "Research story: `story-1`.\n" +
+        "Brief:\nShip the lock",
     );
   });
 });

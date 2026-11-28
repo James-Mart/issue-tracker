@@ -246,7 +246,7 @@ export function createIssuesRouter(
         {
           outlineId: outline.id,
           role: "planner",
-          brief: request.brief,
+          ...request,
         },
         sessions,
       );

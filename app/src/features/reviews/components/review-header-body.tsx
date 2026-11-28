@@ -114,6 +114,7 @@ export function ReviewHeaderBody({
   review,
   commits,
   merged,
+  sourceOutline,
   onOpenThread,
 }: {
   projectId: string;
@@ -124,6 +125,7 @@ export function ReviewHeaderBody({
   review?: ReviewView;
   commits?: ReviewCommits;
   merged: boolean;
+  sourceOutline?: { outline: string };
   onOpenThread?: (thread: CommentThread) => void;
 }) {
   const { threads, loaded } = useReviewCommentThreads(review?.id ?? "");
@@ -155,10 +157,12 @@ export function ReviewHeaderBody({
         {review && header ? (
           <ReviewSubmitActions
             projectId={projectId}
+            storyId={storyId}
             review={review}
             header={header}
             submissionThreads={submissionThreads}
             storyOpen={!merged}
+            sourceOutline={sourceOutline}
             onAcknowledge={() =>
               setPendingThreadIds(submissionThreads?.included.map((thread) => thread.root.id))
             }

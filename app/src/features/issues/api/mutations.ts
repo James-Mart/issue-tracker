@@ -632,8 +632,12 @@ function rememberStartedChannelSession(
 /** Start a planner from New planning session. */
 export function useStartOutlinePlanningSession(outlineId: string) {
   const qc = useQueryClient();
-  return useMutation<StartedChannelSession, Error, { brief: string }>({
-    mutationFn: ({ brief }) => startOutlinePlanningSession(outlineId, brief),
+  return useMutation<
+    StartedChannelSession,
+    Error,
+    { brief: string; researchStory?: string }
+  >({
+    mutationFn: (body) => startOutlinePlanningSession(outlineId, body),
     onError: (err) => toast.error(messageOf(err)),
     onSuccess: (data) => {
       rememberStartedChannelSession(qc, outlineId, "planning", {
